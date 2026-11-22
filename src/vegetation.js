@@ -29,9 +29,9 @@ export const TAILLES = {
   Pine_5: 16,
   CommonTree_5: 12,
   // petits détails au bord de la route
-  Mushroom_Common: 1.4, // champignons géants (le modèle est une petite touffe)
-  Flower_3_Group: 1.8,
-  Flower_4_Group: 2,
+  Mushroom_Common: 1.8, // champignons géants (le modèle est une petite touffe)
+  Flower_3_Group: 2.4,
+  Flower_4_Group: 2.4,
   Clover_1: 0.6,
   Clover_2: 0.65,
   Pebble_Round_1: 0.22,
@@ -42,8 +42,8 @@ export const TAILLES = {
   Pebble_Square_1: 0.28,
   Pebble_Square_2: 0.28,
   Pebble_Square_3: 0.28,
-  RockPath_Square_Small_2: 0.2,
-  RockPath_Round_Small_1: 0.16,
+  RockPath_Square_Small_2: 0.22,
+  RockPath_Round_Small_1: 0.18,
 };
 
 // Certaines plantes du pack ont des feuilles violettes : on fait tourner leur teinte vers le vert (degrés).
