@@ -18,8 +18,8 @@ export class CameraPoursuite {
     const dx = Math.sin(this.angle), dz = Math.cos(this.angle);
     // en saut, la caméra suit à moitié la hauteur (pas de secousse)
     this.y = (this.y ?? 0) + (y - (this.y ?? 0)) * Math.min(1, dt * 6);
-    this.camera.position.set(x - dx * this.distance, this.hauteur + this.y * 0.6, z - dz * this.distance);
-    this.camera.lookAt(x + dx * 3, 1.1 + this.y * 0.8, z + dz * 3);
+    this.camera.position.set(x - dx * this.distance, this.hauteur + this.y, z - dz * this.distance);
+    this.camera.lookAt(x + dx * 3, 1.1 + this.y, z + dz * 3);
     const fov = this.fovBase + 8 * THREE.MathUtils.clamp(vitesseRelative, 0, 1);
     if (Math.abs(fov - this.camera.fov) > 0.05) {
       this.camera.fov += (fov - this.camera.fov) * Math.min(1, dt * 3);

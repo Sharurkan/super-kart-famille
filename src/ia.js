@@ -23,6 +23,15 @@ export class PiloteIA {
       this.prochainChangement = 3 + Math.random() * 5;
     }
     this.voie += (this.voieCible - this.voie) * Math.min(1, dt * 0.8);
+    // zone à éviter devant (ex. le diplodocus) : on se met de l'autre côté de la route
+    for (const z of P.zonesIA) {
+      const devant = (z.debut - p.indice + N) % N;
+      const dedans = (p.indice - z.debut + N) % N <= (z.fin - z.debut + N) % N;
+      if ((devant < 60 || dedans) && Math.abs(this.voie - z.lateral) < z.demi + 2.5) {
+        this.voie = z.lateral + (z.lateral > 0 ? -1 : 1) * (z.demi + 2.5);
+        this.voieCible = this.voie;
+      }
+    }
 
     // point visé : plus loin quand on va vite
     const distance = 7 + Math.abs(p.vitesse) * 0.45;

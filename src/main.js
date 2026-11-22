@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import "./style.css";
-import { CIRCUITS } from "./circuits.js";
+import { CIRCUITS, CIRCUITS_ACTIFS } from "./circuits.js";
 import { KARTS, COULEURS_KARTS } from "./karts.js";
 import { PERSONNAGES, urlSprite } from "./pilote.js";
 import { Controles } from "./controles.js";
@@ -15,7 +15,7 @@ import { ajouter as ajouterBonbons } from "./portefeuille.js";
 // Choix mémorisés qui n'existent plus (kart, perso ou circuit retiré) : on revient au premier.
 if (!KARTS.includes(reglages.kart)) reglages.kart = KARTS[0];
 if (!PERSONNAGES.includes(reglages.perso)) reglages.perso = PERSONNAGES[0];
-if (!(reglages.circuit in CIRCUITS)) reglages.circuit = "prairie";
+if (!CIRCUITS_ACTIFS.includes(reglages.circuit)) reglages.circuit = CIRCUITS_ACTIFS[0];
 sauver();
 
 // ---------- Rendu ----------
@@ -42,7 +42,7 @@ addEventListener("resize", redimensionner);
 // ---------- Écrans ----------
 const $ = (s) => document.querySelector(s);
 const ECRANS = ["titre", "perso", "kart", "circuit", "options", "pause", "fin", "boutique"];
-const PRECEDENT = { perso: "titre", kart: "perso", circuit: "kart", options: "circuit", boutique: "titre" };
+const PRECEDENT = { perso: "titre", kart: "perso", circuit: "kart", options: CIRCUITS_ACTIFS.length === 1 ? "kart" : "circuit", boutique: "titre" };
 let ecranActuel = "titre";
 
 const COULEURS_PERSOS = { viggo: "#ff922b", harry: "#ffd43b", maman: "#9775fa", bryan: "#ff6b6b", mamy: "#4dabf7" };
@@ -116,7 +116,8 @@ majPoints();
 
 // --- Circuits ---
 for (const c of document.querySelectorAll("[data-circuit]")) {
-  const dispo = c.dataset.circuit in CIRCUITS;
+  const dispo = CIRCUITS_ACTIFS.includes(c.dataset.circuit);
+  c.classList.toggle("cache", !dispo); // circuits retirés pour l'instant : on ne les montre pas
   c.classList.toggle("verrouille", !dispo);
   c.addEventListener("click", () => {
     if (!dispo) {
@@ -271,7 +272,11 @@ const ACTIONS = {
   "kart-suivant": () => changerKart(1),
   "kart-ok": () => {
     sauver();
-    montrer("circuit");
+    // un seul circuit disponible : on saute l'écran de choix
+    if (CIRCUITS_ACTIFS.length === 1) {
+      reglages.circuit = CIRCUITS_ACTIFS[0];
+      montrer("options");
+    } else montrer("circuit");
   },
   partez: () => {
     pleinEcran();

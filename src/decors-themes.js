@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { instances, positions, boiteRonde } from "./decor.js";
 import { fusion, matCouleurs, nuages } from "./decors-circuits.js";
+import { creerDino } from "./dinos.js";
 
 // Décors des circuits Dinosaures, Jouets et Concert pop.
 // Astuce couleurs : les parties "blanches" d'un objet fusionné prennent la couleur
@@ -15,38 +16,26 @@ const versPiste = (piste, p) => {
 };
 
 // ---------------------------------------------------------------------------
-export function decorDino(groupe, piste, rnd, horsPiste) {
+export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   const couleursDinos = [0x69db7c, 0x4dabf7, 0xb197fc, 0xffa94d, 0x38d9a9, 0xf783ac];
 
-  // grand dino à long cou
-  const grandCou = fusion([
-    { geo: new THREE.SphereGeometry(1, 16, 13).scale(1.4, 1.1, 2.2).translate(0, 2.6, 0), couleur: B },
-    ...[[-0.8, 1.2], [0.8, 1.2], [-0.8, -1.2], [0.8, -1.2]].map(([x, z]) => ({ geo: new THREE.CylinderGeometry(0.35, 0.4, 2.2, 14).translate(x, 1.1, z), couleur: B })),
-    { geo: new THREE.CylinderGeometry(0.3, 0.5, 4.2, 14).rotateX(0.55).translate(0, 4.6, 2.6), couleur: B },
-    { geo: boiteRonde(0.7, 0.6, 1.2).translate(0, 6.4, 3.9), couleur: B },
-    { geo: new THREE.IcosahedronGeometry(0.1, 1).translate(0.36, 6.6, 4.1), couleur: N },
-    { geo: new THREE.IcosahedronGeometry(0.1, 1).translate(-0.36, 6.6, 4.1), couleur: N },
-    { geo: new THREE.ConeGeometry(0.5, 4, 14).rotateX(-Math.PI / 2 - 0.3).translate(0, 2.2, -3.6), couleur: B },
-  ]);
-  const grands = positions(piste, rnd, 10, horsPiste + 8, 80).map((p) => ({ ...p, s: 1.6 + rnd() * 0.8, r: versPiste(piste, p) + Math.PI / 2, couleur: auHasard(rnd, couleursDinos) }));
-  groupe.add(instances(grandCou, matCouleurs(), grands));
-
-  // T-rex
-  const trex = fusion([
-    { geo: new THREE.SphereGeometry(1, 16, 13).scale(1, 1.1, 1.7).rotateX(-0.5).translate(0, 2.6, 0), couleur: B },
-    { geo: boiteRonde(1.2, 1.1, 1.8).translate(0, 4.0, 1.5), couleur: B },
-    { geo: boiteRonde(1.1, 0.35, 1.5).translate(0, 3.25, 1.6), couleur: B },
-    ...[-0.3, -0.1, 0.1, 0.3].map((x) => ({ geo: new THREE.ConeGeometry(0.07, 0.2, 10).rotateX(Math.PI).translate(x, 3.5, 2.3), couleur: 0xffffff })),
-    { geo: new THREE.IcosahedronGeometry(0.12, 1).translate(0.5, 4.3, 1.9), couleur: N },
-    { geo: new THREE.IcosahedronGeometry(0.12, 1).translate(-0.5, 4.3, 1.9), couleur: N },
-    { geo: new THREE.CylinderGeometry(0.4, 0.3, 2.2, 14).translate(0.6, 1.1, -0.2), couleur: B },
-    { geo: new THREE.CylinderGeometry(0.4, 0.3, 2.2, 14).translate(-0.6, 1.1, -0.2), couleur: B },
-    { geo: boiteRonde(0.15, 0.15, 0.6).translate(0.6, 2.8, 1.2), couleur: B },
-    { geo: boiteRonde(0.15, 0.15, 0.6).translate(-0.6, 2.8, 1.2), couleur: B },
-    { geo: new THREE.ConeGeometry(0.6, 3.5, 14).rotateX(-Math.PI / 2 + 0.3).translate(0, 2.2, -2.4), couleur: B },
-  ]);
-  const trexs = positions(piste, rnd, 10, horsPiste + 4, 60).map((p) => ({ ...p, s: 1.1 + rnd() * 0.5, r: versPiste(piste, p), couleur: auHasard(rnd, couleursDinos) }));
-  groupe.add(instances(trex, matCouleurs(), trexs));
+  // vrais dinosaures animés (pack Quaternius), tournés vers la piste
+  const mixers = [];
+  const especes = ["Trex", "Apatosaurus", "Stegosaurus", "Triceratops", "Parasaurolophus", "Velociraptor"];
+  const places = [
+    ...positions(piste, rnd, 8, horsPiste + 6, 45), // près de la piste
+    ...positions(piste, rnd, 6, 50, 95), // plus loin (les grands)
+  ];
+  places.forEach((p, k) => {
+    const nom = k < 8 ? especes[k % especes.length] : ["Apatosaurus", "Trex", "Apatosaurus", "Stegosaurus", "Triceratops", "Apatosaurus"][k - 8];
+    const anim = rnd() < 0.3 ? "Attack" : "Idle";
+    creerDino(nom, { animation: anim, vitesse: 0.8 + rnd() * 0.3 }).then(({ objet, mixer }) => {
+      objet.position.set(p.x, 0, p.z);
+      objet.rotation.y = versPiste(piste, p) + (rnd() - 0.5) * 0.8;
+      groupe.add(objet);
+      mixers.push(mixer);
+    });
+  });
 
   // arbres préhistoriques (tronc + parasol de feuilles) et fougères
   const arbre = fusion([
@@ -96,7 +85,9 @@ export function decorDino(groupe, piste, rnd, horsPiste) {
   const fumee = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 2), new THREE.MeshBasicMaterial({ color: 0x9a9a9a, fog: false, transparent: true, opacity: 0.8 }), 14);
   groupe.add(fumee);
   nuages(groupe, piste, rnd);
-  groupe.add(tunnelTrex(piste));
+  const tunnel = tunnelTrex(piste);
+  groupe.add(tunnel);
+  diplodocus(piste, groupe, [tunnel.userData.indice]);
 
   let t = 0;
   const o = new THREE.Object3D();
@@ -110,6 +101,7 @@ export function decorDino(groupe, piste, rnd, horsPiste) {
       fumee.setMatrixAt(k, o.matrix);
     }
     fumee.instanceMatrix.needsUpdate = true;
+    for (const m of mixers) m.update(dt);
   };
 }
 
@@ -346,81 +338,287 @@ export function decorConcert(groupe, piste, rnd, horsPiste) {
 }
 
 // ---------------------------------------------------------------------------
-/**
- * Tunnel : une tête de T-rex géante qui enjambe la route. On passe dans sa gueule
- * ouverte, en roulant sur sa langue. Placée dans une ligne droite, loin des tremplins.
- */
-function tunnelTrex(piste) {
-  const N = piste.N;
-  const enveloppe = (a) => Math.atan2(Math.sin(a), Math.cos(a));
-  const courbure = (i) => Math.abs(enveloppe(piste.angleA((i + 20) % N) - piste.angleA((i - 20 + N) % N)));
-  let meilleur = Math.floor(N * 0.55), cMin = Infinity;
-  for (let k = -Math.floor(N * 0.25); k <= N * 0.25; k++) {
-    const i = (Math.floor(N * 0.55) + k + N) % N;
-    if (i < 40 || i > N - 60) continue;
-    if (piste.tremplins.some((t) => Math.abs(t.debut - i) < 50)) continue;
-    const c = courbure(i) + Math.abs(k) * 0.0005;
-    if (c < cMin) { cMin = c; meilleur = i; }
-  }
-  const i = meilleur;
-
-  const vert = new THREE.MeshPhongMaterial({ color: 0x40c057, shininess: 50, specular: 0x222222 });
-  const vertFonce = new THREE.MeshPhongMaterial({ color: 0x2b8a3e, shininess: 40, specular: 0x222222 });
-  const rose = new THREE.MeshPhongMaterial({ color: 0xff8fab, shininess: 70, specular: 0x444444 });
-  const roseFonce = new THREE.MeshLambertMaterial({ color: 0xc2255c });
-  const blanc = new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 90, specular: 0x555555 });
-  const noir = new THREE.MeshPhongMaterial({ color: 0x111111, shininess: 90 });
-  const orange = new THREE.MeshPhongMaterial({ color: 0xff922b, shininess: 50 });
-
-  const tete = new THREE.Group();
-  const ajouter = (geo, mat, x, y, z) => {
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(x, y, z);
-    tete.add(m);
-    return m;
-  };
-  const L = piste.demi + piste.marge + 3; // demi-largeur intérieure (au-delà des barrières)
-
-  // crâne et mâchoire du haut (la gueule s'ouvre vers les karts qui arrivent, côté -z)
-  ajouter(boiteRonde(2 * L + 6, 7, 16), vert, 0, 10.5, 2);
-  ajouter(boiteRonde(2 * L + 2, 3.2, 8), vert, 0, 8.2, -9);
-  ajouter(boiteRonde(2 * L, 0.6, 22), new THREE.MeshBasicMaterial({ color: 0xd6336c }), 0, 6.85, -1); // palais (couleur fixe : vu d'en dessous)
-  // joues / mâchoire du bas, de chaque côté de la route
-  for (const sx of [1, -1]) {
-    ajouter(boiteRonde(5, 7.5, 24), vert, sx * (L + 2), 3.75, -1);
-    ajouter(boiteRonde(1.2, 6.4, 22), roseFonce, sx * (L - 0.2), 3.4, -1); // intérieur des joues
-    // dents du bas, sur les côtés
-    for (let k = 0; k < 4; k++) {
-      const d = ajouter(new THREE.ConeGeometry(0.7, 1.8, 12), blanc, sx * (L + 0.6), 8.2, -11 + k * 2.4);
-      d.rotation.z = 0;
+/** Surface à facettes passant par une suite de sections (même nombre de points par section). */
+function loft(sections, couleur, double = true) {
+  const pos = [];
+  for (let s = 0; s < sections.length - 1; s++) {
+    const A = sections[s], B = sections[s + 1];
+    for (let k = 0; k < A.pts.length - 1; k++) {
+      const a0 = [A.pts[k][0], A.pts[k][1], A.z], a1 = [A.pts[k + 1][0], A.pts[k + 1][1], A.z];
+      const b0 = [B.pts[k][0], B.pts[k][1], B.z], b1 = [B.pts[k + 1][0], B.pts[k + 1][1], B.z];
+      pos.push(...a0, ...b0, ...a1, ...a1, ...b0, ...b1);
     }
   }
-  // dents du haut : une rangée le long de l'avant (assez haut pour les sauts)
-  for (let x = -L + 1.5; x <= L - 1.5; x += 2.6) {
-    const d = ajouter(new THREE.ConeGeometry(0.75, 2.0, 12), blanc, x, 5.8, -12.4);
-    d.rotation.x = Math.PI;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: couleur, flatShading: true, side: double ? THREE.DoubleSide : THREE.FrontSide }));
+}
+
+/** Bouchon plat (éventail) qui ferme une section. */
+function bouchon(section, couleur) {
+  const pos = [];
+  const c = section.pts.reduce((m, p) => [m[0] + p[0] / section.pts.length, m[1] + p[1] / section.pts.length], [0, 0]);
+  for (let k = 0; k < section.pts.length - 1; k++)
+    pos.push(c[0], c[1], section.z, section.pts[k][0], section.pts[k][1], section.z, section.pts[k + 1][0], section.pts[k + 1][1], section.z);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: couleur, flatShading: true, side: THREE.DoubleSide }));
+}
+
+/** Indice de la ligne droite la plus longue autour d'une position voulue, loin des tremplins. */
+function ligneDroite(piste, fraction, eviter = []) {
+  const N = piste.N;
+  const enveloppe = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+  const courbure = (i) => Math.abs(enveloppe(piste.angleA((i + 25) % N) - piste.angleA((i - 25 + N) % N)));
+  let i = Math.floor(N * fraction), cMin = Infinity;
+  for (let k = -Math.floor(N * 0.25); k <= N * 0.25; k++) {
+    const j = (Math.floor(N * fraction) + k + N) % N;
+    if (j < 50 || j > N - 70) continue;
+    if (piste.tremplins.some((t) => Math.abs(t.debut - j) < 60)) continue;
+    if (eviter.some((e) => Math.abs(e - j) < 90)) continue;
+    const c = courbure(j) + Math.abs(k) * 0.0005;
+    if (c < cMin) { cMin = c; i = j; }
   }
-  // yeux, sourcils, narines
+  return i;
+}
+
+/**
+ * Tunnel : une énorme tête de T-rex posée en travers de la route, gueule grande ouverte.
+ * On entre par la gueule (sur la langue) et on ressort par l'arrière de la tête.
+ * Couleurs et facettes reprises du vrai modèle de T-rex (pack Quaternius).
+ */
+function tunnelTrex(piste) {
+  const i = ligneDroite(piste, 0.55);
+  const VERT = 0x5a6b4e, OLIVE = 0x848164, BEIGE = 0xb9935f, ROUGE = 0x863f45, NOIR = 0x161616;
+  const tete = new THREE.Group();
+  tete.userData.indice = i;
+  const L = piste.demi + piste.marge + 2; // demi-largeur de la gueule (au-delà des barrières)
+  const pal = 8.5; // hauteur du palais
+
+  // crâne : sections du bout du museau (z = -22) jusqu'à l'arrière (z = +20)
+  const section = (z, haut, w) => ({
+    z,
+    pts: [[-(w - 2.2), pal], [-w, pal + 1.4], [-w, pal + 4], [-w * 0.7, haut - 0.8], [0, haut], [w * 0.7, haut - 0.8], [w, pal + 4], [w, pal + 1.4], [w - 2.2, pal]],
+  });
+  const W = L + 3;
+  const crane = [section(-22, 12.5, W - 0.5), section(-14, 14, W), section(-4, 15.5, W + 0.3), section(6, 18.5, W + 0.8), section(14, 18, W + 0.5), section(20, 16, W)];
+  tete.add(loft(crane, VERT));
+  tete.add(bouchon(crane[0], VERT)); // bout du museau
+  // dessous de la lèvre du haut, plus clair
+  tete.add(loft(crane.map((c) => ({ z: c.z, pts: [[-(W - 2.2), pal], [-(W - 2.2), pal - 0.6], [W - 2.2, pal - 0.6], [W - 2.2, pal]] })), OLIVE));
+  // palais (intérieur de la gueule)
+  const palais = new THREE.Mesh(new THREE.PlaneGeometry(2 * (W - 2.2), 42), new THREE.MeshBasicMaterial({ color: 0x5c1f26, side: THREE.DoubleSide }));
+  palais.rotation.x = Math.PI / 2;
+  palais.position.set(0, pal - 0.62, -1);
+  tete.add(palais);
+
+  // mâchoire du bas : deux côtés posés au sol, de part et d'autre de la route
+  const matDent = new THREE.MeshLambertMaterial({ color: 0xfff8e1, flatShading: true });
   for (const sx of [1, -1]) {
-    ajouter(new THREE.SphereGeometry(2.4, 24, 16), blanc, sx * (L - 4), 14.6, -3);
-    ajouter(new THREE.SphereGeometry(1.2, 20, 14), noir, sx * (L - 4), 14.9, -5.1);
-    ajouter(new THREE.SphereGeometry(0.4, 12, 8), blanc, sx * (L - 4) + 0.4, 15.4, -6.0);
-    const sourcil = ajouter(boiteRonde(5, 0.9, 1.6), vertFonce, sx * (L - 4), 17.4, -3.5);
-    sourcil.rotation.z = sx * -0.25;
-    ajouter(new THREE.SphereGeometry(0.7, 16, 10), vertFonce, sx * 3, 9.9, -12.6);
+    const mach = [];
+    for (const [z, h] of [[-21, 2.6], [-10, 3.4], [2, 4.4], [12, 5.2], [20, 5]]) {
+      mach.push({ z, pts: [[sx * L, 0], [sx * L, h], [sx * (L + 1.6), h + 0.5], [sx * W, h - 0.4], [sx * (W + 0.4), 0]] });
+    }
+    tete.add(loft(mach, BEIGE));
+    // intérieur des joues (rouge sombre)
+    const joue = new THREE.Mesh(new THREE.PlaneGeometry(40, pal), new THREE.MeshBasicMaterial({ color: ROUGE, side: THREE.DoubleSide }));
+    joue.rotation.y = Math.PI / 2;
+    joue.position.set(sx * (L - 0.05), pal / 2, -1);
+    tete.add(joue);
+    // dents du haut (pendent des gencives) et du bas (sortent de la mâchoire)
+    for (let z = -20; z <= 8; z += 2.8) {
+      const d = new THREE.Mesh(new THREE.ConeGeometry(0.85, 2.8, 5), matDent);
+      d.rotation.x = Math.PI;
+      d.position.set(sx * (W - 2.6), pal - 1.4, z);
+      tete.add(d);
+      if (z < 6) {
+        const b = new THREE.Mesh(new THREE.ConeGeometry(0.8, 2.4, 5), matDent);
+        const hm = 2.6 + ((z + 21) / 41) * 2.4;
+        b.position.set(sx * (L + 0.8), hm + 1.1, z + 1.4);
+        tete.add(b);
+      }
+    }
+    // œil jaune avec pupille fendue, et arcade osseuse au-dessus
+    const oeil = new THREE.Mesh(new THREE.IcosahedronGeometry(1.8, 1), new THREE.MeshLambertMaterial({ color: 0xf2c94c, flatShading: true }));
+    oeil.position.set(sx * (W + 0.2), 14.5, 6);
+    tete.add(oeil);
+    const pupille = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.4, 0.5), new THREE.MeshBasicMaterial({ color: NOIR }));
+    pupille.position.set(sx * (W + 1.85), 14.5, 6);
+    tete.add(pupille);
+    const arcade = new THREE.Mesh(new THREE.ConeGeometry(1.8, 4.5, 4), new THREE.MeshLambertMaterial({ color: OLIVE, flatShading: true }));
+    arcade.rotation.set(Math.PI / 2, 0, sx * 0.4);
+    arcade.position.set(sx * (W - 0.4), 17.2, 5);
+    tete.add(arcade);
+    // narine
+    const narine = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshBasicMaterial({ color: NOIR }));
+    narine.scale.set(1, 0.5, 1.4);
+    narine.position.set(sx * 4, 12.6, -19.5);
+    tete.add(narine);
   }
-  // pics sur le dessus du crâne
-  for (let k = 0; k < 5; k++) ajouter(new THREE.ConeGeometry(1.4, 3, 12), orange, 0, 15.2, -4 + k * 3.2);
-  // cou qui part vers l'arrière
-  ajouter(boiteRonde(2 * L - 4, 8, 14), vert, 0, 12.5, 15); // reste au-dessus des karts (bas à 8,5 m)
-  // langue posée sur la route (décor plat, on roule dessus)
-  const langue = new THREE.Mesh(new THREE.CircleGeometry(1, 32).scale(6, 14, 1), rose);
+  // rangée de dents à l'avant du museau
+  for (let x = -(W - 3); x <= W - 3; x += 2.9) {
+    const d = new THREE.Mesh(new THREE.ConeGeometry(0.9, 3, 5), matDent);
+    d.rotation.x = Math.PI;
+    d.position.set(x, pal - 1.5, -21);
+    tete.add(d);
+  }
+  // langue sur la route
+  const langue = new THREE.Mesh(new THREE.CircleGeometry(1, 32).scale(7, 18, 1), new THREE.MeshLambertMaterial({ color: 0xc2526a }));
   langue.rotation.x = -Math.PI / 2;
-  langue.position.set(0, 0.045, 1);
+  langue.position.set(0, 0.045, -2);
   tete.add(langue);
 
-  // orientation : axe z de la tête = sens de la course
+  // cou qui part sur le côté gauche, et dos qui dépasse du sol (le reste est "enterré")
+  const matVert = new THREE.MeshLambertMaterial({ color: VERT, flatShading: true });
+  const cou = new THREE.Mesh(new THREE.CylinderGeometry(7, 9, 26, 7), matVert);
+  cou.position.set(W + 8, 7, 18);
+  cou.rotation.set(0, 0, 1.15);
+  tete.add(cou);
+  const dos = new THREE.Mesh(new THREE.SphereGeometry(1, 9, 6), matVert);
+  dos.scale.set(14, 9, 20);
+  dos.position.set(W + 26, 0, 24);
+  tete.add(dos);
+  const ventre = new THREE.Mesh(new THREE.SphereGeometry(1, 9, 6), new THREE.MeshLambertMaterial({ color: BEIGE, flatShading: true }));
+  ventre.scale.set(12, 5, 17);
+  ventre.position.set(W + 22, 0, 22);
+  tete.add(ventre);
+
   tete.position.set(piste.cx[i], 0, piste.cz[i]);
   tete.rotation.y = piste.angleA(i);
   return tete;
+}
+
+// ---------------------------------------------------------------------------
+/**
+ * Diplodocus couché le long de la route : sa tête est posée au sol, un tremplin permet
+ * de sauter sur son cou, on roule sur son dos et on redescend par sa queue.
+ * Le modèle (pack Quaternius) est plié une fois pour toutes, puis "figé" en un objet
+ * fixe ; on mesure ensuite la hauteur de son dos pour pouvoir rouler dessus.
+ */
+async function diplodocus(piste, groupe, eviter) {
+  const N = piste.N;
+  const i0 = ligneDroite(piste, 0.2, eviter);
+  const LAT = -(piste.demi - 4); // côté droit de la route : l'autre moitié reste libre
+
+  const { objet } = await creerDino("Apatosaurus", { hauteur: 15, animation: "Idle" });
+  const os = {};
+  objet.traverse((o) => { if (o.isBone) os[o.name] = o; });
+  const v = new THREE.Vector3();
+  const hauteurDe = (b) => { objet.updateMatrixWorld(true); return b.getWorldPosition(v).y; };
+
+  // plie un os autour de son axe X pour amener un autre os à la hauteur voulue
+  const AXES = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)];
+  const plier = (osAPlier, osCible, hauteurVoulue) => {
+    const depart = osAPlier.quaternion.clone();
+    const q = new THREE.Quaternion();
+    let meilleur = { axe: AXES[0], a: 0 }, ecart = Infinity;
+    for (const axe of AXES)
+      for (let a = -1.7; a <= 1.7; a += 0.05) {
+        osAPlier.quaternion.copy(depart).multiply(q.setFromAxisAngle(axe, a));
+        const e = Math.abs(hauteurDe(osCible) - hauteurVoulue);
+        if (e < ecart) { ecart = e; meilleur = { axe, a }; }
+      }
+    osAPlier.quaternion.copy(depart).multiply(q.setFromAxisAngle(meilleur.axe, meilleur.a));
+    return meilleur;
+  };
+  if (os.Neck && os.Head) objet.userData.cou = plier(os.Neck, os.Head, 1.6); // tête posée au sol
+  objet.userData.hauteurTete = os.Head ? hauteurDe(os.Head) : null;
+  if (os.Head) os.Head.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0)); // (tête laissée telle quelle)
+  // queue : chaque segment plie un peu pour que le bout touche le sol
+  const queue = ["Tail1", "Tail2", "Tail3", "Tail4", "Tail5"].map((n) => os[n]).filter(Boolean);
+  if (queue.length) {
+    const bout = queue[queue.length - 1];
+    const depart = queue.map((b) => b.quaternion.clone());
+    const q = new THREE.Quaternion();
+    let meilleur = { axe: AXES[0], a: 0 }, ecart = Infinity;
+    for (const axe of AXES)
+      for (let a = -0.6; a <= 0.6; a += 0.02) {
+        queue.forEach((b, k) => b.quaternion.copy(depart[k]).multiply(q.setFromAxisAngle(axe, a)));
+        const e = Math.abs(hauteurDe(bout) - 0.4);
+        if (e < ecart) { ecart = e; meilleur = { axe, a }; }
+      }
+    queue.forEach((b, k) => b.quaternion.copy(depart[k]).multiply(q.setFromAxisAngle(meilleur.axe, meilleur.a)));
+    objet.userData.queue = meilleur;
+  }
+
+  // orientation : la tête vers les karts qui arrivent, le corps le long de la route
+  objet.updateMatrixWorld(true);
+  const tete = (os.Head ?? objet).getWorldPosition(new THREE.Vector3());
+  const boutQueue = (queue[queue.length - 1] ?? objet).getWorldPosition(new THREE.Vector3());
+  const alpha = Math.atan2(tete.x - boutQueue.x, tete.z - boutQueue.z);
+  objet.rotation.y = piste.angleA(i0) + Math.PI - alpha;
+  objet.updateMatrixWorld(true);
+  const teteMonde = (os.Head ?? objet).getWorldPosition(new THREE.Vector3());
+  objet.position.set(piste.cx[i0] + piste.nx[i0] * LAT - teteMonde.x, 0, piste.cz[i0] + piste.nz[i0] * LAT - teteMonde.z);
+  objet.updateMatrixWorld(true);
+
+  // on fige la pose : un objet fixe (plus léger qu'un squelette animé), aplati en hauteur
+  const APLATIR = 0.42;
+  const fige = new THREE.Group();
+  objet.traverse((o) => {
+    if (!o.isSkinnedMesh) return;
+    const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    const pos = g.attributes.position;
+    const tmp = new THREE.Vector3();
+    // getVertexPosition applique le squelette : on l'appelle sur la géométrie d'origine
+    const src = o.geometry.index ? o.geometry.index : null;
+    for (let k = 0; k < pos.count; k++) {
+      const idx = src ? src.getX(k) : k;
+      o.getVertexPosition(idx, tmp);
+      tmp.applyMatrix4(o.matrixWorld);
+      pos.setXYZ(k, tmp.x, Math.max(0, tmp.y) * APLATIR, tmp.z); // aplati : il a l'air couché, et on peut grimper
+    }
+    g.deleteAttribute("skinIndex");
+    g.deleteAttribute("skinWeight");
+    g.computeVertexNormals();
+    g.computeBoundingBox();
+    g.computeBoundingSphere();
+    // faces visibles des deux côtés (le modèle converti a des faces retournées)
+    const mat = o.material.clone();
+    mat.side = THREE.DoubleSide;
+    mat.color.multiplyScalar(1.5); // un peu plus clair que le modèle d'origine
+    const m = new THREE.Mesh(g, mat);
+    fige.add(m);
+  });
+  groupe.add(fige);
+
+  // mesure de la hauteur du dos : rayons tirés du ciel vers le bas, sur une grille
+  const boite = new THREE.Box3().setFromObject(fige);
+  const { indice: iTete } = piste.localiser(teteMonde.x + objet.position.x, teteMonde.z + objet.position.z);
+  let iFin = iTete;
+  for (let k = 0; k < 120; k++) {
+    const i = (iTete + k) % N;
+    const dans = boite.containsPoint(new THREE.Vector3(piste.cx[i], boite.min.y + 0.1, piste.cz[i])) ||
+      boite.distanceToPoint(new THREE.Vector3(piste.cx[i] + piste.nx[i] * LAT, (boite.min.y + boite.max.y) / 2, piste.cz[i] + piste.nz[i] * LAT)) < 1;
+    if (dans) iFin = i;
+  }
+  const debut = (iTete - 6 + N) % N;
+  const nb = ((iFin - debut + N) % N) + 8;
+  const latMin = -(piste.demi + piste.marge), pasLat = 0.5;
+  const nbLat = Math.round((2 * (piste.demi + piste.marge)) / pasLat) + 1;
+  const h = new Float32Array(nb * nbLat);
+  const rayon = new THREE.Raycaster();
+  const bas = new THREE.Vector3(0, -1, 0);
+  let latG = Infinity, latD = -Infinity;
+  for (let a = 0; a < nb; a++) {
+    const i = (debut + a) % N;
+    for (let b = 0; b < nbLat; b++) {
+      const l = latMin + b * pasLat;
+      rayon.set(new THREE.Vector3(piste.cx[i] + piste.nx[i] * l, 80, piste.cz[i] + piste.nz[i] * l), bas);
+      const touche = rayon.intersectObject(fige, true)[0];
+      const y = touche ? touche.point.y : 0;
+      h[a * nbLat + b] = y;
+      if (y > 0.5) { latG = Math.min(latG, l); latD = Math.max(latD, l); }
+    }
+  }
+  piste.surfaces.push({ debut, nb, latMin, pasLat, nbLat, h });
+  piste.zonesIA.push({ debut: (debut - 12 + N) % N, fin: (debut + nb) % N, lateral: (latG + latD) / 2, demi: (latD - latG) / 2 + 0.5 });
+
+  // tremplin juste avant la tête, pour sauter sur le cou
+  const nbRampe = Math.max(1, Math.round(4.5 / piste.pas));
+  const rampe = { debut: (iTete - nbRampe - 5 + N) % N, nb: nbRampe, lateral: LAT, demiLargeur: 3.2, hauteur: 1.2 };
+  groupe.add(piste.ajouterTremplin(rampe));
+  groupe.userData.diplodocus = { indice: iTete, debut, nb, lateral: LAT, cou: objet.userData.cou, queue: objet.userData.queue, hauteurTete: objet.userData.hauteurTete, os: Object.keys(os) };
 }

@@ -83,9 +83,10 @@ export function construireDecor(def, piste) {
   groupe.add(sol);
 
   const DECORS = { prairie: decorPrairie, plage: decorPlage, neige: decorNeige, dino: decorDino, jouets: decorJouets, concert: decorConcert };
-  const animer = DECORS[def.decor]?.(groupe, piste, rnd, horsPiste);
+  const obstacles = []; // objets ronds qu'on ne traverse pas (ex. pieds du T-rex géant)
+  const animer = DECORS[def.decor]?.(groupe, piste, rnd, horsPiste, obstacles);
 
-  return { groupe, ciel: leCiel, animer: animer ?? (() => {}) };
+  return { groupe, ciel: leCiel, animer: animer ?? (() => {}), obstacles };
 }
 
 function decorPrairie(groupe, piste, rnd, horsPiste) {

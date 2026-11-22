@@ -240,14 +240,40 @@ export function construirePiste(def) {
   }
 
   /** Hauteur du sol (tremplin ou 0) à cet endroit, et pente pour incliner le kart. */
+  // Surfaces "posées" sur la piste (ex. le dos du diplodocus) : grille de hauteurs
+  // { debut, nb (échantillons), latMin, pasLat, nbLat, h: Float32Array(nb * nbLat) }
+  const surfaces = [];
+  // Zones que les adversaires évitent : { debut, fin, lateral, demi }
+  const zonesIA = [];
+
+  function ajouterTremplin(t) {
+    t.longueur = t.nb * pas;
+    tremplins.push(t);
+    return meshTremplin(t);
+  }
+
+  /** Hauteur du sol à cet endroit, sa pente (pour incliner le kart) et son type. */
   function hauteurTremplin(indice, lateral, long = 0) {
     for (const t of tremplins) {
       if (Math.abs(lateral - t.lateral) > t.demiLargeur) continue;
       const k = (indice - t.debut + N) % N;
       const d = k * pas + long;
-      if (d >= 0 && d <= t.longueur) return { h: (t.hauteur * d) / t.longueur, pente: Math.atan(t.hauteur / t.longueur) };
+      if (d >= 0 && d <= t.longueur) return { h: (t.hauteur * d) / t.longueur, pente: Math.atan(t.hauteur / t.longueur), type: "tremplin" };
     }
-    return { h: 0, pente: 0 };
+    for (const s of surfaces) {
+      const u = ((indice - s.debut + N) % N) + long / pas; // position le long (en échantillons)
+      const v = (lateral - s.latMin) / s.pasLat;
+      if (u < 0 || u > s.nb - 1 || v < 0 || v > s.nbLat - 1) continue;
+      const i0 = Math.floor(u), j0 = Math.floor(v);
+      const i1 = Math.min(i0 + 1, s.nb - 1), j1 = Math.min(j0 + 1, s.nbLat - 1);
+      const fu = u - i0, fv = v - j0;
+      const H = (i, j) => s.h[i * s.nbLat + j];
+      const h = (H(i0, j0) * (1 - fv) + H(i0, j1) * fv) * (1 - fu) + (H(i1, j0) * (1 - fv) + H(i1, j1) * fv) * fu;
+      if (h <= 0.05) continue;
+      const pente = Math.atan((H(i1, j0) - H(i0, j0)) / pas);
+      return { h, pente, type: "surface" };
+    }
+    return { h: 0, pente: 0, type: "sol" };
   }
 
   // ---------- Requêtes ----------
@@ -293,5 +319,5 @@ export function construirePiste(def) {
   const centre = new THREE.Vector3((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
   const rayon = Math.hypot(maxX - minX, maxZ - minZ) / 2;
 
-  return { groupe, N, L, pas, cx, cz, tx, tz, nx, nz, demi, marge, localiser, distanceCentre, angleA, centre, rayon, tremplins, hauteurTremplin };
+  return { groupe, N, L, pas, cx, cz, tx, tz, nx, nz, demi, marge, localiser, distanceCentre, angleA, centre, rayon, tremplins, hauteurTremplin, surfaces, zonesIA, ajouterTremplin };
 }

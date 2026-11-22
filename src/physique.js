@@ -38,6 +38,9 @@ export class KartPhysique {
     this.y = 0;
     this.vy = 0;
     this.ySol = 0;
+    this.solAvant = "sol";
+    this.xAvant = 0;
+    this.zAvant = 0;
     this.enLair = false;
     this.pente = 0; // inclinaison avant/arrière (visuel)
     this.sauts = 0; // compteurs pour les sons
@@ -146,15 +149,30 @@ export class KartPhysique {
       }
     } else {
       const avant = this.y;
-      this.y = sol.h;
-      this.pente = -sol.pente;
-      if (avant > 0.35 && sol.h < avant - 0.3 && this.vitesse > 4) {
-        this.enLair = true;
-        this.y = avant;
-        this.vy = this.vitesse * 0.32 + 2;
-        this.sauts++;
+      if (sol.h > avant + 1.6) {
+        // marche trop haute (flanc d'un dinosaure) : on recule et on rebondit doucement
+        this.x = this.xAvant;
+        this.z = this.zAvant;
+        this.vitesse *= -0.3;
+        this.chocs++;
+        const loc2 = p.localiser(this.x, this.z, this.indice);
+        this.indice = loc2.indice;
+        this.lateral = loc2.lateral;
+      } else {
+        this.y = sol.h;
+        this.pente = -sol.pente;
+        if (avant > 0.35 && sol.h < avant - 0.3 && this.vitesse > 4) {
+          // en haut d'un tremplin : on s'envole ; au bord d'une surface : on tombe simplement
+          this.enLair = true;
+          this.y = avant;
+          this.vy = this.solAvant === "tremplin" ? this.vitesse * 0.32 + 2 : 0;
+          if (this.solAvant === "tremplin") this.sauts++;
+        }
       }
+      this.solAvant = sol.type;
     }
+    this.xAvant = this.x;
+    this.zAvant = this.z;
 
     // --- barrières : rebond doux ---
     if (this.contreMur > 0) this.contreMur -= dt;

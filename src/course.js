@@ -245,6 +245,22 @@ export class Course {
 
   /** Chocs doux entre karts : on les écarte et on donne une petite poussée. */
   collisions() {
+    // obstacles du décor (ronds) : on repousse doucement le kart
+    for (const ob of this.decor.obstacles) {
+      for (const k of this.karts) {
+        const P = k.phys;
+        const dx = P.x - ob.x, dz = P.z - ob.z;
+        const min = ob.r + RAYON_KART;
+        const d2 = dx * dx + dz * dz;
+        if (d2 > min * min || d2 < 1e-6) continue;
+        const d = Math.sqrt(d2);
+        P.x = ob.x + (dx / d) * min;
+        P.z = ob.z + (dz / d) * min;
+        P.poussee.x += (dx / d) * 3;
+        P.poussee.z += (dz / d) * 3;
+        P.vitesse *= 0.9;
+      }
+    }
     const ks = this.karts;
     for (let a = 0; a < ks.length; a++)
       for (let b = a + 1; b < ks.length; b++) {

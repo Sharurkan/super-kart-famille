@@ -2,6 +2,9 @@
 // points : ligne centrale (x, z) en boucle fermée. Le premier point est la ligne d'arrivée,
 // et la course part dans la direction du deuxième point.
 
+// Circuits proposés dans le menu (les autres restent définis, prêts à être remis).
+export const CIRCUITS_ACTIFS = ["dino"];
+
 export const CIRCUITS = {
   prairie: {
     nom: "prairie",
