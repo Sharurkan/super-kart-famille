@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#2d7ff9" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="icon" type="image/png" href="./icones/icone-192.png" />
+    <link rel="apple-touch-icon" href="./icones/apple-touch-icon.png" />
+    <title>Super Kart Famille</title>
+  </head>
+  <body>
+    <div id="jeu"></div>
+
+    <!-- Icônes réutilisées -->
+    <svg width="0" height="0" style="position: absolute">
+      <defs>
+        <symbol id="i-retour" viewBox="0 0 100 100"><path d="M70 50 H30 M48 28 L26 50 L48 72" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+        <symbol id="i-jouer" viewBox="0 0 100 100"><path d="M36 22 L80 50 L36 78 Z" fill="#fff" stroke="#fff" stroke-width="8" stroke-linejoin="round" /></symbol>
+        <symbol id="i-gauche" viewBox="0 0 100 100"><path d="M64 18 L26 50 L64 82 Z" fill="#fff" stroke="#fff" stroke-width="10" stroke-linejoin="round" /></symbol>
+        <symbol id="i-droite" viewBox="0 0 100 100"><path d="M36 18 L74 50 L36 82 Z" fill="#fff" stroke="#fff" stroke-width="10" stroke-linejoin="round" /></symbol>
+        <symbol id="i-ok" viewBox="0 0 100 100"><path d="M24 52 L42 70 L78 32" fill="none" stroke="#fff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+        <symbol id="i-maison" viewBox="0 0 100 100"><path d="M18 50 L50 22 L82 50 M28 42 V80 H72 V42" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" /><rect x="43" y="58" width="14" height="22" fill="#fff" /></symbol>
+        <symbol id="i-rejouer" viewBox="0 0 100 100"><path d="M72 36 A26 26 0 1 0 76 58" fill="none" stroke="#fff" stroke-width="11" stroke-linecap="round" /><path d="M60 30 L78 30 L78 12" fill="none" stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+        <symbol id="i-pause" viewBox="0 0 100 100"><rect x="28" y="24" width="14" height="52" rx="4" fill="#fff" /><rect x="58" y="24" width="14" height="52" rx="4" fill="#fff" /></symbol>
+        <symbol id="i-cadenas" viewBox="0 0 100 100"><path d="M34 46 V34 A16 16 0 0 1 66 34 V46" fill="none" stroke="#fff" stroke-width="9" /><rect x="24" y="44" width="52" height="40" rx="8" fill="#fff" /></symbol>
+        <symbol id="i-haut" viewBox="0 0 100 100"><path d="M50 80 L50 30 M28 50 L50 26 L72 50" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+        <symbol id="i-bas" viewBox="0 0 100 100"><path d="M50 22 L50 70 M30 52 L50 74 L70 52" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+      </defs>
+    </svg>
+
+    <!-- Couper / remettre le son -->
+    <button id="btn-son" data-action="son" aria-label="Son">
+      <svg viewBox="0 0 100 100">
+        <path d="M18 40 H34 L54 22 V78 L34 60 H18 Z" fill="#fff" stroke="#fff" stroke-width="6" stroke-linejoin="round" />
+        <g class="ondes" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"><path d="M64 38 Q72 50 64 62" /><path d="M72 28 Q86 50 72 72" /></g>
+        <g class="croix" stroke="#ff6b6b" stroke-width="9" stroke-linecap="round"><path d="M64 36 L86 64 M86 36 L64 64" /></g>
+      </svg>
+    </button>
+
+    <!-- ===== 1. Titre ===== -->
+    <section id="ecran-titre" class="ecran">
+      <h1 class="logo"><span>S</span><span>u</span><span>p</span><span>e</span><span>r</span> <span>K</span><span>a</span><span>r</span><span>t</span></h1>
+      <button class="gros-rond orange" data-action="jouer" aria-label="Jouer"><svg><use href="#i-jouer" /></svg></button>
+    </section>
+
+    <!-- ===== 2. Personnage ===== -->
+    <section id="ecran-perso" class="ecran menu cache">
+      <button class="btn-retour" data-action="retour" aria-label="Retour"><svg><use href="#i-retour" /></svg></button>
+      <div id="liste-persos" class="liste-persos"></div>
+    </section>
+
+    <!-- ===== 3. Kart ===== -->
+    <section id="ecran-kart" class="ecran menu transparent cache">
+      <button class="btn-retour" data-action="retour" aria-label="Retour"><svg><use href="#i-retour" /></svg></button>
+      <button class="fleche gauche" data-action="kart-precedent" aria-label="Kart précédent"><svg><use href="#i-gauche" /></svg></button>
+      <button class="fleche droite" data-action="kart-suivant" aria-label="Kart suivant"><svg><use href="#i-droite" /></svg></button>
+      <div id="points-karts" class="points"></div>
+      <button class="btn-valider" data-action="kart-ok" aria-label="Choisir ce kart"><svg><use href="#i-ok" /></svg></button>
+    </section>
+
+    <!-- ===== 4. Circuit ===== -->
+    <section id="ecran-circuit" class="ecran menu cache">
+      <button class="btn-retour" data-action="retour" aria-label="Retour"><svg><use href="#i-retour" /></svg></button>
+      <div class="liste-circuits">
+        <button class="carte-circuit" data-circuit="prairie" aria-label="Prairie">
+          <svg viewBox="0 0 160 110">
+            <rect width="160" height="110" fill="#7fd0ff" />
+            <circle cx="132" cy="22" r="12" fill="#ffe066" />
+            <ellipse cx="40" cy="70" rx="70" ry="30" fill="#69db7c" />
+            <ellipse cx="130" cy="74" rx="60" ry="28" fill="#51cf66" />
+            <rect y="70" width="160" height="40" fill="#69db7c" />
+            <path d="M-5 105 C40 70 110 100 165 72 L165 88 C110 112 45 86 -5 120 Z" fill="#666b75" />
+            <path d="M-5 112 C40 78 110 106 165 80" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="8 6" />
+            <rect x="28" y="44" width="5" height="18" fill="#8b5a2b" /><circle cx="30" cy="40" r="12" fill="#2f9e44" />
+            <rect x="112" y="40" width="5" height="18" fill="#8b5a2b" /><circle cx="114" cy="36" r="11" fill="#37b24d" />
+            <circle cx="60" cy="80" r="3" fill="#ff6b6b" /><circle cx="90" cy="76" r="3" fill="#ffd43b" /><circle cx="140" cy="98" r="3" fill="#f783ac" />
+          </svg>
+        </button>
+        <button class="carte-circuit" data-circuit="plage" aria-label="Plage">
+          <svg viewBox="0 0 160 110">
+            <rect width="160" height="110" fill="#8ee0ff" />
+            <circle cx="30" cy="24" r="13" fill="#ffd43b" />
+            <rect y="58" width="160" height="22" fill="#1c9bef" />
+            <path d="M0 64 Q20 60 40 64 T80 64 T120 64 T160 64" fill="none" stroke="#fff" stroke-width="2" />
+            <rect y="78" width="160" height="32" fill="#ffe8a3" />
+            <path d="M118 96 Q114 70 124 46" fill="none" stroke="#8b5a2b" stroke-width="6" stroke-linecap="round" />
+            <path d="M124 46 Q108 40 98 52 M124 46 Q138 36 150 46 M124 46 Q120 30 108 30 M124 46 Q136 30 146 32" fill="none" stroke="#2f9e44" stroke-width="6" stroke-linecap="round" />
+            <circle cx="60" cy="96" r="7" fill="#ff6b6b" /><path d="M53 96 H67" stroke="#fff" stroke-width="3" />
+          </svg>
+          <span class="verrou"><svg><use href="#i-cadenas" /></svg></span>
+        </button>
+        <button class="carte-circuit" data-circuit="neige" aria-label="Neige">
+          <svg viewBox="0 0 160 110">
+            <rect width="160" height="110" fill="#b8dcff" />
+            <path d="M0 70 L40 30 L70 60 L100 24 L160 76 L160 110 L0 110 Z" fill="#e7f5ff" />
+            <rect y="78" width="160" height="32" fill="#ffffff" />
+            <path d="M36 84 L36 92" stroke="#8b5a2b" stroke-width="5" />
+            <path d="M36 40 L52 66 L20 66 Z M36 52 L56 84 L16 84 Z" fill="#2b8a3e" />
+            <path d="M36 40 L44 53 L28 53 Z" fill="#fff" />
+            <circle cx="112" cy="90" r="14" fill="#fff" stroke="#adb5bd" stroke-width="1.5" />
+            <circle cx="112" cy="68" r="10" fill="#fff" stroke="#adb5bd" stroke-width="1.5" />
+            <circle cx="108" cy="66" r="1.6" fill="#222" /><circle cx="116" cy="66" r="1.6" fill="#222" />
+            <path d="M112 69 L120 71 L112 72 Z" fill="#ff922b" />
+            <rect x="104" y="52" width="16" height="7" fill="#e8322f" />
+            <circle cx="12" cy="20" r="2" fill="#fff" /><circle cx="70" cy="14" r="2" fill="#fff" /><circle cx="140" cy="30" r="2" fill="#fff" />
+          </svg>
+          <span class="verrou"><svg><use href="#i-cadenas" /></svg></span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ===== 5. Options ===== -->
+    <section id="ecran-options" class="ecran menu cache">
+      <button class="btn-retour" data-action="retour" aria-label="Retour"><svg><use href="#i-retour" /></svg></button>
+      <div class="rangee">
+        <button class="choix" data-mode="auto" aria-label="Accélération automatique">
+          <span class="mini-commandes">
+            <span class="mini bleu"><svg><use href="#i-gauche" /></svg></span>
+            <span class="mini bleu"><svg><use href="#i-droite" /></svg></span>
+          </span>
+        </button>
+        <button class="choix" data-mode="manuel" aria-label="Accélération manuelle">
+          <span class="mini-commandes">
+            <span class="mini bleu"><svg><use href="#i-gauche" /></svg></span>
+            <span class="mini bleu"><svg><use href="#i-droite" /></svg></span>
+            <span class="mini vert"><svg><use href="#i-haut" /></svg></span>
+          </span>
+        </button>
+      </div>
+      <div class="rangee">
+        <button class="choix emoji" data-difficulte="facile" aria-label="Facile">🐢</button>
+        <button class="choix emoji" data-difficulte="normal" aria-label="Normal">🐇</button>
+        <button class="choix emoji" data-difficulte="rapide" aria-label="Rapide">🚀</button>
+      </div>
+      <button class="gros-rond vert petit" data-action="partez" aria-label="Partez"><svg><use href="#i-jouer" /></svg></button>
+    </section>
+
+    <!-- ===== Course : HUD ===== -->
+    <div id="hud" class="cache">
+      <div id="tours" class="badge">
+        <svg viewBox="0 0 24 24" class="icone-drapeau" aria-hidden="true">
+          <rect x="3" y="2" width="2" height="20" rx="1" fill="#333" />
+          <rect x="5" y="3" width="15" height="10" fill="#fff" stroke="#333" stroke-width="1" />
+          <rect x="5" y="3" width="5" height="5" fill="#222" /><rect x="15" y="3" width="5" height="5" fill="#222" />
+          <rect x="10" y="8" width="5" height="5" fill="#222" />
+        </svg>
+        <span id="tour-num">1</span><span class="sur">/3</span>
+      </div>
+      <div id="position" class="position"><span id="position-num">1</span><span id="position-suffixe">er</span></div>
+      <button class="petit-btn" data-action="pause" aria-label="Pause"><svg><use href="#i-pause" /></svg></button>
+    </div>
+    <div id="classement" class="classement cache"></div>
+
+    <!-- 3, 2, 1, Partez ! / arrivée -->
+    <div id="annonce" class="annonce cache"></div>
+
+    <!-- Commandes tactiles -->
+    <div id="commandes" class="cache">
+      <div class="zone-gauche">
+        <button class="btn-dir" data-ctrl="gauche" aria-label="Gauche"><svg><use href="#i-gauche" /></svg></button>
+        <button class="btn-dir" data-ctrl="droite" aria-label="Droite"><svg><use href="#i-droite" /></svg></button>
+      </div>
+      <div class="zone-droite">
+        <button class="btn-frein" data-ctrl="frein" aria-label="Frein"><svg><use href="#i-bas" /></svg></button>
+        <button class="btn-gaz" data-ctrl="gaz" aria-label="Accélérer"><svg><use href="#i-haut" /></svg></button>
+      </div>
+    </div>
+
+    <!-- Pause -->
+    <section id="ecran-pause" class="ecran cache">
+      <div class="rangee">
+        <button class="gros-rond vert" data-action="reprendre" aria-label="Continuer"><svg><use href="#i-jouer" /></svg></button>
+        <button class="gros-rond bleu petit" data-action="menu" aria-label="Menu"><svg><use href="#i-maison" /></svg></button>
+      </div>
+    </section>
+
+    <!-- Podium -->
+    <section id="ecran-fin" class="ecran transparent cache">
+      <div id="ma-place" class="ma-place cache"></div>
+      <div class="rangee bas">
+        <button class="gros-rond vert" data-action="rejouer" aria-label="Rejouer"><svg><use href="#i-rejouer" /></svg></button>
+        <button class="gros-rond bleu petit" data-action="menu" aria-label="Menu"><svg><use href="#i-maison" /></svg></button>
+      </div>
+    </section>
+
+    <!-- Demande de tourner la tablette -->
+    <div id="tourner">
+      <svg viewBox="0 0 100 100" class="icone-tourner">
+        <rect x="30" y="15" width="40" height="70" rx="6" fill="none" stroke="#fff" stroke-width="6" />
+        <path d="M20 70 A40 40 0 0 1 20 30" fill="none" stroke="#ffd34d" stroke-width="6" stroke-linecap="round" />
+        <path d="M12 36 L20 28 L28 36" fill="none" stroke="#ffd34d" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

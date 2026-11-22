@@ -1,0 +1,8 @@
+node_modules
+dist
+
+# photos originales : restent sur le PC (seuls les sprites découpés sont publiés)
+assets/originaux/
+
+# réglages locaux de l'éditeur
+.claude/

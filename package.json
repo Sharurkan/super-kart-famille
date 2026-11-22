@@ -1,0 +1,21 @@
+{
+  "name": "mon-jeu-kart",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "sprites": "node scripts/lancer_python.mjs decoupe_sprites.py",
+    "icones": "node scripts/lancer_python.mjs icones.py"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "pyodide": "^0.27.2",
+    "vite": "^6.0.7",
+    "vite-plugin-pwa": "^0.21.1"
+  }
+}
