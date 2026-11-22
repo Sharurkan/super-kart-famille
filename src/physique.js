@@ -34,6 +34,14 @@ export class KartPhysique {
     this.poussee = { x: 0, z: 0 }; // petites poussées (rebonds, chocs)
     this.chocs = 0; // nombre de rebonds sur les barrières (pour le son)
     this.assistance = 0; // rad/s d'aide au volant (joueur uniquement)
+    // tremplins : hauteur, vitesse verticale, en l'air ou pas
+    this.y = 0;
+    this.vy = 0;
+    this.ySol = 0;
+    this.enLair = false;
+    this.pente = 0; // inclinaison avant/arrière (visuel)
+    this.sauts = 0; // compteurs pour les sons
+    this.atterrissages = 0;
     this.facteur = 1; // multiplicateur de vitesse max (adversaires : difficulté + élastique)
   }
 
@@ -50,6 +58,8 @@ export class KartPhysique {
     this.direction = 0;
     this.poussee.x = this.poussee.z = 0;
     this.tempsCoince = this.tempsContresens = this.clignote = 0;
+    this.y = this.vy = 0;
+    this.enLair = false;
   }
 
   get progression() {
@@ -64,6 +74,8 @@ export class KartPhysique {
     this.vitesse = 0;
     this.poussee.x = this.poussee.z = 0;
     this.tempsCoince = this.tempsContresens = 0;
+    this.y = this.vy = 0;
+    this.enLair = false;
     this.clignote = 1.2;
   }
 
@@ -115,7 +127,32 @@ export class KartPhysique {
       else if (ancien < p.N * 0.2 && this.indice > p.N * 0.8) this.tour--;
     }
     const i = this.indice;
-    this.dansHerbe = Math.abs(this.lateral) > p.demi + 1.4;
+    if (!this.enLair) this.dansHerbe = Math.abs(this.lateral) > p.demi + 1.4;
+
+    // --- tremplins : on monte la pente, puis on s'envole en haut ---
+    const sol = p.hauteurTremplin(i, this.lateral, loc.long);
+    this.ySol = sol.h;
+    if (this.enLair) {
+      this.vy -= 28 * dt;
+      this.y += this.vy * dt;
+      this.pente = Math.max(-0.35, Math.min(0.25, -this.vy * 0.03));
+      if (this.y <= sol.h) {
+        this.y = sol.h;
+        this.vy = 0;
+        this.enLair = false;
+        this.atterrissages++;
+      }
+    } else {
+      const avant = this.y;
+      this.y = sol.h;
+      this.pente = -sol.pente;
+      if (avant > 0.35 && sol.h < avant - 0.3 && this.vitesse > 4) {
+        this.enLair = true;
+        this.y = avant;
+        this.vy = this.vitesse * 0.32 + 2;
+        this.sauts++;
+      }
+    }
 
     // --- barrières : rebond doux ---
     if (this.contreMur > 0) this.contreMur -= dt;
@@ -141,7 +178,7 @@ export class KartPhysique {
 
     // --- coincé ou à contresens : replacement automatique ---
     const veutAvancer = entree.gaz || entree.frein;
-    if (veutAvancer && v < 1.5) this.tempsCoince += dt;
+    if (veutAvancer && v < 1.5 && !this.enLair) this.tempsCoince += dt;
     else this.tempsCoince = 0;
     const ecart = Math.abs(enveloppe(this.angle - p.angleA(i)));
     if (ecart > 2.0 && this.vitesse > -0.5) this.tempsContresens += dt;

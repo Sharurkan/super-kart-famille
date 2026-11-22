@@ -287,5 +287,5 @@ export function creerKart(type = "classique") {
   ombre.position.y = 0.05;
   groupe.add(ombre);
 
-  return { groupe, corps, siege, roues };
+  return { groupe, corps, siege, roues, ombre };
 }

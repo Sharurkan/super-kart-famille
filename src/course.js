@@ -54,13 +54,18 @@ export class Course {
 
     const scene = (this.scene = new THREE.Scene());
     this.camera = new THREE.PerspectiveCamera(66, 1, 0.3, 1000);
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x6a8f4a, 2.2));
+    const ciel = new THREE.HemisphereLight(0xffffff, 0x6a8f4a, 2.2);
+    scene.add(ciel);
     const soleil = new THREE.DirectionalLight(0xffffff, 1.6);
     soleil.position.set(60, 100, 40);
     scene.add(soleil);
 
     const def = (this.def = CIRCUITS[options.circuit] ?? CIRCUITS.prairie);
     scene.fog = new THREE.Fog(def.ciel.horizon, 160, 620);
+    if (def.lumiere) {
+      ciel.intensity = def.lumiere;
+      soleil.intensity = def.lumiere * 0.6;
+    }
     this.piste = construirePiste(def);
     scene.add(this.piste.groupe);
     this.decor = construireDecor(def, this.piste);
@@ -103,6 +108,8 @@ export class Course {
     this.vitesseJoueurMoy = 0.7;
     this.dernierChoc = 0;
     this.chocsVus = 0;
+    this.sautsVus = 0;
+    this.atterrissagesVus = 0;
   }
 
   redimensionner(aspect) {
@@ -153,6 +160,15 @@ export class Course {
         }
       }
       this.collisions();
+      if (joueur.phys.sauts !== this.sautsVus) {
+        this.sautsVus = joueur.phys.sauts;
+        audio.saut();
+      }
+      if (joueur.phys.atterrissages !== this.atterrissagesVus) {
+        this.atterrissagesVus = joueur.phys.atterrissages;
+        audio.atterrissage();
+        for (let n = 0; n < 4; n++) this.particules.emettre(joueur.phys.x, 0.3, joueur.phys.z, 0xffffff, 1, 0.5);
+      }
       if (joueur.phys.chocs !== this.chocsVus) {
         this.chocsVus = joueur.phys.chocs;
         audio.choc();
@@ -190,7 +206,7 @@ export class Course {
     this.particules.update(dt);
 
     const vRel = joueur.phys.vitesse / REGLAGES.vitesseMax;
-    this.cam.update(dt, joueur.phys.x, joueur.phys.z, joueur.phys.angle, vRel);
+    this.cam.update(dt, joueur.phys.x, joueur.phys.z, joueur.phys.angle, vRel, joueur.phys.y);
     this.decor.ciel.position.set(this.camera.position.x, 0, this.camera.position.z);
     this.decor.animer(dt, this.camera);
     for (const k of this.karts) {
@@ -223,7 +239,7 @@ export class Course {
         const dx = B.x - A.x, dz = B.z - A.z;
         const d2 = dx * dx + dz * dz;
         const min = RAYON_KART * 2;
-        if (d2 > min * min || d2 < 1e-6) continue;
+        if (d2 > min * min || d2 < 1e-6 || Math.abs(A.y - B.y) > 1) continue;
         const d = Math.sqrt(d2);
         const nx = dx / d, nz = dz / d;
         const recouvre = (min - d) / 2;
@@ -244,7 +260,12 @@ export class Course {
   majVisuel(k, dt) {
     const { phys, modele } = k;
     const vRel = phys.vitesse / REGLAGES.vitesseMax;
-    modele.groupe.position.set(phys.x, 0, phys.z);
+    modele.groupe.position.set(phys.x, phys.y, phys.z);
+    modele.corps.rotation.x += (phys.pente - modele.corps.rotation.x) * Math.min(1, dt * 10);
+    // l'ombre reste au sol et rapetisse quand on saute
+    const hauteurVol = phys.y - phys.ySol;
+    modele.ombre.position.y = 0.05 - hauteurVol;
+    modele.ombre.scale.set(2.4, 1, 3.4).multiplyScalar(1 / (1 + hauteurVol * 0.3));
     modele.groupe.rotation.y = phys.angle;
     const derapage = -phys.direction * 0.32 * THREE.MathUtils.clamp(vRel, 0, 1);
     modele.corps.rotation.y += (derapage - modele.corps.rotation.y) * Math.min(1, dt * 6);

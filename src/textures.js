@@ -57,3 +57,23 @@ export function textureRond(interieur = "rgba(0,0,0,0.55)", exterieur = "rgba(0,
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
+
+/** Dessus des tremplins : jaune avec des flèches orange. */
+export function textureChevrons() {
+  const [c, g] = canvas(64, 64);
+  g.fillStyle = "#ffd43b";
+  g.fillRect(0, 0, 64, 64);
+  g.strokeStyle = "#ff6b00";
+  g.lineWidth = 9;
+  g.lineJoin = "round";
+  for (const y of [14, 42]) {
+    g.beginPath();
+    g.moveTo(10, y + 14);
+    g.lineTo(32, y);
+    g.lineTo(54, y + 14);
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}

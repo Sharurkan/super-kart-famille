@@ -7,7 +7,7 @@ import { textureRond } from "./textures.js";
 // Un objet composé de plusieurs formes colorées = une seule géométrie (couleurs par
 // sommet), dessinée ensuite en InstancedMesh : un seul appel de dessin par type d'objet.
 
-function fusion(parties) {
+export function fusion(parties) {
   const geos = parties.map(({ geo, couleur }) => {
     const g = geo.index ? geo.toNonIndexed() : geo;
     const c = new THREE.Color(couleur);
@@ -21,10 +21,10 @@ function fusion(parties) {
   return mergeGeometries(geos);
 }
 
-const matCouleurs = () => new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+export const matCouleurs = () => new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
 const filtrer = (liste, ok) => liste.filter((p) => ok(p.x, p.z));
 
-function nuages(groupe, piste, rnd) {
+export function nuages(groupe, piste, rnd) {
   const liste = [];
   for (let i = 0; i < 18; i++) {
     const a = rnd() * Math.PI * 2;

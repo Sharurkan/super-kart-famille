@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { decorPlage, decorNeige } from "./decors-circuits.js";
+import { decorDino, decorJouets, decorConcert } from "./decors-themes.js";
 
 /** Générateur aléatoire reproductible (même décor à chaque partie). */
 function aleatoire(graine) {
@@ -74,7 +75,7 @@ export function construireDecor(def, piste) {
   sol.position.set(piste.centre.x, 0, piste.centre.z);
   groupe.add(sol);
 
-  const DECORS = { prairie: decorPrairie, plage: decorPlage, neige: decorNeige };
+  const DECORS = { prairie: decorPrairie, plage: decorPlage, neige: decorNeige, dino: decorDino, jouets: decorJouets, concert: decorConcert };
   const animer = DECORS[def.decor]?.(groupe, piste, rnd, horsPiste);
 
   return { groupe, ciel: leCiel, animer: animer ?? (() => {}) };

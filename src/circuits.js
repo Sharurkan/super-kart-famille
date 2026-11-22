@@ -56,4 +56,59 @@ export const CIRCUITS = {
     route: 0xd8e4ff,
     decor: "neige",
   },
+
+  dino: {
+    nom: "dino",
+    points: [
+      [0, -40], [0, 45], [15, 105], [60, 140], [115, 130], [150, 90], [135, 40],
+      [95, 25], [70, -10], [85, -60], [130, -90], [120, -145], [65, -165], [20, -140],
+    ],
+    echelle: 0.85,
+    largeur: 16,
+    marge: 6,
+    ciel: { haut: 0xff9e57, horizon: 0xffe3b3 },
+    sol: 0x8fbf4a,
+    horsPiste: 0x9c7a4a,
+    bordure: [0xff922b, 0xfff3bf],
+    barriere: [0x8b5a2b, 0xd9a066],
+    route: 0xe8dcc8,
+    decor: "dino",
+  },
+
+  jouets: {
+    nom: "jouets",
+    points: [
+      [0, -40], [0, 50], [25, 100], [80, 110], [120, 80], [110, 30], [140, -10],
+      [175, -50], [160, -110], [100, -130], [45, -120], [10, -95],
+    ],
+    echelle: 0.85,
+    largeur: 16,
+    marge: 6,
+    ciel: { haut: 0xa5d8ff, horizon: 0xfff0f6 },
+    sol: 0xd9a066, // parquet
+    horsPiste: 0xffd8a8,
+    bordure: [0x4dabf7, 0xffd43b],
+    barriere: [0xff6b6b, 0x51cf66],
+    route: 0xffe3e3,
+    decor: "jouets",
+  },
+
+  concert: {
+    nom: "concert",
+    points: [
+      [0, -40], [0, 40], [-25, 95], [-80, 120], [-130, 95], [-140, 40], [-110, 0],
+      [-140, -45], [-130, -110], [-75, -140], [-25, -110],
+    ],
+    echelle: 0.85,
+    largeur: 16,
+    marge: 6,
+    ciel: { haut: 0x1a0b3d, horizon: 0x7b2c9e },
+    sol: 0x2b1b4f,
+    horsPiste: 0xf783ac,
+    bordure: [0xf783ac, 0x66d9e8],
+    barriere: [0xff4dd2, 0x22b8cf],
+    route: 0xb197fc,
+    lumiere: 1.5, // un peu plus sombre : c'est le soir
+    decor: "concert",
+  },
 };

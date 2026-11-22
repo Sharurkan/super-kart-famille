@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { textureAsphalte, textureDamier } from "./textures.js";
+import { textureAsphalte, textureDamier, textureChevrons } from "./textures.js";
 
 /**
  * Construit la piste (route, bordures, barrières, ligne d'arrivée) à partir
@@ -152,6 +152,80 @@ export function construirePiste(def) {
     groupe.add(portique);
   }
 
+  // ---------- Tremplins ----------
+  // Placés automatiquement dans les lignes droites, en alternant gauche / droite / centre.
+  const tremplins = [];
+  {
+    const courbure = (i) => Math.abs(Math.atan2(Math.sin(angleBrut((i + 15) % N) - angleBrut((i - 15 + N) % N)), Math.cos(angleBrut((i + 15) % N) - angleBrut((i - 15 + N) % N))));
+    const nb = Math.max(1, Math.round(4.5 / pas)); // ~4,5 m de pente
+    const cibles = def.tremplins ?? [0.12, 0.42, 0.72];
+    const lateraux = [-4, 4, 0];
+    cibles.forEach((f, n) => {
+      // l'endroit le plus droit autour de la position voulue, loin de la grille et des autres tremplins
+      let meilleur = -1, cMin = Infinity;
+      for (let k = -Math.floor(N * 0.2); k <= N * 0.2; k++) {
+        const i = (Math.round(f * N) + k + N) % N;
+        if (i < 25 || i > N - 50) continue;
+        if (tremplins.some((t) => Math.abs(t.debut - i) < 80)) continue;
+        const c = courbure(i) + courbure((i + nb) % N) + Math.abs(k) * 0.0008;
+        if (c < cMin) { cMin = c; meilleur = i; }
+      }
+      if (meilleur >= 0) tremplins.push({ debut: meilleur, nb, longueur: nb * pas, lateral: lateraux[n % 3], demiLargeur: 3.5, hauteur: 1.0 });
+    });
+  }
+  for (const t of tremplins) groupe.add(meshTremplin(t));
+
+  function angleBrut(i) {
+    return Math.atan2(tx[i], tz[i]);
+  }
+
+  function meshTremplin(t) {
+    const pos = [], uv = [];
+    const pt = (k, o, y) => {
+      const i = (t.debut + k) % N;
+      return [cx[i] + nx[i] * (t.lateral + o), y, cz[i] + nz[i] * (t.lateral + o)];
+    };
+    const w = t.demiLargeur;
+    const tri = (a, b, c, ua, ub, uc) => {
+      pos.push(...a, ...b, ...c);
+      uv.push(...ua, ...ub, ...uc);
+    };
+    for (let k = 0; k < t.nb; k++) {
+      const h0 = 0.04 + (t.hauteur * k) / t.nb, h1 = 0.04 + (t.hauteur * (k + 1)) / t.nb;
+      const v0 = k / t.nb, v1 = (k + 1) / t.nb;
+      const a = pt(k, w, h0), b = pt(k, -w, h0), c = pt(k + 1, w, h1), d = pt(k + 1, -w, h1);
+      tri(a, b, c, [0, v0], [1, v0], [0, v1]);
+      tri(b, d, c, [1, v0], [1, v1], [0, v1]);
+      // côtés
+      for (const o of [w, -w]) {
+        const p0 = pt(k, o, 0), p1 = pt(k + 1, o, 0), q0 = pt(k, o, h0), q1 = pt(k + 1, o, h1);
+        tri(p0, q0, p1, [0, 0], [0, 0], [0, 0]);
+        tri(q0, q1, p1, [0, 0], [0, 0], [0, 0]);
+      }
+    }
+    // face arrière (verticale)
+    const H = 0.04 + t.hauteur;
+    const e = pt(t.nb, w, 0), f = pt(t.nb, -w, 0), g = pt(t.nb, w, H), h = pt(t.nb, -w, H);
+    tri(e, f, g, [0, 0], [0, 0], [0, 0]);
+    tri(f, h, g, [0, 0], [0, 0], [0, 0]);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+    geo.computeVertexNormals();
+    return new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: textureChevrons(), side: THREE.DoubleSide }));
+  }
+
+  /** Hauteur du sol (tremplin ou 0) à cet endroit, et pente pour incliner le kart. */
+  function hauteurTremplin(indice, lateral, long = 0) {
+    for (const t of tremplins) {
+      if (Math.abs(lateral - t.lateral) > t.demiLargeur) continue;
+      const k = (indice - t.debut + N) % N;
+      const d = k * pas + long;
+      if (d >= 0 && d <= t.longueur) return { h: (t.hauteur * d) / t.longueur, pente: Math.atan(t.hauteur / t.longueur) };
+    }
+    return { h: 0, pente: 0 };
+  }
+
   // ---------- Requêtes ----------
   /** Trouve l'échantillon de piste le plus proche (recherche locale autour de "indice"). */
   function localiser(x, z, indice = -1) {
@@ -170,7 +244,8 @@ export function construirePiste(def) {
     }
     const i = meilleur;
     const lateral = (x - cx[i]) * nx[i] + (z - cz[i]) * nz[i];
-    return { indice: i, lateral };
+    const long = (x - cx[i]) * tx[i] + (z - cz[i]) * tz[i]; // avance/recul par rapport à l'échantillon
+    return { indice: i, lateral, long };
   }
 
   /** Distance approximative au centre de la piste (pour placer le décor). */
@@ -194,5 +269,5 @@ export function construirePiste(def) {
   const centre = new THREE.Vector3((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
   const rayon = Math.hypot(maxX - minX, maxZ - minZ) / 2;
 
-  return { groupe, N, L, pas, cx, cz, tx, tz, nx, nz, demi, marge, localiser, distanceCentre, angleA, centre, rayon };
+  return { groupe, N, L, pas, cx, cz, tx, tz, nx, nz, demi, marge, localiser, distanceCentre, angleA, centre, rayon, tremplins, hauteurTremplin };
 }

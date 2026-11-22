@@ -210,6 +210,27 @@ class MoteurAudio {
     this.bruitFiltre(this.ctx.currentTime, 0.18, 0.5, "lowpass", 400, this.busEffets);
   }
 
+  /** "Boing" qui monte quand on s'envole d'un tremplin. */
+  saut() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = "triangle";
+    o.frequency.setValueAtTime(220, t);
+    o.frequency.exponentialRampToValueAtTime(880, t + 0.25);
+    g.gain.setValueAtTime(0.5, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    o.connect(g).connect(this.busEffets);
+    o.start(t);
+    o.stop(t + 0.4);
+  }
+
+  atterrissage() {
+    if (!this.ctx) return;
+    this.bruitFiltre(this.ctx.currentTime, 0.15, 0.35, "lowpass", 300, this.busEffets);
+  }
+
   fanfare() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;

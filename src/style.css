@@ -732,3 +732,15 @@ button:active {
   right: auto;
   left: max(16px, 4vw);
 }
+
+/* 6 circuits : 2 rangées de 3 */
+.liste-circuits {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, min(300px, 34vh * 1.45)));
+  gap: clamp(12px, 2.5vh, 26px) clamp(14px, 3vw, 32px);
+  justify-content: center;
+}
+
+.carte-circuit {
+  max-width: none;
+}
