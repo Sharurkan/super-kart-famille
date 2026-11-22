@@ -5,6 +5,10 @@ animations raccourcies). CC-BY 4.0 : http://creativecommons.org/licenses/by/4.0/
 
 --- CC-BY 4.0 (attribution obligatoire) ---
 
+Cartoonish Go-Kart — CaptCaviness
+  https://sketchfab.com/3d-models/cartoonish-go-kart-cb5b6546a26d48cd8c80320c11d24737
+  Fichier : karts/kart.glb (roues séparées, simplifié, carrosserie recolorable)
+
 Pteranodon (Animated) — DogexorRexUwU (oscar.lopez.riviello)
   https://sketchfab.com/3d-models/pteranodon-animated-7d7683df41d1405283f160e81a5dff1b
   Fichier : dinos/pteranodon.glb

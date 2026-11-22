@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { textureRond } from "./textures.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { liberer } from "./liberer.js";
 
 // Tous les karts ont exactement les mêmes performances : seul le look change.
 // Repère local : avant du kart = +Z, haut = +Y.
@@ -15,57 +16,100 @@ export const COULEURS_KARTS = {
 };
 
 // ---------------------------------------------------------------------------
-// Karts venant de vrais modèles 3D (fichiers .glb), ex. le pack gratuit Kenney.
-// Les roues doivent être des nœuds dont le nom commence par "wheel" (fl/fr = avant).
-// ⚠️ Uniquement des karts ou motos à TOIT OUVERT : le pilote est un dessin 2D posé sur
-// le siège, dans une voiture fermée sa tête sort du toit.
-// Pour en ajouter un : poser le .glb dans public/karts/, l'ajouter ici et dans KARTS.
-// Exemple : monkart: { url: "karts/monkart.glb", longueur: 2.6, siege: [0, 0.55, -0.4], tourner: 0 },
-export const MODELES_GLB = {};
-const chargeurGLB = new GLTFLoader();
-export const gabarits = new Map();
+// Le vrai modèle 3D : « Cartoonish Go-Kart » de CaptCaviness (CC-BY 4.0), préparé dans
+// Blender par outils/blender/kart_go_kart.py -> public/karts/kart.glb.
+// Il est déjà à la bonne taille (3 m de long, posé au sol, avant = +Z). Les 4 roues sont
+// des nœuds "roue_avg/avd/arg/ard" dont l'origine est le centre de la roue. Le matériau
+// "peinture" (texture gris clair) est teinté avec la couleur de chaque kart.
+// ⚠️ Uniquement des karts à TOIT OUVERT : le pilote est un dessin 2D posé sur le siège.
+// Tant que le fichier n'est pas chargé (ou s'il ne se charge pas), on montre le kart
+// construit en code plus bas, puis on le remplace dès que le modèle arrive.
+const URL_KART = "karts/kart.glb";
+const SIEGE_GLB = [0, 0.48, -0.25]; // creux du baquet
+let gabarit = null; // { scene, map, rayons: Map(nom de roue -> rayon) }
 
-function chargerGabarit(type) {
-  if (!gabarits.has(type)) {
-    const info = MODELES_GLB[type];
-    gabarits.set(type, chargeurGLB.loadAsync(import.meta.env.BASE_URL + info.url).then((gltf) => {
-      const modele = gltf.scene;
-      // matériaux plus légers (même rendu que le reste du jeu)
-      modele.traverse((o) => {
-        if (o.isMesh) o.material = new THREE.MeshLambertMaterial({ map: o.material.map, color: o.material.color });
-      });
-      // mise à l'échelle : longueur voulue, posé au sol, centré
-      modele.rotation.y = info.tourner;
-      const boite = new THREE.Box3().setFromObject(modele);
-      const taille = boite.getSize(new THREE.Vector3());
-      const s = info.longueur / Math.max(taille.x, taille.z);
-      const centre = boite.getCenter(new THREE.Vector3());
-      const racine = new THREE.Group();
-      modele.position.set(-centre.x, -boite.min.y, -centre.z);
-      racine.add(modele);
-      racine.scale.setScalar(s);
-      return racine;
-    }));
+/** Promesse résolue quand le modèle 3D est prêt (vrai) ou a échoué (faux). */
+export const kartPret = new GLTFLoader()
+  .loadAsync(import.meta.env.BASE_URL + URL_KART)
+  .then((gltf) => {
+    const scene = gltf.scene;
+    let map = null;
+    scene.traverse((o) => {
+      if (o.isMesh && o.material.map) map = o.material.map;
+    });
+    if (map) map.anisotropy = 4;
+    const matKart = new THREE.MeshLambertMaterial({ map });
+    const rayons = new Map();
+    scene.traverse((o) => {
+      if (o.isMesh) {
+        o.userData.peinture = o.material.name === "peinture";
+        o.material = matKart;
+      }
+      if (/^roue_/.test(o.name)) rayons.set(o.name, new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3()).y / 2);
+    });
+    gabarit = { scene, map, rayons };
+    return true;
+  })
+  .catch((e) => {
+    console.warn("Kart 3D non chargé, on garde les karts dessinés en code :", e);
+    return false;
+  });
+
+const peintures = new Map();
+function matPeinture(couleur) {
+  if (!peintures.has(couleur)) {
+    // plastique un peu brillant, comme un jouet
+    peintures.set(couleur, new THREE.MeshPhongMaterial({ map: gabarit.map, color: couleur, shininess: 60, specular: 0x2a2a2a }));
   }
-  return gabarits.get(type);
+  return peintures.get(couleur);
 }
 
-function constructeurGLB(type) {
-  return ({ corps, roues }) => {
-    chargerGabarit(type).then((gabarit) => {
-      const m = gabarit.clone(true);
-      corps.add(m);
-      m.updateMatrixWorld(true);
-      m.traverse((o) => {
-        if (!o.name.startsWith("wheel")) return;
-        o.rotation.order = "YXZ"; // braquage puis rotation de la roue
-        const r = new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3()).y / 2 || 0.3;
-        const roue = { pivot: o, tourne: o, rayon: r };
-        (/f[lr]$/.test(o.name) ? roues.avant : roues.arriere).push(roue);
-      });
-    });
-    return { siege: MODELES_GLB[type].siege };
-  };
+/** Petits accessoires pour reconnaître chaque kart (en plus de la couleur). */
+const ACCESSOIRES = {
+  pompier(g) {
+    boite(g, 0.26, 0.14, 0.2, 0x339af0, -0.17, 0.98, 0.78); // gyrophares
+    boite(g, 0.26, 0.14, 0.2, 0xff4d4d, 0.17, 0.98, 0.78);
+  },
+  licorne(g) {
+    const corne = cone(g, 0.08, 0.5, 8, 0xffc933, 0, 1.08, 1.05);
+    corne.rotation.x = 0.7;
+  },
+  dino(g) {
+    for (let k = 0; k < 4; k++) {
+      const pic = cone(g, 0.11 - k * 0.015, 0.26 - k * 0.03, 4, 0xff922b, 0, 1.0 - k * 0.04, 1.15 - k * 0.22);
+      pic.rotation.x = -0.25;
+    }
+  },
+  fusee(g) {
+    // flammes au bout des pots d'échappement
+    for (const s of [1, -1]) {
+      const flamme = cone(g, 0.13, 0.5, 10, 0xffa94d, s * 0.44, 1.08, -1.72);
+      flamme.material = matFlamme;
+      flamme.rotation.x = -Math.PI / 2 + 0.45; // vers l'arrière, un peu vers le haut comme les pots
+    }
+  },
+  baignoire(g) {
+    // canard en plastique sur le ponton
+    sphere(g, 0.15, 0xffd43b, 0.72, 0.72, -0.15, 1);
+    sphere(g, 0.1, 0xffd43b, 0.72, 0.9, -0.05, 1);
+    cone(g, 0.05, 0.12, 4, 0xff922b, 0.72, 0.88, 0.07).rotation.x = Math.PI / 2;
+  },
+};
+const matFlamme = new THREE.MeshBasicMaterial({ color: 0xffa94d });
+
+/** Habille un kart avec le modèle 3D (clone : géométries et texture partagées). */
+function habiller(corps, roues, type) {
+  const m = gabarit.scene.clone(true);
+  const peinture = matPeinture(COULEURS_KARTS[type] ?? COULEURS_KARTS.classique);
+  m.traverse((o) => {
+    if (o.isMesh && o.userData.peinture) o.material = peinture;
+    if (!/^roue_/.test(o.name)) return;
+    o.rotation.order = "YXZ"; // braquage (Y) puis rotation de la roue (X)
+    const roue = { pivot: o, tourne: o, rayon: gabarit.rayons.get(o.name) };
+    (o.name.startsWith("roue_av") ? roues.avant : roues.arriere).push(roue);
+  });
+  ACCESSOIRES[type]?.(m);
+  corps.add(m);
 }
 
 const materiaux = new Map();
@@ -333,8 +377,6 @@ const CONSTRUCTEURS = {
   },
 };
 
-for (const type of Object.keys(MODELES_GLB)) CONSTRUCTEURS[type] = constructeurGLB(type);
-
 const texOmbre = textureRond();
 const geoOmbre = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
 const matOmbre = new THREE.MeshBasicMaterial({ map: texOmbre, transparent: true, depthWrite: false });
@@ -342,16 +384,36 @@ const matOmbre = new THREE.MeshBasicMaterial({ map: texOmbre, transparent: true,
 /**
  * Crée un kart.
  * groupe : position + direction ; corps : dérapage / roulis / rebonds ; siege : où poser le pilote.
+ * roues.avant / roues.arriere : { pivot (braquage), tourne (roule), rayon }.
  */
 export function creerKart(type = "classique") {
   const groupe = new THREE.Group();
   const corps = new THREE.Group();
   groupe.add(corps);
   const roues = { avant: [], arriere: [] };
-  const info = (CONSTRUCTEURS[type] ?? CONSTRUCTEURS.classique)({ corps, roues });
   const siege = new THREE.Group();
-  siege.position.set(...info.siege);
   corps.add(siege);
+
+  if (gabarit) {
+    habiller(corps, roues, type);
+    siege.position.set(...SIEGE_GLB);
+  } else {
+    // kart dessiné en code en attendant le modèle 3D (ou s'il ne se charge pas)
+    const secours = new THREE.Group();
+    corps.add(secours);
+    const info = (CONSTRUCTEURS[type] ?? CONSTRUCTEURS.classique)({ corps: secours, roues });
+    siege.position.set(...info.siege);
+    kartPret.then((ok) => {
+      if (!ok) return;
+      corps.remove(secours);
+      liberer(secours);
+      // on vide les tableaux sans les remplacer : la course et la vitrine gardent "roues"
+      roues.avant.length = 0;
+      roues.arriere.length = 0;
+      habiller(corps, roues, type);
+      siege.position.set(...SIEGE_GLB);
+    });
+  }
 
   const ombre = new THREE.Mesh(geoOmbre, matOmbre);
   ombre.scale.set(2.4, 1, 3.4);
