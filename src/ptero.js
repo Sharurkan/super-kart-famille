@@ -1,4 +1,6 @@
 import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import { planter } from "./vegetation.js";
 import { fusion } from "./decors-circuits.js";
 import { audio } from "./audio.js";
@@ -42,11 +44,168 @@ function bezierDerivee(a, b, c, d, u, cible) {
 }
 
 // ---------------------------------------------------------------------------
-// Le ptérodactyle (modèle provisoire construit en code, ~700 triangles).
-// Pour le remplacer par un vrai modèle animé (GLB), il suffit que creerPtero()
-// renvoie le même objet : { objet, battre(dt, mode) } avec l'origine de "objet"
+// Le ptérodactyle : un vrai modèle animé (public/dinos/pteranodon.glb, d'après
+// "Pteranodon (Animated)" de oscar.lopez.riviello, CC-BY 4.0, voir CREDITS.txt ;
+// préparé par outils/blender/ptero-preparer.py). Tant qu'il n'est pas chargé (ou si
+// le chargement échoue), on montre le modèle provisoire construit en code.
+// creerPtero() renvoie { objet, battre(dt, mode) } avec l'origine de "objet"
 // à l'endroit où les pattes tiennent le kart, la tête vers +Z.
-// mode : "plane" (ailes ouvertes), "pique" (ailes repliées en piqué), "bat" (battements).
+// mode : "plane" (ailes ouvertes), "pique" (piqué), "bat" (battements).
+
+const ENVERGURE = 8.2; // m, d'un bout d'aile à l'autre
+const PATTES = 1.6; // agrandissement des pattes (le corps reste au-dessus du pilote)
+const TEINTES = [0xffffff, 0xdce9ff, 0xe4ffd9, 0xffe1ee, 0xfff0c9]; // pour que les 5 ne soient pas identiques
+
+let promesseModele = null;
+let modeleCharge = null;
+/** Charge le modèle une seule fois (renvoie null en cas d'échec, sans jamais planter). */
+export function chargerPtero() {
+  if (!promesseModele) {
+    promesseModele = new GLTFLoader()
+      .loadAsync(`${import.meta.env.BASE_URL}dinos/pteranodon.glb`)
+      .then((gltf) => (modeleCharge = preparerModele(gltf)))
+      .catch((e) => {
+        console.warn("ptérodactyle : modèle 3D indisponible, on garde le provisoire", e);
+        return null;
+      });
+  }
+  return promesseModele;
+}
+
+function preparerModele(gltf) {
+  const scene = gltf.scene;
+  const os = {}; // os par nom court ("Lthigh.92_92" → "Lthigh")
+  scene.traverse((o) => {
+    if (o.isBone) os[o.name.replace(/[.\d_]+$/, "")] ??= o;
+    if (o.isMesh) o.frustumCulled = false; // le squelette animé sort de sa boîte
+  });
+  let mesh = null;
+  scene.traverse((o) => {
+    if (o.isSkinnedMesh && !mesh) mesh = o;
+  });
+  // on ne garde que les rotations (le corps ne monte pas et ne descend pas par rapport au kart),
+  // et les cuisses restent fixes : on les tourne pour que les pattes pendent sous le corps
+  const cuisses = [os.Lthigh, os.Rthigh].filter(Boolean);
+  for (const c of gltf.animations)
+    c.tracks = c.tracks.filter((t) => t.name.endsWith(".quaternion") && !cuisses.some((b) => t.name.startsWith(b.name + ".")));
+  const battement = gltf.animations.find((c) => c.name === "battement") ?? gltf.animations[0];
+  const plane = gltf.animations.find((c) => c.name === "plane") ?? battement;
+  if (!mesh || !battement) throw new Error("modèle incomplet");
+
+  // pose de référence : début du vol plané
+  const mixer = new THREE.AnimationMixer(scene);
+  mixer.clipAction(plane).play();
+  mixer.update(0);
+  scene.updateMatrixWorld(true);
+  const pos = (b) => b.getWorldPosition(new THREE.Vector3());
+  // pattes vers le bas et un peu vers l'arrière : le corps passe au-dessus du capot, pas sur la tête du pilote
+  const versBas = new THREE.Vector3(0, -1, -0.35).normalize();
+  const q = new THREE.Quaternion(), qMonde = new THREE.Quaternion(), qParent = new THREE.Quaternion();
+  for (const [cuisse, cheville] of [[os.Lthigh, os.Lankle], [os.Rthigh, os.Rankle]]) {
+    if (!cuisse || !cheville) continue;
+    const d = pos(cheville).sub(pos(cuisse)).normalize();
+    q.setFromUnitVectors(d, versBas);
+    cuisse.getWorldQuaternion(qMonde);
+    cuisse.parent.getWorldQuaternion(qParent);
+    cuisse.quaternion.copy(qParent.invert().multiply(q.multiply(qMonde)));
+    cuisse.scale.multiplyScalar(PATTES); // de grandes pattes (et de grosses griffes) pour porter un kart
+    cuisse.updateMatrixWorld(true);
+  }
+  // sens : la tête doit regarder vers +Z
+  const demiTour = os.head && os.chest ? pos(os.head).z < pos(os.chest).z : false;
+  // taille (envergure) et point d'accroche (entre les deux pattes, au plus bas des doigts)
+  const boite = new THREE.Box3().setFromObject(scene, true);
+  const echelle = ENVERGURE / Math.max(1e-6, boite.max.x - boite.min.x);
+  const pieds = new THREE.Vector3();
+  let n = 0;
+  for (const cote of ["L", "R"]) {
+    let bas = null;
+    os[cote + "ankle"]?.traverse((b) => {
+      if (b.isBone && (!bas || pos(b).y < bas.y)) bas = pos(b);
+    });
+    if (bas) {
+      pieds.add(bas);
+      n++;
+    }
+  }
+  if (n) pieds.divideScalar(n);
+  else pieds.set((boite.min.x + boite.max.x) / 2, boite.min.y, (boite.min.z + boite.max.z) / 2);
+  mixer.stopAllAction();
+  mixer.uncacheRoot(scene);
+  return { scene, battement, plane, echelle, pieds, demiTour, tex: mesh.material.map ?? null };
+}
+
+/** Une copie animée du modèle chargé (squelette cloné, son propre mixer). */
+function creerPteroModele(m, variante) {
+  const objet = new THREE.Group();
+  const pivot = new THREE.Group();
+  const copie = SkeletonUtils.clone(m.scene);
+  const mat = new THREE.MeshLambertMaterial({ map: m.tex, side: THREE.DoubleSide, color: TEINTES[variante % TEINTES.length] });
+  copie.traverse((o) => {
+    if (o.isMesh) {
+      o.material = mat;
+      o.frustumCulled = false;
+    }
+  });
+  if (m.demiTour) pivot.rotation.y = Math.PI;
+  pivot.scale.setScalar(m.echelle);
+  copie.position.copy(m.pieds).negate();
+  pivot.add(copie);
+  objet.add(pivot);
+
+  const mixer = new THREE.AnimationMixer(copie);
+  const bat = mixer.clipAction(m.battement);
+  const plane = mixer.clipAction(m.plane);
+  bat.play();
+  plane.play();
+  bat.time = Math.random() * m.battement.duration;
+  plane.time = Math.random() * m.plane.duration;
+  let poidsBat = 0;
+  bat.setEffectiveWeight(0);
+  plane.setEffectiveWeight(1);
+  return {
+    objet,
+    modele3D: true,
+    battre(dt, mode = "bat") {
+      poidsBat += ((mode === "bat" ? 1 : 0) - poidsBat) * Math.min(1, dt * 5);
+      bat.setEffectiveWeight(poidsBat);
+      plane.setEffectiveWeight(1 - poidsBat);
+      bat.timeScale = 1.5; // battements énergiques : il porte un kart !
+      plane.timeScale = mode === "pique" ? 0.4 : 1;
+      mixer.update(dt);
+    },
+  };
+}
+
+/**
+ * Crée un ptérodactyle. Si le vrai modèle est déjà chargé, on l'utilise tout de suite ;
+ * sinon on montre le provisoire et on le remplace dès que le modèle arrive.
+ */
+export function creerPtero(variante = 0) {
+  const objet = new THREE.Group();
+  let actuel = null;
+  const mettre = (p) => {
+    if (actuel) objet.remove(actuel.objet);
+    actuel = p;
+    objet.add(p.objet);
+  };
+  if (modeleCharge) mettre(creerPteroModele(modeleCharge, variante));
+  else {
+    mettre(creerPteroProvisoire(variante));
+    chargerPtero().then((m) => {
+      if (m) mettre(creerPteroModele(m, variante));
+    });
+  }
+  return {
+    objet,
+    battre: (dt, mode) => actuel.battre(dt, mode),
+    get modele3D() {
+      return !!actuel.modele3D;
+    },
+  };
+}
+
+// --- le modèle provisoire, construit en code (~700 triangles) ---
 
 const PALETTES = [
   { corps: 0xf76707, aile: 0xffa94d, bord: 0xc2410c, crete: 0xe03131 },
@@ -81,7 +240,7 @@ function membrane(points, triangles, couleurs) {
   return g;
 }
 
-export function creerPtero(variante = 0) {
+function creerPteroProvisoire(variante = 0) {
   const P = PALETTES[variante % PALETTES.length];
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
   const objet = new THREE.Group();
@@ -216,6 +375,7 @@ export function installerRavin(groupe, piste, { debut }) {
   const id = (il + Math.round(RAVIN.depose / pas)) % N;
   piste.trouer(ib, il);
   piste.ravin = { debut: ib, fin: il, depose: id };
+  chargerPtero(); // le vrai modèle arrive pendant le départ de la course
 
   const groupeRavin = new THREE.Group();
   groupe.add(groupeRavin);
@@ -482,7 +642,7 @@ export function installerRavin(groupe, piste, { debut }) {
       bezier(d.a, d.b, d.c, d.d, u, tmp);
       p.objet.position.copy(tmp);
       orienter(p, bezierDerivee(d.a, d.b, d.c, d.d, u, tmpV), dt);
-      p.battre(dt, "bat");
+      p.battre(dt, u < 0.3 ? "bat" : "plane"); // libéré du kart, il plane vers le ciel
       if (u >= 1) {
         p.depart = null;
         p.libre = true;
