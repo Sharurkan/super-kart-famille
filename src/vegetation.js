@@ -9,7 +9,9 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 // même avec des centaines de fougères.
 // Les arbres et le sous-bois de la jungle sont des « imposteurs » (photos d'arbres réalistes
 // Poly Haven sous 8 angles) : voir planterImposteurs et planterJungle en bas du fichier.
-// (Les arbres Quaternius du fichier jurassique.glb ne sont plus plantés.)
+// (jurassique.glb ne contient plus que les plantes Quaternius encore plantées : arbres, rochers et
+// cailloux Quaternius retirés avec outils/blender/elaguer_glb.mjs ; les anciens noms de rochers et
+// cailloux sont remplacés par les modèles réalistes, voir REMPLACEMENTS.)
 
 // Hauteur voulue (mètres) pour chaque modèle du fichier
 export const TAILLES = {

@@ -1,3 +1,5 @@
+(Fichier de référence pour tous les crédits : public/CREDITS.txt. Extrait ci-dessous.)
+
 realiste.glb (outils/blender/pack_realiste.py) et volcan.glb (outils/blender/pack_volcan.py)
 
 Rochers (rock_moss_set_01, rock_07) et fougère (fern_02) : Poly Haven, CC0

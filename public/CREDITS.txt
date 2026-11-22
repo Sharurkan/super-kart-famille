@@ -1,62 +1,89 @@
 Super Kart Famille — crédits des modèles 3D et textures
+(fichier de référence ; les petits fichiers LICENCE-*.txt des dossiers en sont des extraits)
 
-Tous les modèles ont été modifiés pour le jeu (maillages simplifiés, textures réduites,
-animations raccourcies). CC-BY 4.0 : http://creativecommons.org/licenses/by/4.0/
+Tous les modèles ont été modifiés pour le jeu : maillages simplifiés, textures réduites
+(souvent converties en WebP), animations raccourcies ou ajoutées, versions « -loin » allégées.
 
---- CC-BY 4.0 (attribution obligatoire) ---
+=== CC-BY 4.0 (attribution obligatoire) ===
+Licence : https://creativecommons.org/licenses/by/4.0/
+Chaque œuvre : « This work is based on "<titre>" by <auteur> licensed under CC-BY-4.0 ».
 
-Cartoonish Go-Kart — CaptCaviness
+"Cartoonish Go-Kart" — CaptCaviness
   https://sketchfab.com/3d-models/cartoonish-go-kart-cb5b6546a26d48cd8c80320c11d24737
   Fichier : karts/kart.glb (roues séparées, simplifié, carrosserie recolorable)
 
-Pteranodon (Animated) — DogexorRexUwU (oscar.lopez.riviello)
+"Pteranodon (Animated)" — DogexorRexUwU (oscar.lopez.riviello)
   https://sketchfab.com/3d-models/pteranodon-animated-7d7683df41d1405283f160e81a5dff1b
   Fichier : dinos/pteranodon.glb
 
-PBR Velociraptor (Animated) — Ferocious Industries (ferociousindustries.matthias)
+"PBR Velociraptor (Animated)" — Ferocious Industries (ferociousindustries.matthias)
   https://sketchfab.com/3d-models/pbr-velociraptor-animated-8f1744af7b0847a2aabe3df90be802f0
   Fichier : dinos/velociraptor-pbr.glb
 
-Triceratops - dinosaur - low poly — Legendary Claws (Weverton.Oliveira)
-  https://sketchfab.com/3d-models/triceratops-dinosaur-low-poly-d5658e6fe77d40bda00d59bb840cd856
-  Fichier : dinos/triceratops-lp.glb
-
-Randaling T- Rex, animated! — quander
-  https://sketchfab.com/3d-models/randaling-t-rex-animated-09a3632365344a99bb88e3dd0b684c89
-  Fichiers : dinos/trex-realiste.glb, dinos/trex-realiste-loin.glb
-
-PBR Stegasaurus (Animated) — Ferocious Industries (ferociousindustries.matthias)
+"PBR Stegasaurus (Animated)" — Ferocious Industries (ferociousindustries.matthias)
   https://sketchfab.com/3d-models/pbr-stegasaurus-animated-ec254ea1554941fe8a131f62db0faf3d
   Fichiers : dinos/stego-realiste.glb, dinos/stego-realiste-loin.glb
 
-Parasaurolophus — ichigo15
+"Triceratops - dinosaur - low poly" — Legendary Claws (Weverton.Oliveira)
+  https://sketchfab.com/3d-models/triceratops-dinosaur-low-poly-d5658e6fe77d40bda00d59bb840cd856
+  Fichier : dinos/triceratops-lp.glb
+
+"Randaling T- Rex, animated!" — quander
+  https://sketchfab.com/3d-models/randaling-t-rex-animated-09a3632365344a99bb88e3dd0b684c89
+  Fichiers : dinos/trex-realiste.glb, dinos/trex-realiste-loin.glb
+
+"Parasaurolophus" — ichigo15
   https://sketchfab.com/3d-models/parasaurolophus-39aaa00e8c6d46928f8ac1fb6114ca52
   Fichiers : dinos/para-realiste.glb, dinos/para-realiste-loin.glb
 
-Brachiosaurus_AR card — Zinaida.Kovrova
+"Brachiosaurus_AR card" — Zinaida.Kovrova
   https://sketchfab.com/3d-models/brachiosaurus-ar-card-751b32784e1a4ddd9c95aa88d7640ab7
-  Fichiers : dinos/sauropode-troupeau.glb, dinos/sauropode-troupeau-loin.glb
-Mosasaurus — Alexey Zaika (lexazaixa25)
+  Fichiers : dinos/diplodocus.glb (le grand sauropode couché que l'on escalade, reposé dans Blender),
+             dinos/sauropode-troupeau.glb, dinos/sauropode-troupeau-loin.glb (le troupeau)
+
+"Mosasaurus" — Alexey Zaika (lexazaixa25)
   https://sketchfab.com/3d-models/mosasaurus-684754a2ad8c46aca0634326b53d1f04
-  This work is based on "Mosasaurus" (https://sketchfab.com/3d-models/mosasaurus-684754a2ad8c46aca0634326b53d1f04)
-  by Alexey Zaika (https://sketchfab.com/lexazaixa25) licensed under CC-BY-4.0
   Fichier : aquarium/mosasaure.glb (simplifié, texture réduite, un seul cycle de nage)
 
-Sago Palm, Game ready, Low poly, baked textures. — Valykor
+"Sago Palm, Game ready, Low poly, baked textures." — Valykor
   https://sketchfab.com/3d-models/sago-palm-game-ready-low-poly-baked-textures-85c86658224a4fe493f0f35091635555
   Fichier : nature/realiste.glb (cycas)
 
-Volcano — santhu (santhu48)
+"Volcano" — santhu (santhu48)
   https://sketchfab.com/3d-models/volcano-e89153ec4f324e688f78d001dd3f7e3c
-  Fichier : nature/volcan.glb
+  Fichier : nature/volcan.glb (occlusion mélangée à la couleur, étiré en hauteur)
 
---- CC0 (domaine public, merci quand même !) ---
+=== CC0 (domaine public, merci quand même !) ===
+Licence : https://creativecommons.org/publicdomain/zero/1.0/
 
-Quaternius — Ultimate Animated Dinosaur Pack, Stylized Nature MegaKit (dinos/, nature/jurassique.glb)
-Kenney — Food Kit (bonbons/bonbons.glb) : https://kenney.nl/assets/food-kit
-Poly Haven — rock_moss_set_01, rock_07, fern_02, forrest_ground_01, grass_path_2,
-  brown_mud_leaves_01 (nature/realiste.glb, textures/) : https://polyhaven.com
+Quaternius — https://quaternius.com
+  Ultimate Animated Dinosaur Pack : dinos/Trex.glb, Apatosaurus.glb, Stegosaurus.glb,
+    Triceratops.glb, Parasaurolophus.glb, Velociraptor.glb (secours si un modèle réaliste ne charge pas)
+  Stylized Nature MegaKit (version gratuite) : nature/jurassique.glb (fougère, plantes, herbe,
+    fleurs, champignon, pierres de sentier ; outils/blender/pack_vegetation.py puis elaguer_glb.mjs)
 
---- Générés pour ce jeu ---
+Kenney — Food Kit : bonbons/bonbons.glb
+  https://kenney.nl/assets/food-kit
 
-Tête de T-rex et diplodocus : images Gemini, maillages Hunyuan3D, textures projetées avec Blender.
+Poly Haven — https://polyhaven.com
+  Rochers et fougère (nature/realiste.glb, outils/blender/pack_realiste.py) :
+    rock_moss_set_01                                  https://polyhaven.com/a/rock_moss_set_01
+    rock_07                                           https://polyhaven.com/a/rock_07
+    fern_02 (canal alpha ajouté à la couleur)         https://polyhaven.com/a/fern_02
+  Textures du sol (textures/, outils/blender/textures_sol.py) :
+    forrest_ground_01   -> sol-herbe.jpg              https://polyhaven.com/a/forrest_ground_01
+    grass_path_2        -> sol-terre.jpg              https://polyhaven.com/a/grass_path_2
+    brown_mud_leaves_01 -> sol-sous-bois.jpg          https://polyhaven.com/a/brown_mud_leaves_01
+  Arbres de la jungle (nature/arbres.webp + arbres.json : imposteurs photographiés sous 8 angles,
+  outils/blender/impostors_rendre.py puis impostors_atlas.py) :
+    fir_tree_01 — Fir Tree 01 (Rob Tuytel, Rico Cilliers)                 https://polyhaven.com/a/fir_tree_01
+    island_tree_01 — Island Tree 01 (Rob Tuytel, Rico Cilliers)           https://polyhaven.com/a/island_tree_01
+    jacaranda_tree — Jacaranda Tree (Rob Tuytel, Rico Cilliers)           https://polyhaven.com/a/jacaranda_tree
+    tree_small_02 — Tree Small 02 (Rico Cilliers)                         https://polyhaven.com/a/tree_small_02
+    pachira_aquatica_01 — Pachira Aquatica 01 (Rob Tuytel, Rico Cilliers) https://polyhaven.com/a/pachira_aquatica_01
+    calathea_orbifolia_01 — Calathea Orbifolia 01 (Rob Tuytel, Rico Cilliers) https://polyhaven.com/a/calathea_orbifolia_01
+    anthurium_botany_01 — Anthurium Botany 01 (Rob Tuytel, Rico Cilliers) https://polyhaven.com/a/anthurium_botany_01
+
+=== Fabriqués pour ce jeu ===
+
+Tête de T-rex (dinos/tete-trex.glb) : image Gemini, maillage Hunyuan3D, texture projetée avec Blender.
