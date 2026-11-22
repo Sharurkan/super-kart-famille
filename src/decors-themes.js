@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { instances, positions, boiteRonde } from "./decor.js";
 import { fusion, matCouleurs, nuages } from "./decors-circuits.js";
 import { creerDino } from "./dinos.js";
+import { planter } from "./vegetation.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 // Décors des circuits Dinosaures, Jouets et Concert pop.
@@ -38,20 +39,27 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
     });
   });
 
-  // arbres préhistoriques (tronc + parasol de feuilles) et fougères
+  // forêt jurassique : vrais modèles 3D (fougères géantes, plantes tropicales, arbres, rochers)
+  const varie = (liste, s0, ds) => liste.map((p) => ({ ...p, s: s0 + rnd() * ds, r: rnd() * 6.3 }));
+  planter(groupe, "Fern_1", varie(positions(piste, rnd, 150, piste.demi + 2.6, 45), 0.7, 0.9));
+  planter(groupe, "Plant_1_Big", varie(positions(piste, rnd, 45, horsPiste, 60), 0.7, 0.7));
+  planter(groupe, "Plant_7_Big", varie(positions(piste, rnd, 55, horsPiste, 70), 0.7, 0.7));
+  planter(groupe, "Plant_1", varie(positions(piste, rnd, 70, piste.demi + 2.6, 40), 0.8, 0.6));
+  planter(groupe, "Plant_7", varie(positions(piste, rnd, 70, piste.demi + 2.6, 40), 0.8, 0.6));
+  planter(groupe, "Grass_Common_Tall", varie(positions(piste, rnd, 80, piste.demi + 2.2, 35), 0.7, 0.8));
+  planter(groupe, "CommonTree_1", varie(positions(piste, rnd, 10, horsPiste + 8, 95), 0.8, 0.5));
+  planter(groupe, "CommonTree_2", varie(positions(piste, rnd, 10, horsPiste + 8, 95), 0.8, 0.5));
+  planter(groupe, "CommonTree_3", varie(positions(piste, rnd, 10, horsPiste + 8, 95), 0.8, 0.5));
+  planter(groupe, "Pine_1", varie(positions(piste, rnd, 8, horsPiste + 12, 110), 0.8, 0.5));
+  planter(groupe, "Pine_2", varie(positions(piste, rnd, 8, horsPiste + 12, 110), 0.8, 0.5));
+  planter(groupe, "DeadTree_1", varie(positions(piste, rnd, 3, horsPiste + 6, 80), 0.8, 0.4));
+  for (const r of ["Rock_Medium_1", "Rock_Medium_2", "Rock_Medium_3"]) planter(groupe, r, varie(positions(piste, rnd, 16, horsPiste, 100), 0.6, 1.2));
+  // arbres lointains très simples (cachés par la brume, presque gratuits)
   const arbre = fusion([
-    { geo: new THREE.CylinderGeometry(0.35, 0.55, 6, 12).translate(0, 3, 0), couleur: 0x8b5a2b },
-    { geo: new THREE.ConeGeometry(3, 1.4, 16).translate(0, 6.6, 0), couleur: 0x2b8a3e },
-    { geo: new THREE.ConeGeometry(2.2, 1.2, 16).translate(0, 7.5, 0), couleur: 0x37b24d },
+    { geo: new THREE.CylinderGeometry(0.35, 0.55, 6, 8).translate(0, 3, 0), couleur: 0x6b4a2b },
+    { geo: new THREE.IcosahedronGeometry(3.2, 1).translate(0, 7.5, 0), couleur: 0x3f8f3a },
   ]);
-  groupe.add(instances(arbre, matCouleurs(), positions(piste, rnd, 150, horsPiste + 1, 130).map((p) => ({ ...p, s: 0.8 + rnd() * 0.6, r: rnd() * 6 }))));
-  const fougere = fusion(
-    Array.from({ length: 7 }, (_, k) => ({
-      geo: boiteRonde(0.35, 0.05, 1.8).translate(0, 0, 0.9).rotateX(-0.6).rotateY((k / 7) * Math.PI * 2).translate(0, 0.2, 0),
-      couleur: k % 2 ? 0x2f9e44 : 0x51cf66,
-    }))
-  );
-  groupe.add(instances(fougere, matCouleurs(), positions(piste, rnd, 160, piste.demi + 2.5, 60).map((p) => ({ ...p, s: 0.8 + rnd() * 0.8, r: rnd() * 6 }))));
+  groupe.add(instances(arbre, matCouleurs(), positions(piste, rnd, 90, 110, 170).map((p) => ({ ...p, s: 0.9 + rnd() * 0.7, r: rnd() * 6 }))));
 
   // nids d'œufs
   const nid = fusion([
@@ -61,10 +69,6 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
     { geo: new THREE.SphereGeometry(0.45, 13, 10).scale(1, 1.35, 1).translate(0, 0.6, -0.4), couleur: 0xffe8cc },
   ]);
   groupe.add(instances(nid, matCouleurs(), positions(piste, rnd, 14, horsPiste, 40).map((p) => ({ ...p, s: 1, r: rnd() * 6 }))));
-
-  // rochers
-  groupe.add(instances(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshLambertMaterial({ color: 0x8d7b68, flatShading: false }),
-    positions(piste, rnd, 50, horsPiste, 110).map((p) => ({ ...p, s: 0.6 + rnd() * 1.6, sy: 0.6 + rnd() * 0.5, r: rnd() * 6 }))));
 
   // volcan au loin avec sa fumée
   const angleVolcan = rnd() * Math.PI * 2;

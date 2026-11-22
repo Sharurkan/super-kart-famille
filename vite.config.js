@@ -31,7 +31,7 @@ export default defineConfig({
       workbox: {
         // tout le jeu est mis en cache : il marche ensuite sans réseau
         globPatterns: ["**/*.{js,css,html,png,svg,webmanifest,glb}"],
-        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
       },
     }),
   ],
