@@ -5,20 +5,22 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 // Tous les karts ont exactement les mêmes performances : seul le look change.
 // Repère local : avant du kart = +Z, haut = +Y.
 
-export const KARTS = ["classique", "fusee", "pompier", "licorne", "dino", "baignoire", "formule"];
+export const KARTS = ["classique", "fusee", "pompier", "licorne", "dino", "baignoire"];
 
 /** Couleur principale de chaque kart (fonds des menus). */
 export const COULEURS_KARTS = {
   classique: "#e8322f", fusee: "#5b8def", pompier: "#d62828",
-  licorne: "#f783ac", dino: "#40c057", baignoire: "#74c0fc", formule: "#ff922b",
+  licorne: "#f783ac", dino: "#40c057", baignoire: "#74c0fc",
 };
 
 // ---------------------------------------------------------------------------
 // Karts venant de vrais modèles 3D (fichiers .glb), ex. le pack gratuit Kenney.
 // Les roues doivent être des nœuds dont le nom commence par "wheel" (fl/fr = avant).
-export const MODELES_GLB = {
-  formule: { url: "karts/kenney/vehicle-racer.glb", longueur: 2.9, siege: [0, 0.75, -0.25], tourner: Math.PI },
-};
+// ⚠️ Uniquement des karts ou motos à TOIT OUVERT : le pilote est un dessin 2D posé sur
+// le siège, dans une voiture fermée sa tête sort du toit.
+// Pour en ajouter un : poser le .glb dans public/karts/, l'ajouter ici et dans KARTS.
+// Exemple : monkart: { url: "karts/monkart.glb", longueur: 2.6, siege: [0, 0.55, -0.4], tourner: 0 },
+export const MODELES_GLB = {};
 const chargeurGLB = new GLTFLoader();
 export const gabarits = new Map();
 
