@@ -5,6 +5,7 @@ import { KARTS, COULEURS_KARTS } from "./karts.js";
 import { PERSONNAGES, urlSprite } from "./pilote.js";
 import { Controles } from "./controles.js";
 import { Course } from "./course.js";
+import { Minimap } from "./minimap.js";
 import { Vitrine } from "./vitrine.js";
 import { reglages, sauver } from "./reglages.js";
 import { audio } from "./audio.js";
@@ -30,6 +31,7 @@ document.getElementById("jeu").appendChild(renderer.domElement);
 const controles = new Controles();
 const vitrine = new Vitrine();
 let course = null;
+let minimap = null; // mini-carte du circuit pendant la course
 let vue = vitrine; // ce qui est affiché en 3D : la vitrine ou la course
 let enPause = false;
 
@@ -51,6 +53,7 @@ function montrer(nom) {
   ecranActuel = nom;
   for (const e of ECRANS) $(`#ecran-${e}`).classList.toggle("cache", e !== nom);
   $("#hud").classList.toggle("cache", !course || nom === "pause");
+  $("#minimap").classList.toggle("cache", !course || nom === "pause");
   $("#btn-son").classList.toggle("cache", Boolean(course) && nom === null);
   const pilotage = course && nom === null && (course.etat === "decompte" || course.etat === "course");
   $("#commandes").classList.toggle("cache", !pilotage);
@@ -187,6 +190,7 @@ function lancerCourse() {
   vue = course;
   enPause = false;
   preparerClassement(course.karts);
+  minimap = new Minimap($("#minimap"), course.piste, course.karts, { couleurs: COULEURS_PERSOS, urlFace: (p) => urlSprite(p, "face") });
   $("#nb-bonbons").textContent = 0;
   derniereposition = 0;
   document.body.classList.toggle("mode-auto", reglages.modeAuto);
@@ -269,6 +273,7 @@ function quitterCourse() {
   classementEl.classList.add("cache");
   course.liberer();
   course = null;
+  minimap = null;
   vue = vitrine;
   redimensionner();
 }
@@ -353,6 +358,7 @@ function etape(dt, entree) {
   audio.moteur(roule ? course.joueur.phys.vitesse / REGLAGES.vitesseMax : 0, roule);
   if (vue === course && enPause) return;
   vue.etape(dt, entree);
+  minimap?.etape(dt);
 }
 
 // Résolution adaptative : si la tablette n'arrive pas à suivre (moins de ~45 images/s
