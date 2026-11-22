@@ -5,6 +5,7 @@ import { KARTS, COULEURS_KARTS } from "./karts.js";
 import { PERSONNAGES, urlSprite } from "./pilote.js";
 import { Controles } from "./controles.js";
 import { Course } from "./course.js";
+import { Minimap } from "./minimap.js";
 import { Vitrine } from "./vitrine.js";
 import { reglages, sauver } from "./reglages.js";
 import { audio } from "./audio.js";
@@ -30,6 +31,7 @@ document.getElementById("jeu").appendChild(renderer.domElement);
 const controles = new Controles();
 const vitrine = new Vitrine();
 let course = null;
+let minimap = null; // mini-carte du circuit pendant la course
 let vue = vitrine; // ce qui est affiché en 3D : la vitrine ou la course
 let enPause = false;
 
@@ -51,6 +53,7 @@ function montrer(nom) {
   ecranActuel = nom;
   for (const e of ECRANS) $(`#ecran-${e}`).classList.toggle("cache", e !== nom);
   $("#hud").classList.toggle("cache", !course || nom === "pause");
+  $("#minimap").classList.toggle("cache", !course || nom === "pause");
   $("#btn-son").classList.toggle("cache", Boolean(course) && nom === null);
   const pilotage = course && nom === null && (course.etat === "decompte" || course.etat === "course");
   $("#commandes").classList.toggle("cache", !pilotage);
@@ -134,7 +137,37 @@ for (const c of document.querySelectorAll("[data-circuit]")) {
 function majOptions() {
   for (const b of document.querySelectorAll("[data-mode]")) b.classList.toggle("selection", (b.dataset.mode === "auto") === reglages.modeAuto);
   for (const b of document.querySelectorAll("[data-difficulte]")) b.classList.toggle("selection", b.dataset.difficulte === reglages.difficulte);
+  $("#btn-inclinaison").classList.toggle("selection", reglages.inclinaison);
 }
+// Direction en penchant la tablette (Chrome : HTTPS seulement, voir controles.js)
+controles.activerInclinaison(reglages.inclinaison);
+$("#btn-inclinaison").addEventListener("click", async () => {
+  const bouton = $("#btn-inclinaison");
+  const secouer = () => bouton.animate([{ translate: "0" }, { translate: "-12px" }, { translate: "12px" }, { translate: "0" }], { duration: 300 });
+  const actif = !reglages.inclinaison;
+  if (actif && typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+    // iOS : autorisation à demander pendant le toucher (Android Chrome n'en a pas besoin)
+    try {
+      if ((await DeviceOrientationEvent.requestPermission()) !== "granted") return secouer();
+    } catch {
+      return secouer();
+    }
+  }
+  reglages.inclinaison = actif;
+  sauver();
+  controles.activerInclinaison(actif); // calibre aussi le "tout droit"
+  majOptions();
+  if (!actif) return;
+  // Aucun capteur (ordinateur, ou page en http) : on revient aux boutons seuls et on secoue.
+  setTimeout(() => {
+    if (!reglages.inclinaison || controles.dernierCapteur) return;
+    reglages.inclinaison = false;
+    sauver();
+    controles.activerInclinaison(false);
+    majOptions();
+    secouer();
+  }, 1500);
+});
 for (const b of document.querySelectorAll("[data-mode]"))
   b.addEventListener("click", () => {
     reglages.modeAuto = b.dataset.mode === "auto";
@@ -186,7 +219,9 @@ function lancerCourse() {
   );
   vue = course;
   enPause = false;
+  controles.calibrer(); // la position de la tablette au départ = tout droit
   preparerClassement(course.karts);
+  minimap = new Minimap($("#minimap"), course.piste, course.karts, { couleurs: COULEURS_PERSOS, urlFace: (p) => urlSprite(p, "face") });
   $("#nb-bonbons").textContent = 0;
   derniereposition = 0;
   document.body.classList.toggle("mode-auto", reglages.modeAuto);
@@ -269,6 +304,7 @@ function quitterCourse() {
   classementEl.classList.add("cache");
   course.liberer();
   course = null;
+  minimap = null;
   vue = vitrine;
   redimensionner();
 }
@@ -353,6 +389,7 @@ function etape(dt, entree) {
   audio.moteur(roule ? course.joueur.phys.vitesse / REGLAGES.vitesseMax : 0, roule);
   if (vue === course && enPause) return;
   vue.etape(dt, entree);
+  minimap?.etape(dt);
 }
 
 // Résolution adaptative : si la tablette n'arrive pas à suivre (moins de ~45 images/s
@@ -389,7 +426,7 @@ function avancer(secondes, entree) {
   for (let k = 0; k < secondes * 60; k++) etape(1 / 60, entree);
   renderer.render(vue.scene, vue.camera);
 }
-if (import.meta.env.DEV) window.__jeu = { avancer, vitrine, renderer, rendre: () => renderer.render(vue.scene, vue.camera) };
+if (import.meta.env.DEV) window.__jeu = { avancer, controles, vitrine, renderer, rendre: () => renderer.render(vue.scene, vue.camera) };
 
 montrer("titre");
 redimensionner();

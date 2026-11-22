@@ -33,24 +33,22 @@ lum = rgb.mean(axis=2)
 sat = rgb.max(axis=2) - rgb.min(axis=2)
 bord = np.concatenate([lum[:6, :].ravel(), lum[-6:, :].ravel(), lum[:, :6].ravel(), lum[:, -6:].ravel()])
 fond = float(np.median(bord))
-sujet = (lum < fond - 0.13) | (sat > 0.13)
-# on enlève les pixels isolés : il faut au moins 3 % de pixels "sujet" sur la ligne / colonne
 print("fond", round(fond, 3))
-lignes = np.where(sujet.mean(axis=1) > 0.03)[0]
-cols = np.where(sujet.mean(axis=0) > 0.03)[0]
-r0, r1 = lignes.min(), lignes.max()
-c0, c1 = cols.min(), cols.max()
-masque = sujet.copy()
-for _ in range(5):  # on rogne le bord de 5 pixels
-    m = masque.copy()
-    m[1:, :] &= masque[:-1, :]
-    m[:-1, :] &= masque[1:, :]
-    m[:, 1:] &= masque[:, :-1]
-    m[:, :-1] &= masque[:, 1:]
-    masque = m
-# "blancheur" de l'image : clair et peu coloré = dents
-blancheur = np.clip((lum - 0.62) / 0.2, 0, 1) * np.clip((0.2 - sat) / 0.12, 0, 1)
-print("image", W, H, "sujet lignes", r0, r1, "colonnes", c0, c1)
+
+def boite_sujet(ecart_lum, seuil_sat):
+    """Masque du sujet + sa boîte (lignes r0..r1, colonnes c0..c1)."""
+    s = (lum < fond - ecart_lum) | (sat > seuil_sat)
+    # on enlève les pixels isolés : il faut au moins 3 % de pixels "sujet" sur la ligne / colonne
+    li = np.where(s.mean(axis=1) > 0.03)[0]
+    co = np.where(s.mean(axis=0) > 0.03)[0]
+    if len(li) == 0 or len(co) == 0:
+        return None
+    return s, li.min(), li.max(), co.min(), co.max()
+
+# plusieurs réglages possibles (fond uni, sol dégradé...) : on gardera celui dont les proportions
+# collent le mieux à la silhouette du modèle (voir plus bas)
+REGLAGES_SUJET = [(0.13, 0.13), (0.2, 0.08), (0.25, 0.06), (0.3, 0.1), (1.0, 0.06), (1.0, 0.09)]
+sujet, r0, r1, c0, c1 = boite_sujet(*REGLAGES_SUJET[0])
 
 # --- projection : vue de face (caméra du côté +Z de Blender = image d'entrée de Hunyuan),
 #     légèrement en surplomb. Blender : Y avant/arrière, Z haut. Le GLB est importé avec Z haut.
@@ -83,6 +81,30 @@ print("axe retenu", AXE)
 
 P = tourner(verts, axe_vue)
 U, V = proj(P)
+
+# réglage de détection du sujet dont les proportions collent le mieux au modèle
+ratio_modele = (U.max() - U.min()) / max(1e-6, (V.max() - V.min()))
+choix = None
+for reg in REGLAGES_SUJET:
+    b = boite_sujet(*reg)
+    if b is None:
+        continue
+    r = (b[4] - b[3]) / max(1, (b[2] - b[1]))
+    if choix is None or abs(r - ratio_modele) < choix[0]:
+        choix = (abs(r - ratio_modele), reg, b)
+sujet, r0, r1, c0, c1 = choix[2]
+print("détection", choix[1], "rapport modèle", round(ratio_modele, 3), "image", round((c1 - c0) / max(1, r1 - r0), 3))
+masque = sujet.copy()
+for _ in range(5):  # on rogne le bord de 5 pixels
+    m = masque.copy()
+    m[1:, :] &= masque[:-1, :]
+    m[:-1, :] &= masque[1:, :]
+    m[:, 1:] &= masque[:, :-1]
+    m[:, :-1] &= masque[:, 1:]
+    masque = m
+# "blancheur" de l'image : clair et peu coloré = dents
+blancheur = np.clip((lum - 0.62) / 0.2, 0, 1) * np.clip((0.2 - sat) / 0.12, 0, 1)
+print("image", W, H, "sujet lignes", r0, r1, "colonnes", c0, c1)
 umin, umax, vmin, vmax = U.min(), U.max(), V.min(), V.max()
 def vers_uv(u, v):
     x = c0 + (u - umin) / (umax - umin) * (c1 - c0)

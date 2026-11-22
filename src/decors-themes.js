@@ -664,16 +664,41 @@ function sentiers(groupe, piste, rnd) {
 const ROTATION_GUEULE = 0.5; // réglé à l'œil depuis la vue du kart (le modèle n'est pas symétrique)
 const DECALAGE_GUEULE = -1; // mètres vers la droite de la route, réglé depuis le tremplin (là où on vise la gueule)
 
+// bord avant de la gueule (lèvres et dents), en mètres avant le centre de la tête : mesuré sur
+// le modèle placé (≈ 11,8 m) ; remplacé par la vraie mesure quand le modèle est chargé
+const GUEULE_AVANT = 12;
+const ELAN_GUEULE = 9; // mètres entre le haut du tremplin et la gueule : on y arrive en haut du saut
+
+/** Indice d'une ligne droite assez longue avant (et un peu après) un point, près d'une position voulue. */
+function ligneDroiteLongue(piste, fraction, avant, apres, fenetre) {
+  const N = piste.N;
+  const enveloppe = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+  const nAvant = Math.round(avant / piste.pas), nApres = Math.round(apres / piste.pas);
+  let meilleur = Math.floor(N * fraction), cMin = Infinity;
+  for (let k = -Math.floor(N * fenetre); k <= N * fenetre; k++) {
+    const j = (Math.floor(N * fraction) + k + N) % N;
+    if (piste.tremplins.some((t) => ((j - t.debut + N) % N) < nAvant + 10 || ((t.debut - j + N) % N) < nApres + 10)) continue;
+    // virage total sur toute la longueur (une courbe en S compte aussi)
+    let c = 0;
+    for (let m = -nAvant; m < nApres; m++) c += Math.abs(enveloppe(piste.angleA((j + m + 1 + N) % N) - piste.angleA((j + m + N) % N)));
+    c += Math.abs(k) * 0.0005;
+    if (c < cMin) { cMin = c; meilleur = j; }
+  }
+  return meilleur;
+}
+
 function teteTrex(piste, groupe) {
   const N = piste.N;
-  const i = ligneDroite(piste, 0.55);
   const nbRampe = Math.max(1, Math.round(4.5 / piste.pas));
-  const debutRampe = (i - Math.round(27 / piste.pas) - nbRampe + N) % N; // la gueule est ~15 m devant le centre de la tête
+  // il faut ~95 m de ligne droite avant la tête (entonnoir + tremplin + gueule) et ~30 m après (on est recraché)
+  const i = ligneDroiteLongue(piste, 0.63, GUEULE_AVANT + ELAN_GUEULE + 4.5 + 70, 30, 0.06);
+  const debutRampe = (i - Math.round((GUEULE_AVANT + ELAN_GUEULE) / piste.pas) - nbRampe + N) % N;
   const debutEntonnoir = (debutRampe - Math.round(55 / piste.pas) + N) % N;
   const DEMI_ETROIT = 3.6;
   piste.retrecissements.push({ debut: debutEntonnoir, fin: i, demiMin: DEMI_ETROIT });
   groupe.add(piste.ajouterTremplin({ debut: debutRampe, nb: nbRampe, lateral: 0, demiLargeur: DEMI_ETROIT, hauteur: 1.3 }));
-  piste.teteTrex = { indice: i, recrache: (i + Math.round(26 / piste.pas)) % N };
+  // distanceGueule : distance (le long de la piste, avant l'indice) du bord avant de la gueule
+  piste.teteTrex = { indice: i, recrache: (i + Math.round(26 / piste.pas)) % N, distanceGueule: GUEULE_AVANT };
 
   // rochers le long de l'entonnoir (ce sont eux qui "font" les murs) : vrais rochers du pack
   // Quaternius, trois formes en alternance (les murs physiques viennent de piste.limiteLaterale)
@@ -737,6 +762,24 @@ function teteTrex(piste, groupe) {
       modele.position.x = -perp.x * milieu * echelle;
       modele.position.z = -perp.y * milieu * echelle;
       tete.rotation.y = piste.angleA(i) + Math.PI / 2 + angleGueule; // gueule tournée vers les karts qui arrivent
+      piste.teteTrex.distanceGueule = mesurerGueule();
+    };
+    // où est vraiment le bord avant de la gueule (lèvres, dents) le long de la route ?
+    const mesurerGueule = () => {
+      tete.updateMatrixWorld(true);
+      let sMin = Infinity;
+      modele.traverse((o) => {
+        if (!o.isMesh) return;
+        const pa = o.geometry.attributes.position;
+        for (let k = 0; k < pa.count; k++) {
+          v.fromBufferAttribute(pa, k).applyMatrix4(o.matrixWorld);
+          if (v.y < 1 || v.y > 10) continue; // pas le socle posé par terre
+          const dx = v.x - piste.cx[i], dz = v.z - piste.cz[i];
+          if (Math.abs(dx * piste.nx[i] + dz * piste.nz[i]) > 4) continue; // devant la route seulement
+          sMin = Math.min(sMin, dx * piste.tx[i] + dz * piste.tz[i]);
+        }
+      });
+      return Number.isFinite(sMin) ? -sMin : GUEULE_AVANT;
     };
     placer(ROTATION_GUEULE);
     piste.teteTrex.objet = tete;

@@ -63,9 +63,17 @@ export const CIRCUITS = {
   dino: {
     nom: "dino",
     points: [
-      [0, -40], [0, 45], [15, 105], [60, 140], [115, 130], [150, 90], [135, 40],
-      [95, 25], [70, -10], [85, -60], [130, -90], [120, -145], [65, -165], [20, -140],
+      // ~1285 m : 4 grandes lignes droites (départ, haut, droite, bas), virages larges (rayon > 35 m)
+      [0, -50], [0, 50], [15, 115], [60, 160], [130, 178], [210, 178], [275, 155], [305, 105],
+      [310, 30], [310, -50], [295, -115], [255, -158], [195, -172], [130, -174], [70, -180],
+      [15, -200], [-35, -240], [-90, -262], [-140, -240], [-155, -190], [-135, -152], [-95, -135],
+      [-50, -130], [-18, -112], [-3, -88],
     ],
+    echantillons: 1120, // ~1,15 m entre deux échantillons (physique précise)
+    // tremplins dans les lignes droites du départ, du haut et de droite ; la tête du T-rex
+    // occupe celle du bas (voir decors-themes.js) ; il reste ~100 m libres en haut et à droite
+    tremplins: [0.065, 0.262, 0.452],
+    tremplinsFenetre: 0.02, // on reste dans ces lignes droites (sinon ils iraient sur celle du T-rex)
     echelle: 0.85,
     largeur: 16,
     marge: 6,

@@ -185,10 +185,11 @@ export function construirePiste(def) {
     const nb = Math.max(1, Math.round(4.5 / pas)); // ~4,5 m de pente
     const cibles = def.tremplins ?? [0.12, 0.42, 0.72];
     const lateraux = [-4, 4, 0];
+    const fenetre = def.tremplinsFenetre ?? 0.2; // jusqu'où on cherche autour de la position voulue (fraction du tour)
     cibles.forEach((f, n) => {
       // l'endroit le plus droit autour de la position voulue, loin de la grille et des autres tremplins
       let meilleur = -1, cMin = Infinity;
-      for (let k = -Math.floor(N * 0.2); k <= N * 0.2; k++) {
+      for (let k = -Math.floor(N * fenetre); k <= N * fenetre; k++) {
         const i = (Math.round(f * N) + k + N) % N;
         if (i < 25 || i > N - 50) continue;
         if (tremplins.some((t) => Math.abs(t.debut - i) < 80)) continue;
