@@ -1,0 +1,19 @@
+realiste.glb (outils/blender/pack_realiste.py) et volcan.glb (outils/blender/pack_volcan.py)
+
+Rochers (rock_moss_set_01, rock_07) et fougère (fern_02) : Poly Haven, CC0
+  https://polyhaven.com/a/rock_moss_set_01
+  https://polyhaven.com/a/rock_07
+  https://polyhaven.com/a/fern_02
+
+Cycas : "Sago Palm, Game ready, Low poly, baked textures." par Valykor, CC-BY 4.0
+  https://sketchfab.com/3d-models/sago-palm-game-ready-low-poly-baked-textures-85c86658224a4fe493f0f35091635555
+  This work is based on "Sago Palm, Game ready, Low poly, baked textures." by Valykor
+  (https://sketchfab.com/Valykor) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+
+Volcan : "Volcano" par santhu (santhu48), CC-BY 4.0
+  https://sketchfab.com/3d-models/volcano-e89153ec4f324e688f78d001dd3f7e3c
+  This work is based on "Volcano" by santhu (https://sketchfab.com/santhu48)
+  licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+
+Modifications : maillages simplifiés, textures réduites et converties en WebP, occlusion
+mélangée à la couleur (volcan), canal alpha ajouté à la couleur (fougère).

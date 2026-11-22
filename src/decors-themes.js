@@ -58,31 +58,32 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   const serre = Math.max(0.6, Math.min(1, densite / rapport));
   const nb = (n) => Math.round(n * densite);
   const zone = (n, dMin, dMax) => positions(piste, rnd, nb(n), dMin, dMin + (dMax - dMin) * serre);
-  planter(groupe, "Fern_1", varie(zone(130, piste.demi + 2.6, 45), 0.7, 0.9), garde);
-  planter(groupe, "Plant_1_Big", varie(zone(45, horsPiste, 60), 0.7, 0.7), garde);
-  planter(groupe, "Plant_7_Big", varie(zone(55, horsPiste, 70), 0.7, 0.7), garde);
-  planter(groupe, "Plant_1", varie(zone(70, piste.demi + 2.6, 40), 0.8, 0.6), garde);
-  planter(groupe, "Plant_7", varie(zone(70, piste.demi + 2.6, 40), 0.8, 0.6), garde);
-  planter(groupe, "Grass_Common_Tall", varie(zone(50, piste.demi + 2.2, 35), 0.7, 0.8).filter((_, k) => k % 3 !== 2), garde); // un tiers en moins (300 triangles chacune)
+  // plantes réalistes de l'époque : fougères (scan Poly Haven) et cycas, avec quelques plantes
+  // stylisées du pack Quaternius pour la variété (budget de triangles : voir TAILLES et le pack)
+  planter(groupe, "Fougere", varie(zone(54, piste.demi + 2.6, 45), 0.8, 0.7), garde);
+  planter(groupe, "Fern_1", varie(zone(40, piste.demi + 2.6, 45), 0.7, 0.9), garde);
+  planter(groupe, "Cycas", varie(zone(33, horsPiste, 60), 0.75, 0.6), garde);
+  planter(groupe, "Plant_1_Big", varie(zone(11, horsPiste, 60), 0.7, 0.7), garde);
+  planter(groupe, "Plant_1", varie(zone(55, piste.demi + 2.6, 40), 0.8, 0.6), garde);
+  planter(groupe, "Grass_Common_Tall", varie(zone(24, piste.demi + 2.2, 35), 0.7, 0.8), garde); // 300 triangles chacune
   planter(groupe, "CommonTree_1", varie(zone(10, horsPiste + 8, 95), 0.8, 0.5), garde);
   planter(groupe, "CommonTree_2", varie(zone(10, horsPiste + 8, 95), 0.8, 0.5), garde);
   planter(groupe, "CommonTree_3", varie(zone(10, horsPiste + 8, 95), 0.8, 0.5), garde);
   planter(groupe, "Pine_1", varie(zone(8, horsPiste + 12, 110), 0.8, 0.5), garde);
   planter(groupe, "Pine_2", varie(zone(8, horsPiste + 12, 110), 0.8, 0.5), garde);
-  planter(groupe, "DeadTree_1", varie(zone(3, horsPiste + 6, 80), 0.8, 0.4), garde);
+  // rochers : vrais rochers scannés (les anciens noms sont remplacés dans vegetation.js)
   for (const r of ["Rock_Medium_1", "Rock_Medium_2", "Rock_Medium_3"]) planter(groupe, r, varie(zone(16, horsPiste, 100), 0.6, 1.2).map((p) => ({ ...p, y: -0.15 })), garde);
+  planter(groupe, "Gros_Rocher", varie(zone(6, horsPiste + 20, 100), 0.7, 0.6).map((p) => ({ ...p, y: -0.4 })), garde);
   // arbres lointains : vrais sapins et feuillus très simplifiés (cachés par la brume)
   planter(groupe, "Pine_5", varie(positions(piste, rnd, 34, 110, 170), 0.8, 0.6), garde);
   planter(groupe, "CommonTree_5", varie(positions(piste, rnd, 12, 110, 160), 0.8, 0.6), garde);
 
-  // petits détails au bord de la route : cailloux, trèfles, fleurs, champignons géants
+  // petits détails au bord de la route : cailloux (scannés), fleurs, champignons géants
   const cailloux = ["Pebble_Round_1", "Pebble_Round_2", "Pebble_Round_3", "Pebble_Round_4", "Pebble_Round_5", "Pebble_Square_1", "Pebble_Square_2", "Pebble_Square_3"];
   for (const c of cailloux) planter(groupe, c, varie(positions(piste, rnd, nb(8), piste.demi + 0.8, piste.demi + 5), 0.7, 0.8), garde);
-  planter(groupe, "Clover_1", varie(zone(15, piste.demi + 1.5, 30), 0.8, 0.6), garde);
-  planter(groupe, "Clover_2", varie(zone(15, piste.demi + 1.5, 30), 0.8, 0.6), garde);
   planter(groupe, "Flower_3_Group", varie(zone(16, piste.demi + 2, 35), 0.8, 0.5), garde);
   planter(groupe, "Flower_4_Group", varie(zone(8, piste.demi + 2, 35), 0.8, 0.5), garde);
-  planter(groupe, "Mushroom_Common", varie(zone(12, horsPiste - 1, 40), 0.8, 0.7), garde);
+  planter(groupe, "Mushroom_Common", varie(zone(6, horsPiste - 1, 40), 0.8, 0.7), garde);
   sentiers(groupe, piste, rnd, nb(4), garde);
 
   // nids d'œufs (aucun modèle libre équivalent : formes simples, peu de triangles)
@@ -94,24 +95,26 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   ]);
   const nids = positions(piste, rnd, nb(14), horsPiste, 40).map((p) => ({ ...p, s: 1, r: rnd() * 6 })); // posés plus bas
 
-  // volcan au loin avec sa fumée
-  const angleVolcan = rnd() * Math.PI * 2;
-  const xV = piste.centre.x + Math.cos(angleVolcan) * (piste.rayon + 260);
-  const zV = piste.centre.z + Math.sin(angleVolcan) * (piste.rayon + 260);
-  const volcan = fusion([
-    { geo: new THREE.CylinderGeometry(30, 110, 120, 20).translate(0, 60, 0), couleur: 0x6b4f3a },
-    { geo: new THREE.CylinderGeometry(26, 30, 6, 20).translate(0, 121, 0), couleur: 0xff6b00 },
-  ]);
-  groupe.add(instances(volcan, matCouleurs(), [{ x: xV, z: zV, s: 1 }]));
+  // volcan au loin avec sa fumée (vrai modèle 3D, voir volcan() plus bas)
+  const xV = piste.centre.x + Math.cos(ANGLE_VOLCAN) * (piste.rayon + 260);
+  const zV = piste.centre.z + Math.sin(ANGLE_VOLCAN) * (piste.rayon + 260);
+  const sommet = { x: 0, y: VOLCAN.hauteur, z: 0 }; // cratère, par rapport au pied du volcan (mesuré au chargement)
+  volcan(groupe, xV, zV, sommet);
+  // collines lointaines : même sol que la forêt (vraies textures), un peu plus sombres
   const collines = [];
   for (let i = 0; i < 14; i++) {
     const a = (i / 14) * Math.PI * 2;
-    if (Math.abs(Math.atan2(Math.sin(a - angleVolcan), Math.cos(a - angleVolcan))) < 0.35) continue;
+    if (Math.abs(Math.atan2(Math.sin(a - ANGLE_VOLCAN), Math.cos(a - ANGLE_VOLCAN))) < 0.35) continue;
     const r = piste.rayon + 230 + rnd() * 70;
-    collines.push({ x: piste.centre.x + Math.cos(a) * r, y: -8, z: piste.centre.z + Math.sin(a) * r, s: 70 + rnd() * 50, sy: 30 + rnd() * 25, couleur: [0x5c940d, 0x74b816, 0x82c91e][i % 3] });
+    collines.push({ x: piste.centre.x + Math.cos(a) * r, y: -8, z: piste.centre.z + Math.sin(a) * r, s: 70 + rnd() * 50, sy: 30 + rnd() * 25, couleur: [0xa8b890, 0x98a882, 0xb4bc9c][i % 3] });
   }
-  groupe.add(instances(new THREE.SphereGeometry(1, 16, 10), new THREE.MeshLambertMaterial({ color: 0xffffff }), collines));
-  const fumee = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0x9a9a9a, fog: false, transparent: true, opacity: 0.8 }), 14);
+  const sol = groupe.children.find((o) => o.isMesh && o.geometry?.type === "PlaneGeometry" && o.geometry.parameters.width >= 1000);
+  groupe.add(instances(new THREE.SphereGeometry(1, 16, 10), sol?.material ?? new THREE.MeshLambertMaterial({ color: 0x74b816 }), collines));
+  const NB_FUMEE = 16;
+  const fumee = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, opacity: 0.8, depthWrite: false }), NB_FUMEE);
+  // panache : gris foncé près du cratère, plus clair en montant (couleur fixée par boule, voir l'animation)
+  const gris = new THREE.Color();
+  for (let k = 0; k < NB_FUMEE; k++) fumee.setColorAt(k, gris.setHex(0x8a8580));
   groupe.add(fumee);
   nuages(groupe, piste, rnd);
   teteTrex(piste, groupe);
@@ -128,16 +131,71 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   const o = new THREE.Object3D();
   return (dt) => {
     t += dt;
-    for (let k = 0; k < 14; k++) {
-      const vie = (t * 0.08 + k / 14) % 1;
-      o.position.set(xV + Math.sin(k * 3 + t * 0.2) * 10 * vie, 130 + vie * 90, zV + Math.cos(k * 2) * 8 * vie);
-      o.scale.setScalar(10 + vie * 25);
+    for (let k = 0; k < NB_FUMEE; k++) {
+      const vie = (t * 0.07 + k / NB_FUMEE) % 1;
+      o.position.set(xV + sommet.x + Math.sin(k * 3 + t * 0.2) * 12 * vie + vie * vie * 30, sommet.y + 4 + vie * 110, zV + sommet.z + Math.cos(k * 2) * 9 * vie);
+      o.scale.setScalar(8 + vie * 30);
       o.updateMatrix();
       fumee.setMatrixAt(k, o.matrix);
+      // en bas, éclairée par la lave (orange), puis grise et de plus en plus claire
+      const g = 0.4 + vie * 0.42, lave = Math.max(0, 1 - vie * 6);
+      fumee.setColorAt(k, gris.setRGB(g + (1 - g) * lave, g + (0.35 - g) * lave, g + (0.08 - g) * lave));
     }
     fumee.instanceMatrix.needsUpdate = true;
+    fumee.instanceColor.needsUpdate = true;
     for (const m of mixers) m.update(dt);
   };
+}
+
+// Volcan : "Volcano" de santhu48 (Sketchfab, CC-BY 4.0), préparé par outils/blender/pack_volcan.py
+// (AO mélangée à la couleur, textures 1024). Le modèle est bas et large : on l'étire en hauteur.
+const ANGLE_VOLCAN = 1.056; // direction depuis le centre du circuit (là où était l'ancien cône)
+const VOLCAN = { hauteur: 115, largeur: 270 }; // mètres (l'ancien cône : 127 m de haut, 220 m de large)
+
+function volcan(groupe, x, z, sommet) {
+  new GLTFLoader().loadAsync(import.meta.env.BASE_URL + "nature/volcan.glb").then((gltf) => {
+    const modele = gltf.scene;
+    modele.traverse((o) => {
+      if (!o.isMesh) return;
+      const a = o.material;
+      // même éclairage simple que le reste du décor
+      o.material = new THREE.MeshLambertMaterial({ map: a.map, normalMap: a.normalMap });
+      if (a.normalMap) o.material.normalScale.copy(a.normalScale);
+      if (a.map) a.map.anisotropy = 4;
+      a.dispose();
+    });
+    const boite = new THREE.Box3().setFromObject(modele);
+    const taille = boite.getSize(new THREE.Vector3()), centre = boite.getCenter(new THREE.Vector3());
+    const sh = VOLCAN.largeur / Math.max(taille.x, taille.z), sv = VOLCAN.hauteur / taille.y;
+    modele.scale.set(sh, sv, sh);
+    modele.position.set(-centre.x * sh, -boite.min.y * sv - 3, -centre.z * sh); // un peu enfoncé : pas de bord visible
+    const support = new THREE.Group();
+    support.name = "volcan";
+    support.position.set(x, 0, z);
+    support.add(modele);
+    groupe.add(support);
+    // cratère : sommets les plus hauts du modèle (centre et rayon du bord)
+    support.updateMatrixWorld(true);
+    const v = new THREE.Vector3(), haut = [];
+    let yMax = -Infinity;
+    modele.traverse((o) => {
+      if (!o.isMesh) return;
+      const p = o.geometry.attributes.position;
+      for (let k = 0; k < p.count; k++) {
+        v.fromBufferAttribute(p, k).applyMatrix4(o.matrixWorld).sub(support.position);
+        yMax = Math.max(yMax, v.y);
+        haut.push(v.clone());
+      }
+    });
+    const bord = haut.filter((p) => p.y > yMax - VOLCAN.hauteur * 0.06);
+    const cx = bord.reduce((s, p) => s + p.x, 0) / bord.length, cz = bord.reduce((s, p) => s + p.z, 0) / bord.length;
+    const rayon = bord.reduce((s, p) => s + Math.hypot(p.x - cx, p.z - cz), 0) / bord.length;
+    // lave qui rougeoie au fond du cratère (visible de loin, comme sur l'ancien volcan)
+    const lave = new THREE.Mesh(new THREE.CircleGeometry(rayon * 0.85, 20).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff7b1c }));
+    lave.position.set(cx, yMax - VOLCAN.hauteur * 0.04, cz);
+    support.add(lave);
+    Object.assign(sommet, { y: yMax, x: cx, z: cz });
+  });
 }
 
 // ---------------------------------------------------------------------------
