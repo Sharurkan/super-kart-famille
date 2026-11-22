@@ -7,6 +7,9 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 // de Valykor, CC-BY 4.0) préparés par outils/blender/pack_realiste.py.
 // Chaque modèle est dessiné en InstancedMesh : un seul appel de dessin par pièce,
 // même avec des centaines de fougères.
+// Les arbres et le sous-bois de la jungle sont des « imposteurs » (photos d'arbres réalistes
+// Poly Haven sous 8 angles) : voir planterImposteurs et planterJungle en bas du fichier.
+// (Les arbres Quaternius du fichier jurassique.glb ne sont plus plantés.)
 
 // Hauteur voulue (mètres) pour chaque modèle du fichier
 export const TAILLES = {
@@ -228,7 +231,7 @@ export function planter(groupe, nom, liste, garde = null) {
 const CAM_RECUL = 7.2, CAM_HAUT = 3.1; // comme CameraPoursuite
 
 /**
- * gardeRoute(piste).verifier(x, z, rayon, hauteur, nom) -> { x, z } (éventuellement
+ * gardeRoute(piste).verifier(x, z, rayon, hauteur, nom, deplacer = true) -> { x, z } (éventuellement
  * repoussé loin de la route) ou null (retiré). gardeRoute(piste).bilan : compte par modèle.
  */
 export function gardeRoute(piste) {
@@ -257,6 +260,8 @@ export function gardeRoute(piste) {
     if (D && dans(i, (D.indice - 3 + N) % N, (D.fin + 3) % N) && lat - r < 16.5) return "diplodocus";
     const T = piste.teteTrex;
     if (T && Math.abs(ecart(i, T.indice)) <= Math.round(18 / pas) && lat - r < 23.5) return "trex";
+    // autres grands décors posés sur la route (ex. l'aquarium) : [{ debut, fin, demi }]
+    for (const Z of piste.zonesDecor ?? []) if (dans(i, Z.debut, Z.fin) && lat - r < Z.demi) return "decor";
     // 3. le ravin : rien qui pende au-dessus du vide (rectangle aux bouts arrondis, bords bruités)
     const V = piste.ravin;
     if (V) {
@@ -291,12 +296,14 @@ export function gardeRoute(piste) {
     return false;
   }
 
-  function verifier(x, z, r, h, nom = "?") {
+  function verifier(x, z, r, h, nom = "?", deplacer = true) {
     const b = (bilan[nom] ??= { plantes: 0, deplacees: 0, retirees: 0, raisons: {} });
     b.plantes++;
     let raison = probleme(x, z, r, h);
     if (!raison) return { x, z };
     b.raisons[raison] = (b.raisons[raison] ?? 0) + 1;
+    // forêt dense : l'arbre est simplement retiré (pas de paquets d'arbres repoussés au bord)
+    if (!deplacer) { b.retirees++; return null; }
     // on essaie de la repousser loin de la route (la forêt garde sa densité)
     const { indice: i, lateral } = piste.localiser(x, z);
     const cote = Math.sign(lateral) || 1;
@@ -314,4 +321,191 @@ export function gardeRoute(piste) {
   const garde = { verifier, bilan };
   if (import.meta.env.DEV) window.__auditVegetation = bilan;
   return garde;
+}
+
+// ---------------------------------------------------------------------------
+// Imposteurs : arbres et grandes plantes réalistes (Poly Haven, CC0) photographiés sous 8 angles
+// par Blender (outils/blender/impostors_rendre.py), rangés dans un seul atlas
+// (outils/blender/impostors_atlas.py -> public/nature/arbres.webp + arbres.json).
+// Dans le jeu, chaque arbre n'est qu'un rectangle (2 triangles) qui se tourne vers la caméra
+// autour de son axe vertical et montre la photo prise du côté d'où on le regarde (passage
+// tramé vers la vue voisine). Toute la forêt = un seul InstancedMesh, un seul appel de dessin,
+// sans transparence à trier (test alpha + alpha-to-coverage).
+const VUES = 8;
+// Couleur multipliée (teinte du soir, un peu moins de jaune sur les sapins et le petit arbre)
+const TEINTES = {
+  sapin_a: [0.74, 0.8, 0.66], sapin_b: [0.74, 0.8, 0.66], ile_a: [0.92, 0.94, 0.84], jacaranda: [1.0, 0.98, 0.9],
+  petit_arbre: [0.66, 0.74, 0.56], pachira_c: [1.0, 1.0, 0.92], pachira_d: [1.0, 1.0, 0.92], calathea: [1.0, 1.0, 0.94], anthurium: [1.0, 1.0, 0.94],
+};
+let chargementImposteurs = null;
+
+function chargerImposteurs() {
+  chargementImposteurs ??= Promise.all([
+    fetch(import.meta.env.BASE_URL + "nature/arbres.json").then((r) => r.json()),
+    new THREE.TextureLoader().loadAsync(import.meta.env.BASE_URL + "nature/arbres.webp"),
+  ]).then(([info, texture]) => {
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 4;
+    const noms = Object.keys(info.sprites);
+    const vues = [];
+    for (const nom of noms) for (const v of info.sprites[nom].vues) vues.push(new THREE.Vector4(...v));
+    const materiau = new THREE.MeshBasicMaterial({ map: texture, alphaTest: 0.5, alphaToCoverage: true });
+    materiau.onBeforeCompile = (sh) => {
+      sh.uniforms.uVues = { value: vues };
+      sh.uniforms.uTaille = { value: new THREE.Vector2(...info.taille) };
+      sh.vertexShader = sh.vertexShader
+        .replace("#include <common>", `#include <common>
+          attribute float aSprite;
+          uniform vec4 uVues[${vues.length}];
+          varying vec2 vUv0;
+          varying vec2 vUv1;
+          varying float vMelange;`)
+        .replace("#include <project_vertex>", `
+          // pied de l'arbre, taille et rotation de l'instance
+          vec4 centre = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+          vec3 axeX = (modelMatrix * instanceMatrix * vec4(1.0, 0.0, 0.0, 0.0)).xyz;
+          float sx = length(axeX), sy = length((modelMatrix * instanceMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+          // le rectangle tourne autour de l'axe vertical pour faire face à la caméra
+          vec2 versCam = cameraPosition.xz - centre.xz;
+          versCam /= max(length(versCam), 1e-4);
+          vec3 droite = vec3(versCam.y, 0.0, -versCam.x);
+          vec4 mvPosition = viewMatrix * vec4(centre.xyz + droite * position.x * sx + vec3(0.0, position.y * sy, 0.0), 1.0);
+          gl_Position = projectionMatrix * mvPosition;
+          // photo prise du côté d'où on regarde l'arbre (rotation de l'instance comprise)
+          float angle = atan(versCam.x, versCam.y) - atan(-axeX.z, axeX.x);
+          float f = fract(angle / 6.2831853) * ${VUES}.0;
+          float k0 = floor(f);
+          vMelange = smoothstep(0.3, 0.7, f - k0);
+          int base = int(aSprite + 0.5) * ${VUES};
+          vec4 r0 = uVues[base + int(k0)];
+          vec4 r1 = uVues[base + int(mod(k0 + 1.0, ${VUES}.0))];
+          vUv0 = r0.xy + uv * r0.zw;
+          vUv1 = r1.xy + uv * r1.zw;`);
+      sh.fragmentShader = sh.fragmentShader
+        .replace("#include <common>", `#include <common>
+          uniform vec2 uTaille;
+          varying vec2 vUv0;
+          varying vec2 vUv1;
+          varying float vMelange;`)
+        .replace("#include <map_fragment>", `
+          vec4 c0 = texture2D(map, vUv0), c1 = texture2D(map, vUv1);
+          // passage tramé d'une vue à l'autre (pas de transparence partielle)
+          float bruit = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+          vec4 sampledDiffuseColor = vMelange > bruit ? c1 : c0;
+          // de loin (petites mipmaps) les feuilles fines disparaîtraient : on renforce l'alpha
+          vec2 ddx = dFdx(vUv0 * uTaille), ddy = dFdy(vUv0 * uTaille);
+          float lod = 0.5 * log2(max(max(dot(ddx, ddx), dot(ddy, ddy)), 1e-8));
+          sampledDiffuseColor.a = min(1.0, sampledDiffuseColor.a * (1.0 + max(lod, 0.0) * 0.35));
+          diffuseColor *= sampledDiffuseColor;`);
+    };
+    return { info, noms, materiau };
+  });
+  return chargementImposteurs;
+}
+
+/**
+ * Plante des imposteurs (asynchrone, un seul InstancedMesh). Renvoie une promesse.
+ * liste : [{ x, z, sprite (nom), h (hauteur en m), r (rotation), c (luminosité, facultatif) }]
+ * garde (facultatif) : gardeRoute ; les arbres refusés sont retirés (pas déplacés).
+ */
+export function planterImposteurs(groupe, liste, garde = null) {
+  return chargerImposteurs().then(({ info, noms, materiau }) => {
+    if (garde) liste = liste.filter((p) => garde.verifier(p.x, p.z, info.sprites[p.sprite].rayon * p.h * 0.55, p.h, p.sprite, false));
+    if (!liste.length) return null;
+    const geo = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0);
+    const sprites = new Float32Array(liste.length);
+    const im = new THREE.InstancedMesh(geo, materiau, liste.length);
+    im.name = "Imposteurs";
+    im.frustumCulled = false; // les rectangles tournent dans le shader : la boîte calculée serait fausse
+    const o = new THREE.Object3D(), couleur = new THREE.Color();
+    liste.forEach((p, i) => {
+      const s = info.sprites[p.sprite];
+      o.position.set(p.x, s.bas * p.h - 0.15, p.z);
+      o.rotation.set(0, p.r ?? 0, 0);
+      o.scale.set(s.largeur * p.h, s.hauteur * p.h, 1);
+      o.updateMatrix();
+      im.setMatrixAt(i, o.matrix);
+      const t = TEINTES[p.sprite] ?? [1, 1, 1], c = p.c ?? 1;
+      im.setColorAt(i, couleur.setRGB(t[0] * c, t[1] * c, t[2] * c, THREE.SRGBColorSpace));
+      sprites[i] = noms.indexOf(p.sprite);
+    });
+    geo.setAttribute("aSprite", new THREE.InstancedBufferAttribute(sprites, 1));
+    groupe.add(im);
+    return im;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Jungle : une forêt très dense (mur d'arbres et de sous-bois le long des barrières), qui
+// s'ouvre à quelques endroits sur de grandes plaines (on y voit les dinosaures et le volcan).
+// [sprite, hauteur min, hauteur max, poids]
+const SOUS_BOIS = [["anthurium", 1.6, 3.0, 3], ["calathea", 1.5, 2.8, 3], ["pachira_c", 2.0, 3.5, 2], ["pachira_d", 3.0, 5.5, 3]];
+const ARBRES_PROCHES = [["ile_a", 9, 14, 6], ["petit_arbre", 7, 11, 3], ["pachira_d", 4.5, 7, 2], ["sapin_a", 17, 25, 3], ["sapin_b", 13, 19, 3], ["jacaranda", 13, 19, 1]];
+const ARBRES_LOIN = [["sapin_a", 18, 26, 4], ["sapin_b", 14, 20, 3], ["ile_a", 11, 16, 4], ["jacaranda", 15, 22, 2]];
+const ARBRES_PLAINE = [["jacaranda", 14, 21, 1], ["ile_a", 11, 15, 1]];
+
+function auHasardPondere(rnd, liste) {
+  let t = rnd() * liste.reduce((s, e) => s + e[3], 0);
+  for (const e of liste) if ((t -= e[3]) <= 0) return e;
+  return liste[liste.length - 1];
+}
+
+/**
+ * Plante la jungle autour de la piste (asynchrone, renvoie une promesse).
+ * plaines : [{ debut, fin (indices), cote (+1/-1 : signe du latéral), largeur (m) }]
+ * exclusions : [{ x, z, r }] (pied du volcan, troupeaux...)
+ * La garde de la route retire ce qui gêne (route, vue de la caméra, ravin, grands décors).
+ */
+export function planterJungle(groupe, piste, rnd, garde, { plaines = [], exclusions = [] } = {}) {
+  const { N, cx, cz, nx, nz } = piste;
+  const barriere = piste.demi + piste.marge + 0.8;
+  const ecart = (i, j) => { const d = (i - j + N) % N; return d > N / 2 ? d - N : d; };
+  const RAMPE = 28; // échantillons de transition jungle -> plaine
+  /** 0 = jungle, 1 = plaine ; lisiere : bande de forêt touffue au fond de la plaine */
+  function ouverture(i, lat) {
+    let o = 0, lisiere = false;
+    for (const P of plaines) {
+      if (Math.sign(lat) !== P.cote) continue;
+      const long = (P.fin - P.debut + N) % N, d = ecart(i, P.debut);
+      if (d < -RAMPE || d > long + RAMPE) continue;
+      const t = Math.max(0, Math.min(1, Math.min(d + RAMPE, long + RAMPE - d) / RAMPE));
+      const fond = Math.max(0, Math.min(1, (P.largeur - Math.abs(lat)) / 30));
+      o = Math.max(o, t * t * (3 - 2 * t) * fond);
+      if (t > 0.5 && Math.abs(lat) > P.largeur - 30 && Math.abs(lat) < P.largeur + 40) lisiere = true;
+    }
+    return { o, lisiere };
+  }
+  // repère local rapide : échantillon le plus proche (recherche grossière puis fine)
+  function local(x, z) {
+    let m = 0, dMin = Infinity;
+    for (let i = 0; i < N; i += 6) { const d = (x - cx[i]) ** 2 + (z - cz[i]) ** 2; if (d < dMin) { dMin = d; m = i; } }
+    for (let k = -6; k <= 6; k++) { const i = (m + k + N) % N; const d = (x - cx[i]) ** 2 + (z - cz[i]) ** 2; if (d < dMin) { dMin = d; m = i; } }
+    return { i: m, lat: (x - cx[m]) * nx[m] + (z - cz[m]) * nz[m], d: Math.sqrt(dMin) };
+  }
+  const C = 3, R = piste.rayon + 290; // grille de 3 m sur toute la carte, un tirage par case
+  const arbres = [];
+  const ajouter = (x, z, e, d, sombre = 1) => arbres.push({ x, z, sprite: e[0], h: e[1] + rnd() * (e[2] - e[1]), r: rnd() * 6.283, c: (0.86 + rnd() * 0.16) * sombre, d });
+  for (let gx = -R; gx < R; gx += C) {
+    for (let gz = -R; gz < R; gz += C) {
+      const x = piste.centre.x + gx + rnd() * C, z = piste.centre.z + gz + rnd() * C;
+      const { i, lat, d } = local(x, z);
+      if (d < barriere || d > 290) continue;
+      if (exclusions.some((e) => (x - e.x) ** 2 + (z - e.z) ** 2 < e.r * e.r)) continue;
+      const { o, lisiere } = ouverture(i, lat);
+      // densités (arbres par m²) selon la distance à la route
+      let dSous = (d < 30 ? 0.28 : d < 80 ? 0.05 : 0) * (1 - 0.92 * o);
+      let dArbre = d < 35 ? 1 / 14 : d < 60 ? 1 / 22 : d < 90 ? 1 / 40 : d < 170 ? 1 / 95 : 1 / 220;
+      let liste = d < 90 ? ARBRES_PROCHES : ARBRES_LOIN;
+      // plaine : presque rien, quelques grands arbres isolés ; au fond, la lisière touffue
+      dArbre = dArbre * (1 - o) + (lisiere ? 1 / 45 : 0) + o / 2500;
+      if (o > 0.5) liste = ARBRES_PLAINE;
+      // (plusieurs plantes par case quand c'est très touffu)
+      for (let n = dSous * C * C; n > 0; n--) if (rnd() < n) ajouter(x + (rnd() - 0.5) * C, z + (rnd() - 0.5) * C, auHasardPondere(rnd, SOUS_BOIS), d);
+      if (rnd() < dArbre * C * C) ajouter(x, z, auHasardPondere(rnd, liste), d, d > 170 ? 0.92 : 1);
+    }
+  }
+  // du plus près de la route au plus loin : les arbres de devant cachent ceux de derrière
+  // et le GPU ne colorie pas deux fois les mêmes pixels
+  arbres.sort((a, b) => a.d - b.d);
+  return planterImposteurs(groupe, arbres, garde);
 }
