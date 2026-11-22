@@ -1,16 +1,69 @@
 import * as THREE from "three";
 import { textureRond } from "./textures.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 // Tous les karts ont exactement les mêmes performances : seul le look change.
 // Repère local : avant du kart = +Z, haut = +Y.
 
-export const KARTS = ["classique", "fusee", "pompier", "licorne", "dino", "baignoire"];
+export const KARTS = ["classique", "fusee", "pompier", "licorne", "dino", "baignoire", "formule"];
 
 /** Couleur principale de chaque kart (fonds des menus). */
 export const COULEURS_KARTS = {
   classique: "#e8322f", fusee: "#5b8def", pompier: "#d62828",
-  licorne: "#f783ac", dino: "#40c057", baignoire: "#74c0fc",
+  licorne: "#f783ac", dino: "#40c057", baignoire: "#74c0fc", formule: "#ff922b",
 };
+
+// ---------------------------------------------------------------------------
+// Karts venant de vrais modèles 3D (fichiers .glb), ex. le pack gratuit Kenney.
+// Les roues doivent être des nœuds dont le nom commence par "wheel" (fl/fr = avant).
+export const MODELES_GLB = {
+  formule: { url: "karts/kenney/vehicle-racer.glb", longueur: 2.9, siege: [0, 0.75, -0.25], tourner: Math.PI },
+};
+const chargeurGLB = new GLTFLoader();
+export const gabarits = new Map();
+
+function chargerGabarit(type) {
+  if (!gabarits.has(type)) {
+    const info = MODELES_GLB[type];
+    gabarits.set(type, chargeurGLB.loadAsync(import.meta.env.BASE_URL + info.url).then((gltf) => {
+      const modele = gltf.scene;
+      // matériaux plus légers (même rendu que le reste du jeu)
+      modele.traverse((o) => {
+        if (o.isMesh) o.material = new THREE.MeshLambertMaterial({ map: o.material.map, color: o.material.color });
+      });
+      // mise à l'échelle : longueur voulue, posé au sol, centré
+      modele.rotation.y = info.tourner;
+      const boite = new THREE.Box3().setFromObject(modele);
+      const taille = boite.getSize(new THREE.Vector3());
+      const s = info.longueur / Math.max(taille.x, taille.z);
+      const centre = boite.getCenter(new THREE.Vector3());
+      const racine = new THREE.Group();
+      modele.position.set(-centre.x, -boite.min.y, -centre.z);
+      racine.add(modele);
+      racine.scale.setScalar(s);
+      return racine;
+    }));
+  }
+  return gabarits.get(type);
+}
+
+function constructeurGLB(type) {
+  return ({ corps, roues }) => {
+    chargerGabarit(type).then((gabarit) => {
+      const m = gabarit.clone(true);
+      corps.add(m);
+      m.updateMatrixWorld(true);
+      m.traverse((o) => {
+        if (!o.name.startsWith("wheel")) return;
+        o.rotation.order = "YXZ"; // braquage puis rotation de la roue
+        const r = new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3()).y / 2 || 0.3;
+        const roue = { pivot: o, tourne: o, rayon: r };
+        (/f[lr]$/.test(o.name) ? roues.avant : roues.arriere).push(roue);
+      });
+    });
+    return { siege: MODELES_GLB[type].siege };
+  };
+}
 
 const materiaux = new Map();
 export function mat(couleur) {
@@ -263,6 +316,8 @@ const CONSTRUCTEURS = {
     return { siege: [0, 0.78, -0.35] };
   },
 };
+
+for (const type of Object.keys(MODELES_GLB)) CONSTRUCTEURS[type] = constructeurGLB(type);
 
 const texOmbre = textureRond();
 const geoOmbre = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
