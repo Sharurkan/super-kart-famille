@@ -97,6 +97,20 @@ button svg {
   justify-content: center;
 }
 
+/* Mini-carte : en haut à gauche, sous les badges des tours et des bonbons (loin des boutons du bas) */
+.minimap {
+  position: fixed;
+  top: calc(max(12px, env(safe-area-inset-top)) + clamp(40px, 11vh, 90px) + 18px + clamp(30px, 8vh, 60px) * 1.1 + 16px);
+  left: max(16px, env(safe-area-inset-left));
+  width: 22vh;
+  height: 22vh;
+  min-width: 110px;
+  min-height: 110px;
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
 /* ---------- Commandes tactiles ---------- */
 #commandes {
   position: fixed;
