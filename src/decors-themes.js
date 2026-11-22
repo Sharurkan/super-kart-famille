@@ -629,8 +629,8 @@ async function diplodocus(piste, groupe, eviter) {
  * karts dans la gueule : le T-rex les croque puis les recrache derrière lui (voir course.js).
  */
 // dans le modèle, la gueule ne regarde pas exactement +x et n'est pas centrée : on corrige
-const ROTATION_GUEULE = 0.37;
-const DECALAGE_GUEULE = 0; // réglage fin éventuel (mètres) ; le centrage est calculé automatiquement
+const ROTATION_GUEULE = 0.5; // réglé à l'œil depuis la vue du kart (le modèle n'est pas symétrique)
+const DECALAGE_GUEULE = -7; // mètres vers la droite de la route, réglé depuis la vue du kart
 
 function teteTrex(piste, groupe) {
   const N = piste.N;
@@ -671,8 +671,6 @@ function teteTrex(piste, groupe) {
     const boite = new THREE.Box3().setFromObject(modele);
     const echelle = 17;
     // centrage automatique : on cherche le milieu de la gueule (les points tout à l'avant)
-    const d = new THREE.Vector2(Math.cos(ROTATION_GUEULE), Math.sin(ROTATION_GUEULE)); // direction de la gueule (x, z)
-    const perp = new THREE.Vector2(-d.y, d.x);
     modele.updateMatrixWorld(true);
     const pts = [];
     const v = new THREE.Vector3();
@@ -684,26 +682,31 @@ function teteTrex(piste, groupe) {
         pts.push(v.x, v.y, v.z);
       }
     });
-    let smax = -Infinity;
-    for (let k = 0; k < pts.length; k += 3) smax = Math.max(smax, pts[k] * d.x + pts[k + 2] * d.y);
     const hautMin = boite.min.y + (boite.max.y - boite.min.y) * 0.25;
-    let somme = 0, n = 0;
-    for (let k = 0; k < pts.length; k += 3) {
-      const sk = pts[k] * d.x + pts[k + 2] * d.y;
-      if (sk > smax - 0.35 && pts[k + 1] > hautMin) {
-        somme += pts[k] * perp.x + pts[k + 2] * perp.y;
-        n++;
-      }
-    }
-    const milieu = n ? somme / n : 0;
-    modele.position.x = -perp.x * milieu * echelle;
-    modele.position.z = -perp.y * milieu * echelle;
-    modele.scale.setScalar(echelle);
-    modele.position.y = -boite.min.y * echelle - 0.6; // socle un peu enfoncé dans le sol
     const tete = new THREE.Group();
     tete.add(modele);
-    tete.position.set(piste.cx[i] + piste.nx[i] * DECALAGE_GUEULE, 0, piste.cz[i] + piste.nz[i] * DECALAGE_GUEULE); // gueule centrée sur la route
-    tete.rotation.y = piste.angleA(i) + Math.PI / 2 + ROTATION_GUEULE; // gueule tournée vers les karts qui arrivent
+    modele.scale.setScalar(echelle);
+    modele.position.y = -boite.min.y * echelle - 0.6; // socle un peu enfoncé dans le sol
+    tete.position.set(piste.cx[i] + piste.nx[i] * DECALAGE_GUEULE, 0, piste.cz[i] + piste.nz[i] * DECALAGE_GUEULE);
+    // oriente la tête (angle de la gueule dans le modèle) et centre le milieu de la gueule sur la route
+    const placer = (angleGueule) => {
+      const d = new THREE.Vector2(Math.cos(angleGueule), Math.sin(angleGueule));
+      const perp = new THREE.Vector2(-d.y, d.x);
+      let smax = -Infinity;
+      for (let k = 0; k < pts.length; k += 3) smax = Math.max(smax, pts[k] * d.x + pts[k + 2] * d.y);
+      let somme = 0, n = 0;
+      for (let k = 0; k < pts.length; k += 3) {
+        const sk = pts[k] * d.x + pts[k + 2] * d.y;
+        if (sk > smax - 0.35 && pts[k + 1] > hautMin) { somme += pts[k] * perp.x + pts[k + 2] * perp.y; n++; }
+      }
+      const milieu = n ? somme / n : 0;
+      modele.position.x = -perp.x * milieu * echelle;
+      modele.position.z = -perp.y * milieu * echelle;
+      tete.rotation.y = piste.angleA(i) + Math.PI / 2 + angleGueule; // gueule tournée vers les karts qui arrivent
+    };
+    placer(ROTATION_GUEULE);
+    piste.teteTrex.objet = tete;
+    piste.teteTrex.placer = placer;
     groupe.add(tete);
   });
 }

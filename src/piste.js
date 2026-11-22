@@ -10,7 +10,8 @@ import { textureAsphalte, textureDamier, textureChevrons } from "./textures.js";
  */
 export function construirePiste(def) {
   const e = def.echelle ?? 1;
-  const pts = def.points.map(([x, z]) => new THREE.Vector3(x * e, 0, z * e));
+  const [dx0, dz0] = def.decalage ?? [0, 0]; // pour placer un circuit ailleurs (ex. le ventre du T-rex)
+  const pts = def.points.map(([x, z]) => new THREE.Vector3(x * e + dx0, 0, z * e + dz0));
   const courbe = new THREE.CatmullRomCurve3(pts, true, "centripetal");
   const N = def.echantillons ?? 600;
   const brut = courbe.getSpacedPoints(N);
@@ -148,7 +149,7 @@ export function construirePiste(def) {
   }
 
   // ---------- Ligne d'arrivée + portique ----------
-  {
+  if (def.portique !== false) {
     const angle = Math.atan2(tx[0], tz[0]);
     const ligne = new THREE.Mesh(
       new THREE.PlaneGeometry(def.largeur, 2.6),
