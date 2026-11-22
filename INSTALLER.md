@@ -18,16 +18,48 @@ Chaque modification du code s'affiche dès qu'on recharge la page.
 > sur les **réseaux privés** dans le pare-feu Windows.
 > Si l'adresse du PC change, la retrouver avec `ipconfig` (ligne « Adresse IPv4 »).
 
-## 2. Installer l'appli sur la tablette
+## 2. Installer l'appli sur la tablette (GitHub Pages)
 
-Chrome n'installe une appli que depuis une adresse **sécurisée** (https) ou depuis
-`localhost`. Une adresse du réseau local comme `http://192.168.0.57` ne compte pas,
-d'où une petite étape de réglage dans Chrome.
+Le jeu est publié ici : **https://sharurkan.github.io/super-kart-famille/**
 
-### Méthode conseillée : tout reste à la maison
+1. Sur la tablette, ouvrir cette adresse dans Chrome et attendre l'écran titre.
+2. Menu **⋮** (en haut à droite) → **Installer l'application**
+   (ou **Ajouter à l'écran d'accueil** → **Installer**).
+3. L'icône « Super Kart » (Viggo et Harry) apparaît sur l'écran d'accueil.
 
-Les dessins des personnages viennent de photos de famille. Avec cette méthode, rien
-n'est publié sur Internet.
+L'appli s'ouvre en plein écran, en paysage, et marche ensuite **sans Internet**.
+
+### Mettre à jour
+
+Le dépôt https://github.com/Sharurkan/super-kart-famille publie le jeu tout seul à
+chaque envoi sur la branche `main` (onglet **Actions** pour suivre). Après une
+modification :
+
+```powershell
+git add -A
+```
+
+```powershell
+git commit -m "Ce qui a changé"
+```
+
+```powershell
+git push
+```
+
+Environ une minute plus tard, le site est à jour. Sur la tablette, l'appli se met à
+jour toute seule quand elle est ouverte avec Internet (la nouvelle version apparaît
+au lancement suivant).
+
+> Le dépôt est **public** : le code et les sprites des personnages sont visibles.
+> Les photos originales (`assets/originaux/`) ne sont **pas** envoyées sur GitHub
+> (elles sont exclues par `.gitignore`).
+
+## 3. Autre méthode : tout garder à la maison
+
+Sans GitHub, on peut installer l'appli depuis le PC. Chrome n'installe une appli que
+depuis une adresse **sécurisée** (https), ce que l'adresse locale `http://192.168.0.57`
+n'est pas, d'où une petite étape de réglage dans Chrome.
 
 **Sur le PC** : fabriquer la version finale et la servir sur le réseau.
 
@@ -66,15 +98,6 @@ Ensuite :
 > ⚠️ Si l'adresse du PC change (autre box, autre réseau), l'appli déjà installée
 > continue de marcher, mais les mises à jour demandent de refaire le réglage
 > `chrome://flags` avec la nouvelle adresse.
-
-### Autre méthode : mettre le jeu en ligne (https)
-
-On peut aussi publier le dossier `dist/` (créé par `npm run build`) sur un hébergeur
-gratuit en https (GitHub Pages, Netlify, Cloudflare Pages…). Plus besoin de
-`chrome://flags`, et l'appli s'installe depuis n'importe où.
-
-> ⚠️ Le site serait accessible à toute personne qui connaît l'adresse, avec les
-> visages de la famille.
 
 ## Commandes utiles
 
