@@ -21,9 +21,9 @@ const DEMI_BONBON = 0.75 * ECHELLE; // demi-longueur (papillotes comprises) : il
 // 1) formeBonbon() : le bonbon dessiné en code (ovale + papillotes), affiché tout de suite.
 // 2) dès que public/bonbons/bonbons.glb est chargé (friandises du "Food Kit" de Kenney, CC0,
 //    préparé par outils/blender/bonbons_kenney.py), on passe aux vraies friandises : une rangée
-//    de sucettes, une de chocolats, une de beignets, une de cupcakes...
+//    de sucettes, une de glaces, une de beignets, une de cupcakes...
 // La couleur de chaque bonbon est appliquée par instance (setColorAt) ; sur les friandises,
-// seulement sur les parties "teinte" (sucre, papier, glaçage) : bâton, chocolat et pâte gardent
+// seulement sur les parties "teinte" (sucre, boule de glace, glaçage) : bâton, cornet et pâte gardent
 // leur couleur.
 let geometrieBonbon = null;
 export function formeBonbon() {
@@ -64,7 +64,7 @@ export function formeBonbon() {
 // l'ancien bonbon : 2 × DEMI_BONBON) et inclinaison vers la caméra. Les rangées les prennent à tour de rôle.
 const FRIANDISES = [
   { nom: "sucette", taille: 2.3, penche: 0.1 },
-  { nom: "chocolat", taille: 1.8, penche: 0.35 },
+  { nom: "glace", taille: 2.0, penche: 0.1 },
   { nom: "beignet", taille: 1.8, penche: 0.15 },
   { nom: "cupcake", taille: 1.9, penche: 0.2 },
 ];

@@ -6,7 +6,7 @@
 # sommets (plus de texture), puis le modèle est coupé en deux objets :
 #   <nom>_teinte : les parties colorées (bonbon, papier, glaçage) en gris clair -> le jeu les
 #                  colore bonbon par bonbon (rose, jaune, bleu...) ;
-#   <nom>_fixe   : le reste (bâton, chocolat, pâte, vermicelles, cerise) garde ses couleurs.
+#   <nom>_fixe   : le reste (bâton, cornet, pâte, vermicelles, cerise) garde ses couleurs.
 # Chaque friandise est centrée, debout face à la route, et mesure 1 (plus grande dimension).
 import bpy, bmesh, sys
 from mathutils import Vector, Matrix
@@ -19,7 +19,7 @@ DOSSIER, SORTIE = args[0], args[1]
 # double face (le dessus glacé recopié en miroir dessous : il tourne sur lui-même, on voit les deux côtés)
 MODELES = [
     ("sucette", "lollypop", 0, False),
-    ("chocolat", "chocolate-wrapper", 90, False),
+    ("glace", "ice-cream", 0, False),
     ("beignet", "donut-sprinkles", 90, True),
     ("cupcake", "cupcake", 0, False),
 ]
@@ -35,9 +35,8 @@ def luminance(c):
 
 def a_teinter(c):
     r, g, b = c
-    rose = r > 0.8 and b > 0.75 and g < 0.7  # sucette, glaçage, rayures du cupcake
-    violet = b > 0.7 and r < 0.6 and g < 0.45  # papier du chocolat
-    return rose or violet
+    rose = r > 0.8 and b > 0.75 and g < 0.7  # sucette, boule de glace, glaçage, rayures du cupcake (tout le rose)
+    return rose
 
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
