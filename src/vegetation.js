@@ -1,8 +1,10 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-// Végétation en vrais modèles 3D (Stylized Nature MegaKit de Quaternius, CC0),
-// rassemblés et allégés avec Blender dans public/nature/jurassique.glb.
+// Végétation en vrais modèles 3D : Stylized Nature MegaKit de Quaternius (CC0), rassemblés et
+// allégés avec Blender dans public/nature/jurassique.glb, et modèles réalistes dans
+// public/nature/realiste.glb (rochers scannés et fougère de Poly Haven, CC0 ; cycas "Sago Palm"
+// de Valykor, CC-BY 4.0) préparés par outils/blender/pack_realiste.py.
 // Chaque modèle est dessiné en InstancedMesh : un seul appel de dessin par pièce,
 // même avec des centaines de fougères.
 
@@ -44,22 +46,65 @@ export const TAILLES = {
   Pebble_Square_3: 0.28,
   RockPath_Square_Small_2: 0.22,
   RockPath_Round_Small_1: 0.18,
+  // modèles réalistes (public/nature/realiste.glb, voir outils/blender/pack_realiste.py)
+  Fougere: 1.05, // fougère basse et large (fern_02, Poly Haven)
+  Cycas: 3.2, // cycas (Sago Palm de Valykor)
+  Gros_Rocher: 3.4, // grand rocher moussu (rock_moss_set_01)
+  Rocher_Mousse_A: 2.2,
+  Rocher_Mousse_B: 1.6,
+  Rocher_Mousse_C: 1.8,
+  Rocher_07: 1.8,
+  Caillou_A: 0.3,
+  Caillou_B: 0.26,
 };
 
-// Certaines plantes du pack ont des feuilles violettes : on fait tourner leur teinte vers le vert (degrés).
-// (Plant_1 a déjà des feuilles vertes : la tourner les rendait violettes.)
-const TEINTES = { Plant_7: -150, Plant_7_Big: -150 };
+// Anciens noms -> modèles réalistes. Les rochers Quaternius sont aussi posés par le T-rex, le
+// diplodocus et le ravin (sans garde de la route) : leur remplaçant garde exactement la même
+// place au sol ("place" = rayon au sol de l'ancien rocher, en mètres, mesuré sur le modèle).
+const REMPLACEMENTS = {
+  Rock_Medium_1: { nom: "Rocher_Mousse_A", place: 0.66 * 2.6 },
+  Rock_Medium_2: { nom: "Rocher_Mousse_C", place: 0.78 * 2.2 },
+  Rock_Medium_3: { nom: "Rocher_07", place: 0.75 * 3 },
+  Pebble_Round_1: { nom: "Caillou_A" },
+  Pebble_Round_2: { nom: "Caillou_B" },
+  Pebble_Round_3: { nom: "Caillou_A" },
+  Pebble_Round_4: { nom: "Caillou_B" },
+  Pebble_Round_5: { nom: "Caillou_A" },
+  Pebble_Square_1: { nom: "Caillou_B" },
+  Pebble_Square_2: { nom: "Caillou_A" },
+  Pebble_Square_3: { nom: "Caillou_B" },
+};
+
+// Filtres (comme en CSS) appliqués aux textures de certains modèles Quaternius :
+//  - feuilles violettes tournées vers le vert (Plant_1 a déjà des feuilles vertes : la tourner les rendait violettes) ;
+//  - plantes et arbres aux couleurs de dessin animé un peu moins saturés, pour aller avec les
+//    plantes et rochers réalistes (sans texture : la couleur du matériau est désaturée pareil).
+const VIOLET_EN_VERT = "hue-rotate(-150deg) saturate(0.9)";
+const DOUX = "saturate(0.78) brightness(0.96)", TRES_DOUX = "saturate(0.68) brightness(0.92)";
+const FILTRES = {
+  Plant_7: VIOLET_EN_VERT, Plant_7_Big: VIOLET_EN_VERT,
+  Fern_1: TRES_DOUX, Plant_1: TRES_DOUX, Plant_1_Big: TRES_DOUX, Grass_Common_Tall: DOUX,
+  CommonTree_1: DOUX, CommonTree_2: DOUX, CommonTree_3: DOUX, Pine_1: DOUX, Pine_2: DOUX, Pine_5: DOUX, CommonTree_5: DOUX,
+};
 const texturesTeintees = new Map();
 
-function teinter(texture, degres) {
-  const cle = texture.uuid + degres;
+/** Même effet qu'un filtre "saturate(s) brightness(b)" sur une couleur unie. */
+function adoucir(couleur, filtre) {
+  if (/hue-rotate/.test(filtre)) return;
+  const s = +(filtre.match(/saturate\(([\d.]+)\)/)?.[1] ?? 1), b = +(filtre.match(/brightness\(([\d.]+)\)/)?.[1] ?? 1);
+  const hsl = couleur.getHSL({});
+  couleur.setHSL(hsl.h, hsl.s * s, hsl.l * b);
+}
+
+function teinter(texture, filtre) {
+  const cle = texture.uuid + filtre;
   if (!texturesTeintees.has(cle)) {
     const img = texture.image;
     const c = document.createElement("canvas");
     c.width = img.width;
     c.height = img.height;
     const g = c.getContext("2d");
-    g.filter = `hue-rotate(${degres}deg) saturate(0.9)`;
+    g.filter = filtre;
     g.drawImage(img, 0, 0);
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = texture.colorSpace;
@@ -71,15 +116,21 @@ function teinter(texture, degres) {
   return texturesTeintees.get(cle);
 }
 
+// Les deux fichiers de modèles : pack Quaternius (stylisé) et pack réaliste (scans, cycas, fougère)
+const FICHIERS = ["nature/jurassique.glb", "nature/realiste.glb"];
 let chargement = null;
 
-/** Charge le fichier une fois ; renvoie { nom: [{ geometrie, materiau }] } normalisés (hauteur 1, posés au sol). */
+/** Charge les fichiers une fois ; renvoie { nom: [{ geometrie, materiau }] } normalisés (hauteur 1, posés au sol). */
 function chargerModeles() {
   if (!chargement) {
-    chargement = new GLTFLoader().loadAsync(import.meta.env.BASE_URL + "nature/jurassique.glb").then((gltf) => {
+    const chargeur = new GLTFLoader();
+    chargement = Promise.all(FICHIERS.map((f) => chargeur.loadAsync(import.meta.env.BASE_URL + f))).then((gltfs) => {
       const modeles = {};
-      gltf.scene.updateMatrixWorld(true);
-      for (const racine of gltf.scene.children) {
+      const racines = gltfs.flatMap((gltf) => {
+        gltf.scene.updateMatrixWorld(true);
+        return gltf.scene.children;
+      });
+      for (const racine of racines) {
         const pieces = [];
         // Blender ajoute parfois ".001", que le chargeur transforme en "001" : on le retire
         const nomPropre = racine.name.replace(/\.?\d{3}$/, "");
@@ -98,14 +149,18 @@ function chargerModeles() {
           g.scale(1 / h, 1 / h, 1 / h);
           const ancien = o.material;
           const feuilles = ancien.alphaTest > 0 || ancien.transparent || ancien.alphaMap;
-          const map = ancien.map && TEINTES[nomPropre] ? teinter(ancien.map, TEINTES[nomPropre]) : ancien.map;
+          const map = ancien.map && FILTRES[nomPropre] ? teinter(ancien.map, FILTRES[nomPropre]) : ancien.map;
           const m = new THREE.MeshLambertMaterial({
             map: map ?? null,
             color: ancien.color,
             alphaTest: feuilles ? Math.max(0.4, ancien.alphaTest || 0.5) : 0,
             side: feuilles ? THREE.DoubleSide : THREE.FrontSide,
+            // relief des modèles réalistes (scans) ; les modèles Quaternius n'en ont pas
+            normalMap: ancien.normalMap ?? null,
           });
+          if (m.normalMap) m.normalScale.copy(ancien.normalScale);
           if (m.map) m.map.anisotropy = 4;
+          if (!ancien.map && FILTRES[nomPropre]) adoucir(m.color, FILTRES[nomPropre]);
           pieces.push({ geometrie: g, materiau: m });
         });
         // rayon au sol (pour une hauteur de 1) : 85 % des sommets sont plus près de l'axe
@@ -134,9 +189,12 @@ function chargerModeles() {
 export function planter(groupe, nom, liste, garde = null) {
   if (!liste.length) return;
   chargerModeles().then((modeles) => {
+    // ancien nom remplacé par un modèle réaliste (même place au sol pour les rochers)
+    const remplace = REMPLACEMENTS[nom];
+    if (remplace) nom = remplace.nom;
     const pieces = modeles[nom];
     if (!pieces) return console.warn("modèle de végétation introuvable :", nom);
-    const h = TAILLES[nom] ?? 3;
+    const h = remplace?.place ? remplace.place / pieces.rayon : TAILLES[nom] ?? 3;
     if (garde) {
       liste = liste.flatMap((p) => {
         const e = h * (p.s ?? 1);

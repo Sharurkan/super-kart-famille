@@ -1,0 +1,19 @@
+{
+  "_lisezmoi": "Configuration de pack_realiste.py pour public/nature/realiste.glb. TELECHARGEMENTS = dossier des téléchargements (Poly Haven : API files/<id>, glTF 1k ; Sketchfab : zip glTF). blender --background --python pack_realiste.py -- realiste.json dossier_telechargements",
+  "sortie": "../../public/nature/realiste.glb",
+  "taille": 512,
+  "qualite": 80,
+  "modeles": [
+    { "fichier": "TELECHARGEMENTS/dl-polyhaven/modeles/rock_moss_set_01/rock_moss_set_01.gltf",
+      "objets": {
+        "medium.001": [["Rocher_Mousse_A", 300], ["Caillou_A", 60]],
+        "mesh1-geometry.003": ["Rocher_Mousse_C", 300],
+        "modelShape": [["Rocher_Mousse_B", 280], ["Caillou_B", 60]],
+        "modelShape.003": ["Gros_Rocher", 700]
+      } },
+    { "fichier": "TELECHARGEMENTS/dl-polyhaven/modeles/rock_07/rock_07.gltf", "objets": { "*": ["Rocher_07", 280] } },
+    { "fichier": "TELECHARGEMENTS/dl-polyhaven/modeles/fern_02/fern_02.gltf", "objets": { "*": ["Fougere", 400] },
+      "alpha": "TELECHARGEMENTS/dl-polyhaven/modeles/fern_02/textures/fern_02_alpha_1k.png" },
+    { "fichier": "TELECHARGEMENTS/dl-cycas/scene.gltf", "objets": { "*": ["Cycas", 700] } }
+  ]
+}

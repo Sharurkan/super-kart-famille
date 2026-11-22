@@ -1,0 +1,4 @@
+Textures du sol (outils/blender/textures_sol.py) : Poly Haven, CC0 (domaine public)
+  sol-herbe.jpg     <- forrest_ground_01   https://polyhaven.com/a/forrest_ground_01
+  sol-terre.jpg     <- grass_path_2        https://polyhaven.com/a/grass_path_2
+  sol-sous-bois.jpg <- brown_mud_leaves_01 https://polyhaven.com/a/brown_mud_leaves_01
