@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { instances, positions, boiteRonde } from "./decor.js";
 import { fusion, matCouleurs, nuages } from "./decors-circuits.js";
 import { creerDino } from "./dinos.js";
-import { planter } from "./vegetation.js";
+import { planter, gardeRoute } from "./vegetation.js";
 import { installerRavin } from "./ptero.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
@@ -25,6 +25,8 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
 
   // vrais dinosaures animés (pack Quaternius), tournés vers la piste
   const mixers = [];
+  // tout ce qui est posé autour de la route passe par la garde : rien sur la route ni devant la caméra
+  const garde = gardeRoute(piste);
   const especes = ["Trex", "Apatosaurus", "Stegosaurus", "Triceratops", "Parasaurolophus", "Velociraptor"];
   const places = [
     ...positions(piste, rnd, 8, horsPiste + 6, 45), // près de la piste
@@ -34,8 +36,13 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
     const nom = k < 8 ? especes[k % especes.length] : ["Apatosaurus", "Trex", "Apatosaurus", "Stegosaurus", "Triceratops", "Apatosaurus"][k - 8];
     const anim = rnd() < 0.3 ? "Attack" : "Idle";
     creerDino(nom, { animation: anim, vitesse: 0.8 + rnd() * 0.3 }).then(({ objet, mixer }) => {
-      objet.position.set(p.x, 0, p.z);
       objet.rotation.y = versPiste(piste, p) + (rnd() - 0.5) * 0.8;
+      // sa vraie taille (un apatosaure est très long) : il ne doit pas déborder sur la route
+      const boite = new THREE.Box3().setFromObject(objet);
+      const r = 0.6 * Math.hypot(boite.max.x - boite.min.x, boite.max.z - boite.min.z) / 2;
+      const ok = garde.verifier(p.x, p.z, r, boite.max.y - boite.min.y, "dino " + nom);
+      if (!ok) return;
+      objet.position.set(ok.x, 0, ok.z);
       groupe.add(objet);
       mixers.push(mixer);
     });
@@ -51,41 +58,41 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   const serre = Math.max(0.6, Math.min(1, densite / rapport));
   const nb = (n) => Math.round(n * densite);
   const zone = (n, dMin, dMax) => positions(piste, rnd, nb(n), dMin, dMin + (dMax - dMin) * serre);
-  planter(groupe, "Fern_1", varie(zone(130, piste.demi + 2.6, 45), 0.7, 0.9));
-  planter(groupe, "Plant_1_Big", varie(zone(45, horsPiste, 60), 0.7, 0.7));
-  planter(groupe, "Plant_7_Big", varie(zone(55, horsPiste, 70), 0.7, 0.7));
-  planter(groupe, "Plant_1", varie(zone(70, piste.demi + 2.6, 40), 0.8, 0.6));
-  planter(groupe, "Plant_7", varie(zone(70, piste.demi + 2.6, 40), 0.8, 0.6));
-  planter(groupe, "Grass_Common_Tall", varie(zone(50, piste.demi + 2.2, 35), 0.7, 0.8));
-  planter(groupe, "CommonTree_1", varie(zone(10, horsPiste + 8, 95), 0.8, 0.5));
-  planter(groupe, "CommonTree_2", varie(zone(10, horsPiste + 8, 95), 0.8, 0.5));
-  planter(groupe, "CommonTree_3", varie(zone(10, horsPiste + 8, 95), 0.8, 0.5));
-  planter(groupe, "Pine_1", varie(zone(8, horsPiste + 12, 110), 0.8, 0.5));
-  planter(groupe, "Pine_2", varie(zone(8, horsPiste + 12, 110), 0.8, 0.5));
-  planter(groupe, "DeadTree_1", varie(zone(3, horsPiste + 6, 80), 0.8, 0.4));
-  for (const r of ["Rock_Medium_1", "Rock_Medium_2", "Rock_Medium_3"]) planter(groupe, r, varie(zone(16, horsPiste, 100), 0.6, 1.2).map((p) => ({ ...p, y: -0.15 })));
+  planter(groupe, "Fern_1", varie(zone(130, piste.demi + 2.6, 45), 0.7, 0.9), garde);
+  planter(groupe, "Plant_1_Big", varie(zone(45, horsPiste, 60), 0.7, 0.7), garde);
+  planter(groupe, "Plant_7_Big", varie(zone(55, horsPiste, 70), 0.7, 0.7), garde);
+  planter(groupe, "Plant_1", varie(zone(70, piste.demi + 2.6, 40), 0.8, 0.6), garde);
+  planter(groupe, "Plant_7", varie(zone(70, piste.demi + 2.6, 40), 0.8, 0.6), garde);
+  planter(groupe, "Grass_Common_Tall", varie(zone(50, piste.demi + 2.2, 35), 0.7, 0.8).filter((_, k) => k % 3 !== 2), garde); // un tiers en moins (300 triangles chacune)
+  planter(groupe, "CommonTree_1", varie(zone(10, horsPiste + 8, 95), 0.8, 0.5), garde);
+  planter(groupe, "CommonTree_2", varie(zone(10, horsPiste + 8, 95), 0.8, 0.5), garde);
+  planter(groupe, "CommonTree_3", varie(zone(10, horsPiste + 8, 95), 0.8, 0.5), garde);
+  planter(groupe, "Pine_1", varie(zone(8, horsPiste + 12, 110), 0.8, 0.5), garde);
+  planter(groupe, "Pine_2", varie(zone(8, horsPiste + 12, 110), 0.8, 0.5), garde);
+  planter(groupe, "DeadTree_1", varie(zone(3, horsPiste + 6, 80), 0.8, 0.4), garde);
+  for (const r of ["Rock_Medium_1", "Rock_Medium_2", "Rock_Medium_3"]) planter(groupe, r, varie(zone(16, horsPiste, 100), 0.6, 1.2).map((p) => ({ ...p, y: -0.15 })), garde);
   // arbres lointains : vrais sapins et feuillus très simplifiés (cachés par la brume)
-  planter(groupe, "Pine_5", varie(positions(piste, rnd, 34, 110, 170), 0.8, 0.6));
-  planter(groupe, "CommonTree_5", varie(positions(piste, rnd, 12, 110, 160), 0.8, 0.6));
+  planter(groupe, "Pine_5", varie(positions(piste, rnd, 34, 110, 170), 0.8, 0.6), garde);
+  planter(groupe, "CommonTree_5", varie(positions(piste, rnd, 12, 110, 160), 0.8, 0.6), garde);
 
   // petits détails au bord de la route : cailloux, trèfles, fleurs, champignons géants
   const cailloux = ["Pebble_Round_1", "Pebble_Round_2", "Pebble_Round_3", "Pebble_Round_4", "Pebble_Round_5", "Pebble_Square_1", "Pebble_Square_2", "Pebble_Square_3"];
-  for (const c of cailloux) planter(groupe, c, varie(positions(piste, rnd, nb(8), piste.demi + 0.8, piste.demi + 5), 0.7, 0.8));
-  planter(groupe, "Clover_1", varie(zone(15, piste.demi + 1.5, 30), 0.8, 0.6));
-  planter(groupe, "Clover_2", varie(zone(15, piste.demi + 1.5, 30), 0.8, 0.6));
-  planter(groupe, "Flower_3_Group", varie(zone(16, piste.demi + 2, 35), 0.8, 0.5));
-  planter(groupe, "Flower_4_Group", varie(zone(8, piste.demi + 2, 35), 0.8, 0.5));
-  planter(groupe, "Mushroom_Common", varie(zone(12, horsPiste - 1, 40), 0.8, 0.7));
-  sentiers(groupe, piste, rnd, nb(4));
+  for (const c of cailloux) planter(groupe, c, varie(positions(piste, rnd, nb(8), piste.demi + 0.8, piste.demi + 5), 0.7, 0.8), garde);
+  planter(groupe, "Clover_1", varie(zone(15, piste.demi + 1.5, 30), 0.8, 0.6), garde);
+  planter(groupe, "Clover_2", varie(zone(15, piste.demi + 1.5, 30), 0.8, 0.6), garde);
+  planter(groupe, "Flower_3_Group", varie(zone(16, piste.demi + 2, 35), 0.8, 0.5), garde);
+  planter(groupe, "Flower_4_Group", varie(zone(8, piste.demi + 2, 35), 0.8, 0.5), garde);
+  planter(groupe, "Mushroom_Common", varie(zone(12, horsPiste - 1, 40), 0.8, 0.7), garde);
+  sentiers(groupe, piste, rnd, nb(4), garde);
 
   // nids d'œufs (aucun modèle libre équivalent : formes simples, peu de triangles)
   const nid = fusion([
     { geo: new THREE.TorusGeometry(1, 0.35, 5, 9).rotateX(Math.PI / 2).translate(0, 0.3, 0), couleur: 0x9c7a4a },
-    { geo: new THREE.SphereGeometry(0.45, 9, 7).scale(1, 1.35, 1).translate(-0.35, 0.6, 0), couleur: 0xfff3bf },
-    { geo: new THREE.SphereGeometry(0.45, 9, 7).scale(1, 1.35, 1).translate(0.35, 0.6, 0.15), couleur: 0xd3f9d8 },
-    { geo: new THREE.SphereGeometry(0.45, 9, 7).scale(1, 1.35, 1).translate(0, 0.6, -0.4), couleur: 0xffe8cc },
+    { geo: new THREE.SphereGeometry(0.45, 7, 5).scale(1, 1.35, 1).translate(-0.35, 0.6, 0), couleur: 0xfff3bf },
+    { geo: new THREE.SphereGeometry(0.45, 7, 5).scale(1, 1.35, 1).translate(0.35, 0.6, 0.15), couleur: 0xd3f9d8 },
+    { geo: new THREE.SphereGeometry(0.45, 7, 5).scale(1, 1.35, 1).translate(0, 0.6, -0.4), couleur: 0xffe8cc },
   ]);
-  groupe.add(instances(nid, matCouleurs(), positions(piste, rnd, nb(14), horsPiste, 40).map((p) => ({ ...p, s: 1, r: rnd() * 6 }))));
+  const nids = positions(piste, rnd, nb(14), horsPiste, 40).map((p) => ({ ...p, s: 1, r: rnd() * 6 })); // posés plus bas
 
   // volcan au loin avec sa fumée
   const angleVolcan = rnd() * Math.PI * 2;
@@ -103,14 +110,19 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
     const r = piste.rayon + 230 + rnd() * 70;
     collines.push({ x: piste.centre.x + Math.cos(a) * r, y: -8, z: piste.centre.z + Math.sin(a) * r, s: 70 + rnd() * 50, sy: 30 + rnd() * 25, couleur: [0x5c940d, 0x74b816, 0x82c91e][i % 3] });
   }
-  groupe.add(instances(new THREE.SphereGeometry(1, 22, 13), new THREE.MeshLambertMaterial({ color: 0xffffff }), collines));
-  const fumee = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 2), new THREE.MeshBasicMaterial({ color: 0x9a9a9a, fog: false, transparent: true, opacity: 0.8 }), 14);
+  groupe.add(instances(new THREE.SphereGeometry(1, 16, 10), new THREE.MeshLambertMaterial({ color: 0xffffff }), collines));
+  const fumee = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0x9a9a9a, fog: false, transparent: true, opacity: 0.8 }), 14);
   groupe.add(fumee);
   nuages(groupe, piste, rnd);
   teteTrex(piste, groupe);
   diplodocus(piste, groupe); // après le T-rex : sa place ne change pas
   decorLooping(piste, groupe);
   ravinDuPtero(groupe, piste); // ligne droite du haut : le vide et le ptérodactyle
+  // les nids passent par la garde une fois le ravin, le diplodocus et le T-rex installés
+  groupe.add(instances(nid, matCouleurs(), nids.flatMap((p) => {
+    const ok = garde.verifier(p.x, p.z, 1.4, 1.2, "nid");
+    return ok ? [{ ...p, ...ok }] : [];
+  })));
 
   let t = 0;
   const o = new THREE.Object3D();
@@ -806,7 +818,7 @@ function butteDeTerre(B, sJ, hJ, coupe) {
 }
 
 /** Petits sentiers de pierres plates qui partent du bord de la route vers la forêt. */
-function sentiers(groupe, piste, rnd, nombre) {
+function sentiers(groupe, piste, rnd, nombre, garde) {
   const carres = [], ronds = [];
   for (let n = 0; n < nombre; n++) {
     const j = Math.floor(rnd() * piste.N);
@@ -814,7 +826,7 @@ function sentiers(groupe, piste, rnd, nombre) {
     const dx = piste.cx[(j + 1) % piste.N] - piste.cx[j], dz = piste.cz[(j + 1) % piste.N] - piste.cz[j]; // le long de la route
     const lt = Math.hypot(dx, dz) || 1;
     for (let k = 0; k < 5; k++) {
-      const lat = cote * (piste.demi + 1.4 + k * 1.35);
+      const lat = cote * (piste.demi + 2.4 + k * 1.35); // la première pierre juste après la bordure
       const zig = (k % 2 ? 0.35 : -0.35) + (rnd() - 0.5) * 0.3;
       const x = piste.cx[j] + piste.nx[j] * lat + (dx / lt) * zig;
       const z = piste.cz[j] + piste.nz[j] * lat + (dz / lt) * zig;
@@ -822,8 +834,8 @@ function sentiers(groupe, piste, rnd, nombre) {
       (k % 2 ? ronds : carres).push({ x, z, s: 0.85 + rnd() * 0.3, r: rnd() * 6.3 });
     }
   }
-  planter(groupe, "RockPath_Square_Small_2", carres);
-  planter(groupe, "RockPath_Round_Small_1", ronds);
+  planter(groupe, "RockPath_Square_Small_2", carres, garde);
+  planter(groupe, "RockPath_Round_Small_1", ronds, garde);
 }
 
 // ---------------------------------------------------------------------------

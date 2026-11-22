@@ -77,7 +77,8 @@ export function construireDecor(def, piste) {
   groupe.add(leCiel);
 
   // sol
-  const sol = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), new THREE.MeshLambertMaterial({ color: def.sol }));
+  // (ptero.js retrouve ce plan de 2400 m pour y creuser le ravin : le matériau ne dépend pas des UV)
+  const sol = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), materiauSol(def, piste));
   sol.rotation.x = -Math.PI / 2;
   sol.position.set(piste.centre.x, 0, piste.centre.z);
   groupe.add(sol);
@@ -138,4 +139,162 @@ function decorPrairie(groupe, piste, rnd, horsPiste) {
       nuages.push({ x: x + (k - 1.5) * 9 + rnd() * 4, y: y + rnd() * 4, z: z + rnd() * 6, s: 7 + rnd() * 5, sy: 4 + rnd() * 3 });
   }
   groupe.add(instances(new THREE.IcosahedronGeometry(1, 2), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), nuages));
+}
+
+// ---------------------------------------------------------------------------
+// TEXTURE DU SOL (herbe) : tout est dans materiauSol(), facile à remplacer plus tard par une
+// vraie texture. Deux petites images dessinées au chargement, sans fichier :
+//  - "detail" (256², répétée tous les quelques mètres) : grain de l'herbe et taches moyennes ;
+//  - "carte" (1024², tout le circuit) : grandes zones d'herbe plus sombre ou plus sèche,
+//    plaques de terre, bande d'herbe usée le long de la route et terre au pied des barrières.
+// Le shader lit les deux avec les coordonnées du monde (x, z) : il marche aussi après que
+// ptero.js a remplacé le plan par une forme trouée (dont les UV ne sont plus les mêmes).
+const PERIODE_DETAIL = 9; // m
+const PERIODE_TACHES = 53; // m (deuxième lecture du détail, casse la répétition)
+const cacheSol = new Map();
+
+/** Bruit de valeur périodique (tuile sans raccord) : taille² valeurs entre 0 et 1. */
+function bruitPeriodique(taille, octaves, rnd) {
+  const res = new Float32Array(taille * taille);
+  let amp = 1, total = 0;
+  for (const cellules of octaves) {
+    const g = Float32Array.from({ length: cellules * cellules }, () => rnd());
+    const lisse = (t) => t * t * (3 - 2 * t);
+    for (let y = 0; y < taille; y++) {
+      const fy = (y / taille) * cellules, y0 = Math.floor(fy), ty = lisse(fy - y0);
+      for (let x = 0; x < taille; x++) {
+        const fx = (x / taille) * cellules, x0 = Math.floor(fx), tx = lisse(fx - x0);
+        const v = (i, j) => g[((j % cellules) * cellules) + (i % cellules)];
+        const a = v(x0, y0) + (v(x0 + 1, y0) - v(x0, y0)) * tx;
+        const b = v(x0, y0 + 1) + (v(x0 + 1, y0 + 1) - v(x0, y0 + 1)) * tx;
+        res[y * taille + x] += (a + (b - a) * ty) * amp;
+      }
+    }
+    total += amp;
+    amp *= 0.55;
+  }
+  for (let k = 0; k < res.length; k++) res[k] /= total;
+  return res;
+}
+
+function imagesSol(piste) {
+  let rs = 1234567;
+  const rnd = () => ((rs = (rs * 16807) % 2147483647) / 2147483647);
+  // détail : R = grain fin de l'herbe, G = taches moyennes
+  const T = 256;
+  const fin = bruitPeriodique(T, [16, 32, 64], rnd);
+  const moyen = bruitPeriodique(T, [4, 8, 16], rnd);
+  const cd = document.createElement("canvas");
+  cd.width = cd.height = T;
+  const gd = cd.getContext("2d");
+  const id = gd.createImageData(T, T);
+  for (let k = 0; k < T * T; k++) {
+    id.data[k * 4] = Math.round(fin[k] * 255);
+    id.data[k * 4 + 1] = Math.round(moyen[k] * 255);
+    id.data[k * 4 + 2] = 128;
+    id.data[k * 4 + 3] = 255;
+  }
+  gd.putImageData(id, 0, 0);
+
+  // carte du circuit : R = luminosité, G = terre, B = herbe sèche (128 / 0 / 0 = herbe normale)
+  const C = 1024, marge = 160;
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (let i = 0; i < piste.N; i++) {
+    minX = Math.min(minX, piste.cx[i]); maxX = Math.max(maxX, piste.cx[i]);
+    minZ = Math.min(minZ, piste.cz[i]); maxZ = Math.max(maxZ, piste.cz[i]);
+  }
+  const taille = Math.max(maxX - minX, maxZ - minZ) + 2 * marge;
+  const x0 = (minX + maxX) / 2 - taille / 2, z0 = (minZ + maxZ) / 2 - taille / 2;
+  const px = C / taille; // pixels par mètre
+  const grand = bruitPeriodique(C, [6, 12, 24], rnd), plaques = bruitPeriodique(C, [10, 20, 40], rnd);
+  const cc = document.createElement("canvas");
+  cc.width = cc.height = C;
+  const gc = cc.getContext("2d");
+  const ic = gc.createImageData(C, C);
+  for (let y = 0; y < C; y++)
+    for (let x = 0; x < C; x++) {
+      const k = y * C + x;
+      // vers les bords de la carte, tout redevient neutre (au-delà : herbe simple)
+      const bord = Math.min(x, y, C - 1 - x, C - 1 - y) / (C * 0.08);
+      const f = Math.min(1, bord);
+      const v = grand[k];
+      ic.data[k * 4] = Math.round(128 + (v - 0.5) * 150 * f); // zones plus sombres / plus claires
+      ic.data[k * 4 + 1] = Math.round(Math.max(0, (plaques[k] - 0.66) * 4) * 150 * f); // plaques de terre
+      ic.data[k * 4 + 2] = Math.round(Math.max(0, (v - 0.56) * 3) * 140 * f); // herbe sèche
+      ic.data[k * 4 + 3] = 255;
+    }
+  gc.putImageData(ic, 0, 0);
+  // le long de la route : on trace des bandes (de la plus large à la plus étroite)
+  const trace = (demiLargeur, style, flou) => {
+    gc.save();
+    gc.filter = `blur(${flou}px)`;
+    gc.globalCompositeOperation = "source-over";
+    gc.strokeStyle = style;
+    gc.lineWidth = demiLargeur * 2 * px;
+    gc.lineJoin = gc.lineCap = "round";
+    gc.beginPath();
+    for (let i = 0; i <= piste.N; i++) {
+      const j = i % piste.N;
+      const X = (piste.cx[j] - x0) * px, Y = (piste.cz[j] - z0) * px;
+      i ? gc.lineTo(X, Y) : gc.moveTo(X, Y);
+    }
+    gc.stroke();
+    gc.restore();
+  };
+  const bord = piste.demi + piste.marge;
+  trace(bord + 4, "rgba(112,0,60,0.5)", 3); // herbe un peu sèche derrière les barrières
+  trace(bord + 1.3, "rgb(104,150,40)", 1.5); // terre au pied des barrières
+  trace(bord - 0.8, "rgba(132,30,70,0.8)", 1.5); // herbe usée entre la bordure et la barrière
+  trace(piste.demi + 2.2, "rgb(110,95,20)", 1); // terre tassée le long de la bordure
+  return { detail: cd, carte: cc, carteMin: new THREE.Vector2(x0, z0), carteTaille: taille };
+}
+
+/** Matériau du grand sol d'herbe (détail + carte du circuit, voir plus haut). */
+export function materiauSol(def, piste) {
+  const cle = def.nom + ":" + piste.N;
+  if (!cacheSol.has(cle)) {
+    const im = imagesSol(piste);
+    const detail = new THREE.CanvasTexture(im.detail);
+    detail.wrapS = detail.wrapT = THREE.RepeatWrapping;
+    detail.anisotropy = 4;
+    const carte = new THREE.CanvasTexture(im.carte);
+    carte.anisotropy = 4;
+    carte.flipY = false; // ligne 0 du dessin = z minimal
+    cacheSol.set(cle, { detail, carte, carteMin: im.carteMin, carteTaille: im.carteTaille });
+  }
+  const t = cacheSol.get(cle);
+  const sol = new THREE.Color(def.sol);
+  const uniforms = {
+    tDetail: { value: t.detail },
+    tCarte: { value: t.carte },
+    uCarteMin: { value: t.carteMin },
+    uCarteTaille: { value: t.carteTaille },
+    uTerre: { value: new THREE.Color(def.terre ?? 0x9a7748) },
+    uSec: { value: new THREE.Color(def.sec ?? 0xc2b25a) },
+  };
+  const m = new THREE.MeshLambertMaterial({ color: def.sol });
+  m.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec2 vSolXZ;")
+      .replace("#include <project_vertex>", "#include <project_vertex>\nvSolXZ = (modelMatrix * vec4(transformed, 1.0)).xz;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", `#include <common>
+varying vec2 vSolXZ;
+uniform sampler2D tDetail, tCarte;
+uniform vec2 uCarteMin;
+uniform float uCarteTaille;
+uniform vec3 uTerre, uSec;`)
+      .replace("#include <map_fragment>", `
+vec4 carte = texture2D(tCarte, clamp((vSolXZ - uCarteMin) / uCarteTaille, 0.0, 1.0));
+float grain = texture2D(tDetail, vSolXZ / ${PERIODE_DETAIL.toFixed(1)}).r;
+float taches = texture2D(tDetail, vSolXZ / ${PERIODE_TACHES.toFixed(1)} + 0.37).g;
+vec3 c = diffuseColor.rgb;
+c = mix(c, uSec, min(1.0, carte.b * 1.5));
+c = mix(c, uTerre, min(1.0, carte.g * (1.0 + 0.8 * grain)));
+c *= (0.6 + 0.8 * carte.r) * (0.76 + 0.48 * grain) * (0.84 + 0.32 * taches);
+diffuseColor.rgb = c;`);
+  };
+  m.customProgramCacheKey = () => "sol-herbe";
+  return m;
 }
