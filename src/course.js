@@ -255,8 +255,14 @@ export class Course {
   croquer(k) {
     const t = this.piste.teteTrex;
     if (!t || k.dedans) return;
-    const d = (t.indice - k.phys.indice + this.piste.N) % this.piste.N;
-    if (d > Math.round(15 / this.piste.pas)) return; // devant la gueule (≈ 15 m avant le centre de la tête)
+    const p = this.piste, ph = k.phys, i = t.indice;
+    const gueule = t.distanceGueule ?? 15; // bord avant de la gueule, en mètres avant le centre de la tête
+    const d = (i - ph.indice + p.N) % p.N;
+    if (d > (gueule + 5) / p.pas) return;
+    // distance exacte le long de la route jusqu'au centre de la tête (au sol comme en plein saut)
+    const reste = (p.cx[i] - ph.x) * p.tx[i] + (p.cz[i] - ph.z) * p.tz[i];
+    if (reste > gueule - 1) return; // croqué une fois bien entré dans la gueule
+    k.distanceCroc = reste; // (pour les essais)
     // l'enfant visite le ventre ; les adversaires y passent "invisibles" le même temps
     k.mange = this.interieur ? (k.joueur ? 0.55 : 0.55 + this.dureeVentre) : 1.1;
     k.versVentre = Boolean(this.interieur && k.joueur);
