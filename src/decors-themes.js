@@ -630,7 +630,7 @@ async function diplodocus(piste, groupe, eviter) {
  */
 // dans le modèle, la gueule ne regarde pas exactement +x et n'est pas centrée : on corrige
 const ROTATION_GUEULE = 0.5; // réglé à l'œil depuis la vue du kart (le modèle n'est pas symétrique)
-const DECALAGE_GUEULE = -7; // mètres vers la droite de la route, réglé depuis la vue du kart
+const DECALAGE_GUEULE = -1; // mètres vers la droite de la route, réglé depuis le tremplin (là où on vise la gueule)
 
 function teteTrex(piste, groupe) {
   const N = piste.N;
