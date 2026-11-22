@@ -11,7 +11,7 @@ export const KARTS = ["classique", "fusee", "pompier", "licorne", "dino", "baign
 
 /** Couleur principale de chaque kart (fonds des menus). */
 export const COULEURS_KARTS = {
-  classique: "#e8322f", fusee: "#5b8def", pompier: "#d62828",
+  classique: "#ffc72c", fusee: "#5b8def", pompier: "#d62828",
   licorne: "#f783ac", dino: "#40c057", baignoire: "#74c0fc",
 };
 
