@@ -70,9 +70,8 @@ export const CIRCUITS = {
       [-50, -130], [-18, -112], [-3, -88],
     ],
     echantillons: 1120, // ~1,15 m entre deux échantillons (physique précise)
-    // tremplins dans les lignes droites du départ, du haut et de droite ; la tête du T-rex
-    // occupe celle du bas (voir decors-themes.js) ; il reste ~100 m libres en haut et à droite
-    tremplins: [0.262, 0.452],
+    // lignes droites : looping (départ), ptérodactyle (haut), diplodocus (droite), T-rex (bas)
+    tremplins: [0.262],
     tremplinsFenetre: 0.02, // on reste dans ces lignes droites (sinon ils iraient sur celle du T-rex)
     echelle: 0.85,
     largeur: 16,

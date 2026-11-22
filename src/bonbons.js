@@ -37,12 +37,15 @@ export class Bonbons {
       for (let k = 0; k < 5; k++) {
         const i = (debut + k * Math.round(3 / P.pas)) % P.N;
         let lat = motif(k);
-        // pas dans le ventre du diplodocus : on passe de l'autre côté de la route (zone évitée par l'IA)
+        // zone évitée par les adversaires : on passe de l'autre côté de la route
         for (const z of P.zonesIA) {
           const dedans = (i - z.debut + P.N) % P.N <= (z.fin - z.debut + P.N) % P.N;
           if (dedans && Math.abs(lat - z.lateral) < z.demi + 1) lat = z.lateral + (z.lateral > 0 ? -1 : 1) * (z.demi + 1.5);
         }
-        this.liste.push({ x: P.cx[i] + P.nx[i] * lat, y: 1.1, z: P.cz[i] + P.nz[i] * lat, attente: 0 });
+        // route resserrée (entonnoir, dos du diplodocus) : on reste là où l'on peut rouler
+        const lim = Math.max(0, P.limiteLaterale(i) - 0.6);
+        lat = Math.max(-lim, Math.min(lim, lat));
+        this.liste.push({ x: P.cx[i] + P.nx[i] * lat, y: 1.1, z: P.cz[i] + P.nz[i] * lat, i, lat, dy: 1.1, attente: 0 });
       }
     }
     // bonus en l'air, après chaque tremplin
@@ -59,11 +62,20 @@ export class Bonbons {
     scene.add(this.mesh);
     this.o = new THREE.Object3D();
     this.t = 0;
+    this.nbSurfaces = -1;
+  }
+
+  /** Bonbons posés sur la route : à la hauteur du sol (ex. le dos du diplodocus, chargé après coup). */
+  suivreLeSol() {
+    const P = this.piste;
+    this.nbSurfaces = P.surfaces.length;
+    for (const b of this.liste) if (b.i !== undefined) b.y = b.dy + P.hauteurTremplin(b.i, b.lat).h;
   }
 
   /** Anime les bonbons et renvoie combien le kart (phys) vient d'en ramasser. */
   update(dt, phys) {
     this.t += dt;
+    if (this.piste.surfaces.length !== this.nbSurfaces) this.suivreLeSol();
     let pris = 0;
     const o = this.o;
     this.liste.forEach((b, i) => {
