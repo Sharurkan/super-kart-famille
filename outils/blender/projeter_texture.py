@@ -40,6 +40,16 @@ lignes = np.where(sujet.mean(axis=1) > 0.03)[0]
 cols = np.where(sujet.mean(axis=0) > 0.03)[0]
 r0, r1 = lignes.min(), lignes.max()
 c0, c1 = cols.min(), cols.max()
+masque = sujet.copy()
+for _ in range(5):  # on rogne le bord de 5 pixels
+    m = masque.copy()
+    m[1:, :] &= masque[:-1, :]
+    m[:-1, :] &= masque[1:, :]
+    m[:, 1:] &= masque[:, :-1]
+    m[:, :-1] &= masque[:, 1:]
+    masque = m
+# "blancheur" de l'image : clair et peu coloré = dents
+blancheur = np.clip((lum - 0.62) / 0.2, 0, 1) * np.clip((0.2 - sat) / 0.12, 0, 1)
 print("image", W, H, "sujet lignes", r0, r1, "colonnes", c0, c1)
 
 # --- projection : vue de face (caméra du côté +Z de Blender = image d'entrée de Hunyuan),
@@ -88,6 +98,7 @@ arbre = BVHTree.FromBMesh(bm)
 R = Matrix.Rotation(ELEV, 3, axe_vue.cross(Vector((0, 0, 1))).normalized())
 vers_camera = (R @ (-axe_vue)).normalized()
 vis = np.zeros(len(me.vertices), dtype=np.float32)
+blanc = np.zeros(len(me.vertices), dtype=np.float32)
 for i, v in enumerate(bm.verts):
     n = v.normal
     face = max(0.0, n.dot(vers_camera))
@@ -97,7 +108,12 @@ for i, v in enumerate(bm.verts):
     touche = arbre.ray_cast(depart, vers_camera, 10.0)
     if touche[0] is not None:
         continue
+    x, y = vers_uv(U[i], V[i])
+    xi, yi = min(W - 1, max(0, int(x * W))), min(H - 1, max(0, int(y * H)))
+    if not masque[yi, xi]:
+        continue
     vis[i] = min(1.0, face * 2.5)
+    blanc[i] = blancheur[yi, xi]
 
 # --- UV de projection + attribut de visibilité
 uv_proj = me.uv_layers.new(name="projection")
@@ -105,6 +121,9 @@ for poly in me.polygons:
     for li in poly.loop_indices:
         vi = me.loops[li].vertex_index
         uv_proj.data[li].uv = vers_uv(U[vi], V[vi])
+attr_blanc = me.color_attributes.new(name="blanc", type="FLOAT_COLOR", domain="POINT")
+for i in range(len(me.vertices)):
+    attr_blanc.data[i].color = (blanc[i], blanc[i], blanc[i], 1.0)
 attr_vis = me.color_attributes.new(name="visibilite", type="FLOAT_COLOR", domain="POINT")
 for i in range(len(me.vertices)):
     attr_vis.data[i].color = (vis[i], vis[i], vis[i], 1.0)
@@ -135,7 +154,13 @@ nt.links.new(uvn.outputs["UV"], tex.inputs["Vector"])
 nt.links.new(vis_n.outputs["Fac"], mix.inputs["Factor"])
 nt.links.new(zones.outputs["Color"], mix.inputs["A"])
 nt.links.new(tex.outputs["Color"], mix.inputs["B"])
-nt.links.new(mix.outputs["Result"], emis.inputs["Color"])
+mix2 = nt.nodes.new("ShaderNodeMix")
+mix2.data_type = "RGBA"
+blanc_n = nt.nodes.new("ShaderNodeAttribute"); blanc_n.attribute_name = "blanc"
+mix2.inputs["B"].default_value = (0.92, 0.88, 0.78, 1.0)
+nt.links.new(blanc_n.outputs["Fac"], mix2.inputs["Factor"])
+nt.links.new(mix.outputs["Result"], mix2.inputs["A"])
+nt.links.new(mix2.outputs["Result"], emis.inputs["Color"])
 nt.links.new(emis.outputs["Emission"], sortie.inputs["Surface"])
 cible = nt.nodes.new("ShaderNodeTexImage"); cible.image = cuite
 uvf = nt.nodes.new("ShaderNodeUVMap"); uvf.uv_map = "final"

@@ -630,7 +630,7 @@ async function diplodocus(piste, groupe, eviter) {
  */
 // dans le modèle, la gueule ne regarde pas exactement +x et n'est pas centrée : on corrige
 const ROTATION_GUEULE = 0.37;
-const DECALAGE_GUEULE = -9; // en mètres, vers la droite de la route
+const DECALAGE_GUEULE = 0; // réglage fin éventuel (mètres) ; le centrage est calculé automatiquement
 
 function teteTrex(piste, groupe) {
   const N = piste.N;
@@ -670,6 +670,34 @@ function teteTrex(piste, groupe) {
     // le modèle fait ~2 unités de large, gueule vers +x, socle en bas
     const boite = new THREE.Box3().setFromObject(modele);
     const echelle = 17;
+    // centrage automatique : on cherche le milieu de la gueule (les points tout à l'avant)
+    const d = new THREE.Vector2(Math.cos(ROTATION_GUEULE), Math.sin(ROTATION_GUEULE)); // direction de la gueule (x, z)
+    const perp = new THREE.Vector2(-d.y, d.x);
+    modele.updateMatrixWorld(true);
+    const pts = [];
+    const v = new THREE.Vector3();
+    modele.traverse((o) => {
+      if (!o.isMesh) return;
+      const pa = o.geometry.attributes.position;
+      for (let k = 0; k < pa.count; k++) {
+        v.fromBufferAttribute(pa, k).applyMatrix4(o.matrixWorld);
+        pts.push(v.x, v.y, v.z);
+      }
+    });
+    let smax = -Infinity;
+    for (let k = 0; k < pts.length; k += 3) smax = Math.max(smax, pts[k] * d.x + pts[k + 2] * d.y);
+    const hautMin = boite.min.y + (boite.max.y - boite.min.y) * 0.25;
+    let somme = 0, n = 0;
+    for (let k = 0; k < pts.length; k += 3) {
+      const sk = pts[k] * d.x + pts[k + 2] * d.y;
+      if (sk > smax - 0.35 && pts[k + 1] > hautMin) {
+        somme += pts[k] * perp.x + pts[k + 2] * perp.y;
+        n++;
+      }
+    }
+    const milieu = n ? somme / n : 0;
+    modele.position.x = -perp.x * milieu * echelle;
+    modele.position.z = -perp.y * milieu * echelle;
     modele.scale.setScalar(echelle);
     modele.position.y = -boite.min.y * echelle - 0.6; // socle un peu enfoncé dans le sol
     const tete = new THREE.Group();

@@ -93,7 +93,7 @@ for (let i = 0; i < nv; i++) {
     c = melange(SABLE, PIERRE, bruit(x, y, z) > 0.7 ? 0.6 : 0.1);
   } else if (o < 0.38 && x > -0.35 && yr < 0.85) {
     c = GUEULE; // creux à l'avant : intérieur de la gueule
-  } else if (yr < 0.42) {
+  } else if (yr < 0.42 && x > 0.1) {
     c = BEIGE; // bas de la mâchoire
   } else {
     c = melange(VERT, VERT_FONCE, bruit(x, y, z) * 0.7);
