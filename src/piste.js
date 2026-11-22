@@ -336,5 +336,5 @@ export function construirePiste(def) {
   const centre = new THREE.Vector3((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
   const rayon = Math.hypot(maxX - minX, maxZ - minZ) / 2;
 
-  return { groupe, N, L, pas, cx, cz, tx, tz, nx, nz, demi, marge, localiser, distanceCentre, angleA, centre, rayon, tremplins, hauteurTremplin, surfaces, zonesIA, ajouterTremplin, retrecissements, limiteLaterale };
+  return { groupe, N, L, pas, cx, cz, tx, tz, nx, nz, demi, marge, localiser, distanceCentre, angleA, centre, rayon, tremplins, hauteurTremplin, surfaces, zonesIA, ajouterTremplin, retrecissements, limiteLaterale, passages: [] };
 }

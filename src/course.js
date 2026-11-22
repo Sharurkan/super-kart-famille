@@ -174,8 +174,14 @@ export class Course {
           this.digerer(k, dt);
           continue;
         }
-        k.phys.update(dt, entree);
-        this.croquer(k);
+        // passage scripté en cours (looping, ptérodactyle...) : il pilote le kart à la place de la physique
+        if (k.scenario) {
+          if (k.scenario.etape(dt)) k.scenario = null;
+        } else {
+          k.phys.update(dt, entree);
+          this.croquer(k);
+          this.verifierPassages(k);
+        }
         if (!k.fini && k.phys.tour > TOURS) {
           k.fini = true;
           this.arrivees.push(k);
@@ -242,12 +248,29 @@ export class Course {
     this.particules.update(dt);
 
     const vRel = joueur.phys.vitesse / REGLAGES.vitesseMax;
-    this.cam.update(dt, joueur.phys.x, joueur.phys.z, joueur.phys.angle, vRel, joueur.phys.y);
+    if (!joueur.scenario?.camera?.(this.cam, dt)) this.cam.update(dt, joueur.phys.x, joueur.phys.z, joueur.phys.angle, vRel, joueur.phys.y);
     this.decor.ciel.position.set(this.camera.position.x, 0, this.camera.position.z);
     this.decor.animer(dt, this.camera);
     for (const k of this.karts) {
       k.modele.groupe.updateMatrixWorld();
       k.pilote.orienter(this.camera, k.phys.angle + k.modele.corps.rotation.y, k.phys.angle);
+    }
+  }
+
+  /**
+   * Passages scriptés posés par le décor dans piste.passages : chacun a
+   * verifier(k, course) qui renvoie un scénario (ou null) quand le kart y entre.
+   * Un scénario { etape(dt) -> true quand fini, visuel?(k), camera?(cam, dt) -> true s'il gère la caméra }
+   * déplace lui-même k.phys (x, y, z, angle, indice, et garde tour/progression cohérents).
+   */
+  verifierPassages(k) {
+    if (k.dedans) return;
+    for (const p of this.piste.passages ?? []) {
+      const sc = p.verifier(k, this);
+      if (sc) {
+        k.scenario = sc;
+        return;
+      }
     }
   }
 
@@ -441,6 +464,7 @@ export class Course {
     for (const r of modele.roues.arriere) r.tourne.rotation.x += (phys.vitesse * dt) / r.rayon;
     if (k.mange > 0) modele.groupe.visible = false;
     else modele.groupe.visible = phys.clignote > 0 ? Math.floor(this.t * 12) % 2 === 0 : true;
+    k.scenario?.visuel?.(k);
   }
 
   particulesJoueur() {
