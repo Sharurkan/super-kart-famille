@@ -6,12 +6,12 @@ import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.j
 // Tous les karts ont exactement les mêmes performances : seul le look change.
 // Repère local : avant du kart = +Z, haut = +Y.
 
-export const KARTS = ["classique", "fusee", "pompier", "licorne", "dino", "baignoire", "jouet3d"];
+export const KARTS = ["classique", "fusee", "pompier", "licorne", "dino", "baignoire"];
 
 /** Couleur principale de chaque kart (fonds des menus). */
 export const COULEURS_KARTS = {
   classique: "#e8322f", fusee: "#5b8def", pompier: "#d62828",
-  licorne: "#f783ac", dino: "#40c057", baignoire: "#74c0fc", jouet3d: "#ff8787",
+  licorne: "#f783ac", dino: "#40c057", baignoire: "#74c0fc",
 };
 
 // ---------------------------------------------------------------------------
@@ -21,10 +21,7 @@ export const COULEURS_KARTS = {
 // le siège, dans une voiture fermée sa tête sort du toit.
 // Pour en ajouter un : poser le .glb dans public/karts/, l'ajouter ici et dans KARTS.
 // Exemple : monkart: { url: "karts/monkart.glb", longueur: 2.6, siege: [0, 0.55, -0.4], tourner: 0 },
-export const MODELES_GLB = {
-  // kart jouet généré par IA (Gemini + Hunyuan3D), allégé à 8 000 triangles
-  jouet3d: { url: "karts/kart-ia.glb", longueur: 3.2, siege: [0, 0.32, -0.35], tourner: Math.PI / 2 },
-};
+export const MODELES_GLB = {};
 const chargeurGLB = new GLTFLoader();
 export const gabarits = new Map();
 
