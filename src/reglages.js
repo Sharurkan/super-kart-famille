@@ -9,6 +9,7 @@ const DEFAUT = {
   kart: "classique",
   circuit: "prairie",
   muet: false,
+  inclinaison: false, // diriger en penchant la tablette
 };
 
 function lire() {

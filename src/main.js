@@ -134,7 +134,37 @@ for (const c of document.querySelectorAll("[data-circuit]")) {
 function majOptions() {
   for (const b of document.querySelectorAll("[data-mode]")) b.classList.toggle("selection", (b.dataset.mode === "auto") === reglages.modeAuto);
   for (const b of document.querySelectorAll("[data-difficulte]")) b.classList.toggle("selection", b.dataset.difficulte === reglages.difficulte);
+  $("#btn-inclinaison").classList.toggle("selection", reglages.inclinaison);
 }
+// Direction en penchant la tablette (Chrome : HTTPS seulement, voir controles.js)
+controles.activerInclinaison(reglages.inclinaison);
+$("#btn-inclinaison").addEventListener("click", async () => {
+  const bouton = $("#btn-inclinaison");
+  const secouer = () => bouton.animate([{ translate: "0" }, { translate: "-12px" }, { translate: "12px" }, { translate: "0" }], { duration: 300 });
+  const actif = !reglages.inclinaison;
+  if (actif && typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+    // iOS : autorisation à demander pendant le toucher (Android Chrome n'en a pas besoin)
+    try {
+      if ((await DeviceOrientationEvent.requestPermission()) !== "granted") return secouer();
+    } catch {
+      return secouer();
+    }
+  }
+  reglages.inclinaison = actif;
+  sauver();
+  controles.activerInclinaison(actif); // calibre aussi le "tout droit"
+  majOptions();
+  if (!actif) return;
+  // Aucun capteur (ordinateur, ou page en http) : on revient aux boutons seuls et on secoue.
+  setTimeout(() => {
+    if (!reglages.inclinaison || controles.dernierCapteur) return;
+    reglages.inclinaison = false;
+    sauver();
+    controles.activerInclinaison(false);
+    majOptions();
+    secouer();
+  }, 1500);
+});
 for (const b of document.querySelectorAll("[data-mode]"))
   b.addEventListener("click", () => {
     reglages.modeAuto = b.dataset.mode === "auto";
@@ -186,6 +216,7 @@ function lancerCourse() {
   );
   vue = course;
   enPause = false;
+  controles.calibrer(); // la position de la tablette au départ = tout droit
   preparerClassement(course.karts);
   $("#nb-bonbons").textContent = 0;
   derniereposition = 0;
@@ -389,7 +420,7 @@ function avancer(secondes, entree) {
   for (let k = 0; k < secondes * 60; k++) etape(1 / 60, entree);
   renderer.render(vue.scene, vue.camera);
 }
-if (import.meta.env.DEV) window.__jeu = { avancer, vitrine, renderer, rendre: () => renderer.render(vue.scene, vue.camera) };
+if (import.meta.env.DEV) window.__jeu = { avancer, controles, vitrine, renderer, rendre: () => renderer.render(vue.scene, vue.camera) };
 
 montrer("titre");
 redimensionner();

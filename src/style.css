@@ -521,6 +521,15 @@ button:active {
 .mini.vert { background: #28be50; }
 .mini svg { width: 60%; height: 60%; }
 
+/* Bouton "pencher la tablette" (interrupteur, à part des deux modes) */
+#btn-inclinaison {
+  margin-left: 3vh;
+}
+.icone-inclinaison {
+  width: clamp(80px, 19vh, 150px);
+  height: clamp(66px, 16vh, 125px);
+}
+
 /* HUD : bouton pause */
 .petit-btn svg {
   width: 55%;
