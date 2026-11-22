@@ -9,6 +9,8 @@ import { Vitrine } from "./vitrine.js";
 import { reglages, sauver } from "./reglages.js";
 import { audio } from "./audio.js";
 import { REGLAGES } from "./physique.js";
+import { ouvrirBoutique, installerBoutique } from "./boutique.js";
+import { ajouter as ajouterBonbons } from "./portefeuille.js";
 
 // Choix mémorisés qui n'existent plus (kart, perso ou circuit retiré) : on revient au premier.
 if (!KARTS.includes(reglages.kart)) reglages.kart = KARTS[0];
@@ -36,8 +38,8 @@ addEventListener("resize", redimensionner);
 
 // ---------- Écrans ----------
 const $ = (s) => document.querySelector(s);
-const ECRANS = ["titre", "perso", "kart", "circuit", "options", "pause", "fin"];
-const PRECEDENT = { perso: "titre", kart: "perso", circuit: "kart", options: "circuit" };
+const ECRANS = ["titre", "perso", "kart", "circuit", "options", "pause", "fin", "boutique"];
+const PRECEDENT = { perso: "titre", kart: "perso", circuit: "kart", options: "circuit", boutique: "titre" };
 let ecranActuel = "titre";
 
 const COULEURS_PERSOS = { viggo: "#ff922b", harry: "#ffd43b", maman: "#9775fa", bryan: "#ff6b6b", mamy: "#4dabf7" };
@@ -232,6 +234,8 @@ function montrerPodium(liste) {
   const place = liste.findIndex((k) => k.joueur) + 1;
   const joueur = liste[place - 1];
   $("#total-bonbons-nb").textContent = course.nbBonbons;
+  // les bonbons gagnés vont dans la tirelire du personnage joué
+  $("#tirelire-nb").textContent = ajouterBonbons(joueur.perso, course.nbBonbons).toLocaleString("fr-FR");
   quitterCourse();
   vitrine.montrerPodium(liste.map((k) => ({ perso: k.perso, type: k.type })));
   audio.fanfare();
@@ -284,6 +288,11 @@ const ACTIONS = {
     audio.musique("menu");
     montrer("titre");
   },
+  boutique: () => {
+    pleinEcran();
+    ouvrirBoutique(reglages.perso);
+    montrer("boutique");
+  },
   son: () => {
     reglages.muet = !reglages.muet;
     sauver();
@@ -298,6 +307,8 @@ document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-action]");
   if (b) ACTIONS[b.dataset.action]?.();
 });
+
+installerBoutique();
 
 function majSon() {
   audio.setMuet(reglages.muet);

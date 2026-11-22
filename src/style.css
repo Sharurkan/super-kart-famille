@@ -771,3 +771,256 @@ button:active {
   font-size: clamp(40px, 11vh, 80px);
   padding: 4px 26px 4px 14px;
 }
+
+/* =================== Boutique =================== */
+.btn-boutique {
+  position: absolute;
+  left: max(20px, env(safe-area-inset-left));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  width: clamp(90px, 22vh, 150px);
+  height: clamp(90px, 22vh, 150px);
+  border-radius: 28px;
+  background: #ffd43b;
+  border: 6px solid #fff !important;
+  box-shadow: 0 8px 0 rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-boutique svg {
+  width: 72%;
+  height: 72%;
+}
+
+.btn-boutique span {
+  position: absolute;
+  right: -10px;
+  top: -14px;
+  font-size: clamp(30px, 7vh, 48px);
+}
+
+#ecran-boutique {
+  justify-content: flex-start;
+  gap: 3vh;
+  padding-top: max(16px, 3vh);
+}
+
+.tirelires {
+  display: flex;
+  gap: clamp(8px, 1.5vw, 18px);
+  margin-left: clamp(70px, 15vh, 100px);
+}
+
+.tirelire {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 10px 8px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 4px solid transparent !important;
+  color: #fff;
+  font-weight: 900;
+  font-size: clamp(14px, 3.4vh, 24px);
+}
+
+.tirelire img {
+  width: clamp(48px, 12vh, 84px);
+  height: clamp(48px, 12vh, 84px);
+  object-fit: cover;
+  object-position: top;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.tirelire.choisie {
+  background: #ffd43b;
+  color: #1b3a8a;
+  border-color: #fff !important;
+  scale: 1.1;
+}
+
+.recompenses {
+  display: flex;
+  gap: clamp(14px, 3vw, 36px);
+}
+
+.recompense {
+  width: clamp(130px, 30vh, 220px);
+  padding: 2vh 2vh 2.4vh;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 6px solid rgba(255, 255, 255, 0.6) !important;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1vh;
+  opacity: 0.8;
+}
+
+.recompense.possible {
+  opacity: 1;
+  background: #fff;
+  border-color: #51cf66 !important;
+  box-shadow: 0 8px 0 rgba(0, 0, 0, 0.2);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.recompense .dessin,
+.carte-voile .dessin {
+  width: clamp(70px, 18vh, 130px);
+  height: clamp(70px, 18vh, 130px);
+}
+
+.dessin svg {
+  width: 100%;
+  height: 100%;
+}
+
+.emoji-recompense {
+  font-size: clamp(60px, 15vh, 110px);
+  line-height: 1;
+}
+
+.recompense .prix {
+  font-weight: 900;
+  font-size: clamp(18px, 4.5vh, 32px);
+  color: #1b3a8a;
+}
+
+.jauge {
+  width: 100%;
+  height: clamp(12px, 2.6vh, 20px);
+  border-radius: 999px;
+  background: #dee2e6;
+  overflow: hidden;
+}
+
+.jauge div {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ffd43b, #51cf66);
+}
+
+/* bons à récupérer (pour les parents) */
+.liste-bons {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.bon {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 18px;
+  background: #fff3bf;
+  border: 3px dashed #f08c00;
+}
+
+.bon img {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  object-position: top;
+  border-radius: 50%;
+}
+
+.bon .dessin {
+  width: 48px;
+  height: 48px;
+}
+
+.btn-donne {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #51cf66;
+  position: relative;
+}
+
+.btn-donne svg {
+  width: 100%;
+  height: 100%;
+}
+
+.btn-donne .anneau {
+  fill: none;
+  stroke: #2b8a3e;
+  stroke-width: 8;
+  stroke-dasharray: 277;
+  stroke-dashoffset: 277;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+
+.btn-donne.en-cours .anneau {
+  transition: stroke-dashoffset 3s linear;
+  stroke-dashoffset: 0;
+}
+
+/* voiles : confirmation et nouveau bon */
+.voile {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 30, 80, 0.6);
+  z-index: 60;
+}
+
+.carte-voile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2vh;
+  padding: 3vh 5vh;
+  border-radius: 32px;
+  background: #fff;
+  box-shadow: 0 12px 0 rgba(0, 0, 0, 0.25);
+}
+
+.carte-voile img {
+  width: clamp(60px, 14vh, 100px);
+  height: clamp(60px, 14vh, 100px);
+  object-fit: cover;
+  object-position: top;
+  border-radius: 50%;
+  background: #ffd43b;
+}
+
+.gros-rond.rouge {
+  background: #ff6b6b;
+}
+
+.bon-papier {
+  border: 6px dashed #f08c00;
+  background: #fff9db;
+}
+
+.bon-titre {
+  font-size: clamp(40px, 10vh, 70px);
+  line-height: 1;
+}
+
+.bon-nom {
+  font-weight: 900;
+  font-size: clamp(20px, 5vh, 36px);
+  color: #1b3a8a;
+}
+
+.bon-aide {
+  font-size: clamp(14px, 3vh, 22px);
+  color: #495057;
+}
+
+/* podium : contenu de la tirelire */
+.tirelire-total {
+  margin-left: 18px;
+  font-size: 0.7em;
+  opacity: 0.9;
+}
