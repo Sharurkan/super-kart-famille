@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { textureRond } from "./textures.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 
 // Tous les karts ont exactement les mêmes performances : seul le look change.
 // Repère local : avant du kart = +Z, haut = +Y.
@@ -72,26 +73,39 @@ function constructeurGLB(type) {
 
 const materiaux = new Map();
 export function mat(couleur) {
-  if (!materiaux.has(couleur)) materiaux.set(couleur, new THREE.MeshLambertMaterial({ color: couleur, flatShading: true }));
+  // plastique lisse et un peu brillant, comme un jouet
+  if (!materiaux.has(couleur)) materiaux.set(couleur, new THREE.MeshPhongMaterial({ color: couleur, shininess: 80, specular: 0x3a3a3a }));
   return materiaux.get(couleur);
 }
 
 function boite(parent, l, h, p, couleur, x, y, z) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(l, h, p), mat(couleur));
+  // boîtes aux coins arrondis (fini les arêtes vives)
+  const rayon = Math.min(l, h, p) * 0.32;
+  const m = new THREE.Mesh(new RoundedBoxGeometry(l, h, p, 3, rayon), mat(couleur));
   m.position.set(x, y, z);
   parent.add(m);
   return m;
 }
 
 function cylindre(parent, rHaut, rBas, h, seg, couleur, x, y, z) {
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(rHaut, rBas, h, seg), mat(couleur));
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rHaut, rBas, h, Math.max(seg, 18)), mat(couleur));
   m.position.set(x, y, z);
   parent.add(m);
   return m;
 }
 
-const geoPneu = new THREE.CylinderGeometry(1, 1, 1, 10).rotateZ(Math.PI / 2);
-const geoJante = new THREE.CylinderGeometry(1, 1, 1, 8).rotateZ(Math.PI / 2);
+// pneu bien rond (profil arrondi tourné autour de l'axe) + jante bombée
+const geoPneu = (() => {
+  const profil = [];
+  for (let k = 0; k <= 12; k++) {
+    const a = -Math.PI / 2 + (k / 12) * Math.PI;
+    profil.push(new THREE.Vector2(0.62 + Math.cos(a) * 0.38, Math.sin(a) * 0.5));
+  }
+  profil.unshift(new THREE.Vector2(0.45, -0.5));
+  profil.push(new THREE.Vector2(0.45, 0.5));
+  return new THREE.LatheGeometry(profil, 24).rotateZ(Math.PI / 2);
+})();
+const geoJante = new THREE.SphereGeometry(1, 20, 10).scale(0.55, 1, 1);
 
 /** Roue : pivot (braquage) > rotation (roule) > pneu + jante. */
 function roue(parent, x, y, z, r, largeur, couleurJante) {
@@ -101,7 +115,7 @@ function roue(parent, x, y, z, r, largeur, couleurJante) {
   const pneu = new THREE.Mesh(geoPneu, mat(0x222222));
   pneu.scale.set(largeur, r, r);
   const jante = new THREE.Mesh(geoJante, mat(couleurJante));
-  jante.scale.set(largeur + 0.04, r * 0.5, r * 0.5);
+  jante.scale.set(largeur * 0.9, r * 0.62, r * 0.62);
   tourne.add(pneu, jante);
   pivot.add(tourne);
   parent.add(pivot);
@@ -109,14 +123,14 @@ function roue(parent, x, y, z, r, largeur, couleurJante) {
 }
 
 function sphere(parent, r, couleur, x, y, z, detail = 0) {
-  const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, detail), mat(couleur));
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 16 + detail * 4, 12 + detail * 2), mat(couleur));
   m.position.set(x, y, z);
   parent.add(m);
   return m;
 }
 
 function cone(parent, r, h, seg, couleur, x, y, z) {
-  const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, seg), mat(couleur));
+  const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, Math.max(seg, 12)), mat(couleur));
   m.position.set(x, y, z);
   parent.add(m);
   return m;
@@ -130,7 +144,7 @@ function quatreRoues(corps, roues, jante, rAv = 0.34, rAr = 0.4, xAv = 0.85, xAr
 
 function volant(parent, x, y, z, couleur = 0x222222) {
   const g = new THREE.Group();
-  const anneau = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.045, 6, 12), mat(couleur));
+  const anneau = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.045, 10, 24), mat(couleur));
   g.add(anneau);
   const colonne = cylindre(g, 0.04, 0.04, 0.45, 5, 0x555555, 0, 0, 0.22);
   colonne.rotation.x = Math.PI / 2;

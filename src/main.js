@@ -19,8 +19,11 @@ if (!(reglages.circuit in CIRCUITS)) reglages.circuit = "prairie";
 sauver();
 
 // ---------- Rendu ----------
-const renderer = new THREE.WebGLRenderer({ antialias: devicePixelRatio < 2, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+// anti-crénelage toujours actif (bords lisses) ; la résolution s'adapte à la vitesse de la tablette
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+const RESOLUTION_MAX = Math.min(devicePixelRatio, 2);
+let resolution = RESOLUTION_MAX;
+renderer.setPixelRatio(resolution);
 renderer.setSize(innerWidth, innerHeight);
 document.getElementById("jeu").appendChild(renderer.domElement);
 
@@ -335,8 +338,31 @@ function etape(dt, entree) {
   vue.etape(dt, entree);
 }
 
+// Résolution adaptative : si la tablette n'arrive pas à suivre (moins de ~45 images/s
+// en course), on baisse un peu la résolution ; si elle a de la marge, on remonte.
+const mesure = { total: 0, n: 0, attente: 0 };
+function adapterResolution(dt) {
+  if (vue !== course || enPause || document.hidden) return;
+  mesure.total += dt;
+  mesure.n++;
+  if (mesure.n < 90) return;
+  const moyenne = mesure.total / mesure.n;
+  mesure.total = mesure.n = 0;
+  if (performance.now() < mesure.attente) return;
+  let nouvelle = resolution;
+  if (moyenne > 1 / 45 && resolution > 1) nouvelle = Math.max(1, resolution - 0.25);
+  else if (moyenne < 1 / 58 && resolution < RESOLUTION_MAX) nouvelle = Math.min(RESOLUTION_MAX, resolution + 0.25);
+  if (nouvelle !== resolution) {
+    resolution = nouvelle;
+    renderer.setPixelRatio(resolution);
+    mesure.attente = performance.now() + 4000; // on laisse le temps de voir l'effet
+  }
+}
+
 function boucle() {
-  etape(Math.min(horloge.getDelta(), 0.05));
+  const dt = Math.min(horloge.getDelta(), 0.05);
+  etape(dt);
+  adapterResolution(dt);
   renderer.render(vue.scene, vue.camera);
   requestAnimationFrame(boucle);
 }

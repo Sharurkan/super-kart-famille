@@ -17,8 +17,8 @@ function materiau(nom, cote) {
     const t = chargeur.load(urlSprite(nom, cote));
     t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = 4;
-    // alphaTest : pas de tri de transparence, rapide sur tablette
-    cache.set(cle, new THREE.MeshBasicMaterial({ map: t, alphaTest: 0.5 }));
+    // alphaTest + alphaToCoverage : bords lisses grâce à l'anti-crénelage, sans tri coûteux
+    cache.set(cle, new THREE.MeshBasicMaterial({ map: t, alphaTest: 0.5, alphaToCoverage: true }));
   }
   return cache.get(cle);
 }
