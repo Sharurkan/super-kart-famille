@@ -108,6 +108,15 @@ function chargerModeles() {
           if (m.map) m.map.anisotropy = 4;
           pieces.push({ geometrie: g, materiau: m });
         });
+        // rayon au sol (pour une hauteur de 1) : 85 % des sommets sont plus près de l'axe
+        // (le bout des feuilles très fines ne compte pas)
+        const d = [];
+        for (const { geometrie } of pieces) {
+          const p = geometrie.attributes.position;
+          for (let k = 0; k < p.count; k++) d.push(Math.hypot(p.getX(k), p.getZ(k)));
+        }
+        d.sort((a, b) => a - b);
+        pieces.rayon = d.length ? d[Math.floor(d.length * 0.85)] : 0.3;
         modeles[nomPropre] = pieces;
       }
       return modeles;
@@ -119,13 +128,23 @@ function chargerModeles() {
 /**
  * Plante un modèle à plusieurs endroits (asynchrone).
  * liste : [{ x, z, s (échelle autour de 1), r (rotation), sy (aplatissement, facultatif), y (enfoncement, facultatif) }]
+ * garde (facultatif) : voir gardeRoute ; chaque plante y est vérifiée avec sa vraie taille
+ * (connue seulement une fois le modèle chargé), puis gardée, déplacée ou retirée.
  */
-export function planter(groupe, nom, liste) {
+export function planter(groupe, nom, liste, garde = null) {
   if (!liste.length) return;
   chargerModeles().then((modeles) => {
     const pieces = modeles[nom];
     if (!pieces) return console.warn("modèle de végétation introuvable :", nom);
     const h = TAILLES[nom] ?? 3;
+    if (garde) {
+      liste = liste.flatMap((p) => {
+        const e = h * (p.s ?? 1);
+        const ok = garde.verifier(p.x, p.z, pieces.rayon * e, e * (p.sy ?? 1), nom);
+        return ok ? [{ ...p, x: ok.x, z: ok.z }] : [];
+      });
+      if (!liste.length) return;
+    }
     const o = new THREE.Object3D();
     for (const { geometrie, materiau } of pieces) {
       const im = new THREE.InstancedMesh(geometrie, materiau, liste.length);
@@ -141,4 +160,100 @@ export function planter(groupe, nom, liste) {
       groupe.add(im);
     }
   });
+}
+
+// ---------------------------------------------------------------------------
+// Garde de la route : aucune plante (ou rocher, nid, dinosaure) ne doit déborder sur la
+// route ni cacher la route à la caméra du kart. Les règles ne sont appliquées qu'au
+// chargement des modèles : à ce moment le looping, le ravin, le diplodocus et la tête de
+// T-rex ont tous été posés sur la piste.
+const CAM_RECUL = 7.2, CAM_HAUT = 3.1; // comme CameraPoursuite
+
+/**
+ * gardeRoute(piste).verifier(x, z, rayon, hauteur, nom) -> { x, z } (éventuellement
+ * repoussé loin de la route) ou null (retiré). gardeRoute(piste).bilan : compte par modèle.
+ */
+export function gardeRoute(piste) {
+  const { N, pas, cx, cz, nx, nz, tx, tz, demi, marge } = piste;
+  const bordure = demi + 1.4; // fin des bordures rouges et blanches
+  const barriere = demi + marge + 0.8; // derrière les boudins
+  const bilan = {};
+  const dans = (i, debut, fin) => ((i - debut + N) % N) <= ((fin - debut + N) % N);
+  const ecart = (i, j) => { const d = (i - j + N) % N; return d > N / 2 ? d - N : d; };
+
+  /** Raison du refus à cet endroit, ou "" si la place est bonne. */
+  function probleme(x, z, r, h) {
+    const { indice: i, lateral, long } = piste.localiser(x, z);
+    const lat = Math.abs(lateral);
+    const plat = h <= 0.4, bas = h <= 1.0;
+    // 1. la route et ses bordures (plus une marge), les plantes hautes derrière les barrières
+    if (lat - r < bordure + (plat ? 0 : bas ? 0.3 : 1.2)) return "route";
+    if (!bas && lat < barriere) return "route";
+    // dans les entonnoirs, même les petites plantes restent derrière les rochers et les plots
+    const lim = piste.limiteLaterale(i);
+    if (lim < demi + marge - 1.5 && lat < barriere && lat - r < lim + 2.6) return "entonnoir";
+    const L = piste.looping;
+    if (L && dans(i, (L.prise - 4 + N) % N, (L.rendu + 4) % N) && lat - r < barriere) return "looping";
+    // 2. le dos du diplodocus et la tête du T-rex (mesurés sur les modèles placés : ±15 m et ±22 m)
+    const D = piste.diplodocus;
+    if (D && dans(i, (D.indice - 3 + N) % N, (D.fin + 3) % N) && lat - r < 16.5) return "diplodocus";
+    const T = piste.teteTrex;
+    if (T && Math.abs(ecart(i, T.indice)) <= Math.round(18 / pas) && lat - r < 23.5) return "trex";
+    // 3. le ravin : rien qui pende au-dessus du vide (rectangle aux bouts arrondis, bords bruités)
+    const V = piste.ravin;
+    if (V) {
+      const W = ((V.fin - V.debut + N) % N) * pas, R = W / 2, B = 40;
+      const s = ecart(i, V.debut) * pas + long, l = lateral;
+      const m = r + 1.5;
+      if (Math.abs(l) <= B) {
+        if (s > -4.5 - m && s < W + 4.5 + m) return "ravin";
+      } else if (Math.hypot(s - R, Math.abs(l) - B) < R + 1.5 + m) return "ravin";
+    }
+    // 4. la vue de la caméra : un trait de la caméra (derrière le kart) jusqu'à la route
+    //    devant ne doit pas traverser la plante (virages serrés surtout)
+    if (h > 1.2 && lat < 45 && cacheLaRoute(i, x, z, Math.max(0.5, r * 0.6), h)) return "vue";
+    return "";
+  }
+
+  function cacheLaRoute(i0, x, z, r, h) {
+    const n0 = Math.round(45 / pas), n1 = Math.round(8 / pas);
+    for (let dj = -n0; dj <= n1; dj += 2) {
+      const j = (i0 + dj + N) % N, jr = (j - 6 + N) % N; // la caméra suit avec un peu de retard
+      for (const lk of [-7, 0, 7]) {
+        const ax = cx[j] + nx[j] * lk - tx[jr] * CAM_RECUL, az = cz[j] + nz[j] * lk - tz[jr] * CAM_RECUL;
+        for (let m = 0; m <= 40; m += 6) {
+          const k = (j + Math.round(m / pas)) % N;
+          const bx = cx[k] + nx[k] * lk, bz = cz[k] + nz[k] * lk, by = m === 0 ? 1.1 : 0.6;
+          const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+          const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2));
+          if (Math.hypot(ax + dx * t - x, az + dz * t - z) < r && CAM_HAUT + (by - CAM_HAUT) * t < h) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function verifier(x, z, r, h, nom = "?") {
+    const b = (bilan[nom] ??= { plantes: 0, deplacees: 0, retirees: 0, raisons: {} });
+    b.plantes++;
+    let raison = probleme(x, z, r, h);
+    if (!raison) return { x, z };
+    b.raisons[raison] = (b.raisons[raison] ?? 0) + 1;
+    // on essaie de la repousser loin de la route (la forêt garde sa densité)
+    const { indice: i, lateral } = piste.localiser(x, z);
+    const cote = Math.sign(lateral) || 1;
+    for (let d = 4; d <= 24; d += 4) {
+      const nxp = x + nx[i] * cote * d, nzp = z + nz[i] * cote * d;
+      if (!probleme(nxp, nzp, r, h)) {
+        b.deplacees++;
+        return { x: nxp, z: nzp };
+      }
+    }
+    b.retirees++;
+    return null;
+  }
+
+  const garde = { verifier, bilan };
+  if (import.meta.env.DEV) window.__auditVegetation = bilan;
+  return garde;
 }
