@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { instances, positions, boiteRonde } from "./decor.js";
 import { fusion, matCouleurs, nuages } from "./decors-circuits.js";
 import { creerDino } from "./dinos.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 // Décors des circuits Dinosaures, Jouets et Concert pop.
 // Astuce couleurs : les parties "blanches" d'un objet fusionné prennent la couleur
@@ -85,9 +86,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   const fumee = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 2), new THREE.MeshBasicMaterial({ color: 0x9a9a9a, fog: false, transparent: true, opacity: 0.8 }), 14);
   groupe.add(fumee);
   nuages(groupe, piste, rnd);
-  const tunnel = tunnelTrex(piste);
-  groupe.add(tunnel);
-  diplodocus(piste, groupe, [tunnel.userData.indice]);
+  teteTrex(piste, groupe);
 
   let t = 0;
   const o = new THREE.Object3D();
@@ -621,4 +620,60 @@ async function diplodocus(piste, groupe, eviter) {
   const rampe = { debut: (iTete - nbRampe - 5 + N) % N, nb: nbRampe, lateral: LAT, demiLargeur: 3.2, hauteur: 1.2 };
   groupe.add(piste.ajouterTremplin(rampe));
   groupe.userData.diplodocus = { indice: iTete, debut, nb, lateral: LAT, cou: objet.userData.cou, queue: objet.userData.queue, hauteurTete: objet.userData.hauteurTete, os: Object.keys(os) };
+}
+
+// ---------------------------------------------------------------------------
+/**
+ * Grosse tête de T-rex (modèle 3D généré par IA puis coloré) posée en travers de la route.
+ * La route se resserre entre deux rangées de rochers jusqu'à un tremplin qui envoie les
+ * karts dans la gueule : le T-rex les croque puis les recrache derrière lui (voir course.js).
+ */
+// dans le modèle, la gueule ne regarde pas exactement +x et n'est pas centrée : on corrige
+const ROTATION_GUEULE = 0.37;
+const DECALAGE_GUEULE = -9; // en mètres, vers la droite de la route
+
+function teteTrex(piste, groupe) {
+  const N = piste.N;
+  const i = ligneDroite(piste, 0.55);
+  const nbRampe = Math.max(1, Math.round(4.5 / piste.pas));
+  const debutRampe = (i - Math.round(27 / piste.pas) - nbRampe + N) % N; // la gueule est ~15 m devant le centre de la tête
+  const debutEntonnoir = (debutRampe - Math.round(55 / piste.pas) + N) % N;
+  const DEMI_ETROIT = 3.6;
+  piste.retrecissements.push({ debut: debutEntonnoir, fin: i, demiMin: DEMI_ETROIT });
+  groupe.add(piste.ajouterTremplin({ debut: debutRampe, nb: nbRampe, lateral: 0, demiLargeur: DEMI_ETROIT, hauteur: 1.3 }));
+  piste.teteTrex = { indice: i, recrache: (i + Math.round(26 / piste.pas)) % N };
+
+  // rochers le long de l'entonnoir (ce sont eux qui "font" les murs)
+  const rochers = [];
+  const longueur = (i - debutEntonnoir + N) % N;
+  for (let k = 0; k <= longueur; k += 2) {
+    const j = (debutEntonnoir + k) % N;
+    const lim = piste.limiteLaterale(j) + 1.6;
+    if (lim > piste.demi + piste.marge) continue;
+    for (const s of [1, -1]) {
+      rochers.push({ x: piste.cx[j] + piste.nx[j] * s * lim, z: piste.cz[j] + piste.nz[j] * s * lim, s: 1.3 + ((k * 7) % 5) * 0.12, sy: 1.1, r: k });
+    }
+  }
+  groupe.add(instances(new THREE.IcosahedronGeometry(1.2, 1).translate(0, 0.6, 0), new THREE.MeshLambertMaterial({ color: 0x8d7b68, flatShading: true }), rochers));
+
+  // la tête : chargée en arrière-plan
+  new GLTFLoader().loadAsync(import.meta.env.BASE_URL + "dinos/tete-trex.glb").then((gltf) => {
+    const modele = gltf.scene;
+    modele.traverse((o) => {
+      if (o.isMesh) {
+        o.geometry.computeVertexNormals();
+        o.material = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+      }
+    });
+    // le modèle fait ~2 unités de large, gueule vers +x, socle en bas
+    const boite = new THREE.Box3().setFromObject(modele);
+    const echelle = 17;
+    modele.scale.setScalar(echelle);
+    modele.position.y = -boite.min.y * echelle - 0.6; // socle un peu enfoncé dans le sol
+    const tete = new THREE.Group();
+    tete.add(modele);
+    tete.position.set(piste.cx[i] + piste.nx[i] * DECALAGE_GUEULE, 0, piste.cz[i] + piste.nz[i] * DECALAGE_GUEULE); // gueule centrée sur la route
+    tete.rotation.y = piste.angleA(i) + Math.PI / 2 + ROTATION_GUEULE; // gueule tournée vers les karts qui arrivent
+    groupe.add(tete);
+  });
 }

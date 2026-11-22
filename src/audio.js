@@ -221,6 +221,25 @@ class MoteurAudio {
     this.effet(freq(base + 7), 0.2, "triangle", 0.35, t + 0.06);
   }
 
+  /** "CROC" : deux claquements de mâchoire et un grondement. */
+  croc() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.bruitFiltre(t, 0.12, 0.8, "lowpass", 900, this.busEffets);
+    this.bruitFiltre(t + 0.18, 0.15, 0.9, "lowpass", 700, this.busEffets);
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = "sawtooth";
+    o.frequency.setValueAtTime(120, t + 0.3);
+    o.frequency.exponentialRampToValueAtTime(55, t + 1.0);
+    g.gain.setValueAtTime(0.0001, t + 0.3);
+    g.gain.exponentialRampToValueAtTime(0.4, t + 0.4);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 1.05);
+    o.connect(g).connect(this.busEffets);
+    o.start(t + 0.3);
+    o.stop(t + 1.1);
+  }
+
   /** "Boing" qui monte quand on s'envole d'un tremplin. */
   saut() {
     if (!this.ctx) return;

@@ -156,7 +156,12 @@ export class Course {
         if (k.joueur && this.etat === "course") entree = entreeForcee ?? this.controles.etat(this.options.modeAuto);
         else entree = k.ia.entree(dt);
         if (!k.joueur) this.elastique(k, dt);
+        if (k.mange > 0) {
+          this.digerer(k, dt);
+          continue;
+        }
         k.phys.update(dt, entree);
+        this.croquer(k);
         if (!k.fini && k.phys.tour > TOURS) {
           k.fini = true;
           this.arrivees.push(k);
@@ -226,6 +231,41 @@ export class Course {
       k.modele.groupe.updateMatrixWorld();
       k.pilote.orienter(this.camera, k.phys.angle + k.modele.corps.rotation.y, k.phys.angle);
     }
+  }
+
+  /** Le kart arrive devant la gueule du T-rex : il est croqué. */
+  croquer(k) {
+    const t = this.piste.teteTrex;
+    if (!t) return;
+    const d = (t.indice - k.phys.indice + this.piste.N) % this.piste.N;
+    if (d > Math.round(15 / this.piste.pas)) return; // devant la gueule (≈ 15 m avant le centre de la tête)
+    k.mange = 1.1;
+    k.modele.groupe.visible = false;
+    if (k.joueur) {
+      audio.croc?.();
+      this.quand.croc?.();
+    }
+  }
+
+  /** Pendant qu'il est dans la gueule ; puis le T-rex le recrache derrière lui. */
+  digerer(k, dt) {
+    k.mange -= dt;
+    if (k.mange > 0) return;
+    const p = this.piste, i = p.teteTrex.recrache, ph = k.phys;
+    const tourAvant = ph.tour;
+    ph.x = p.cx[i];
+    ph.z = p.cz[i];
+    ph.angle = p.angleA(i);
+    ph.indice = i;
+    ph.tour = tourAvant;
+    ph.vitesse = 18;
+    ph.y = 2;
+    ph.vy = 5;
+    ph.enLair = true;
+    ph.xAvant = ph.x;
+    ph.zAvant = ph.z;
+    k.modele.groupe.visible = true;
+    if (k.joueur) this.cam.angle = null;
   }
 
   /** Élastique discret : les adversaires attendent l'enfant s'il est loin derrière,
@@ -306,7 +346,8 @@ export class Course {
       r.pivot.rotation.y = -phys.direction * 0.45;
     }
     for (const r of modele.roues.arriere) r.tourne.rotation.x += (phys.vitesse * dt) / r.rayon;
-    modele.groupe.visible = phys.clignote > 0 ? Math.floor(this.t * 12) % 2 === 0 : true;
+    if (k.mange > 0) modele.groupe.visible = false;
+    else modele.groupe.visible = phys.clignote > 0 ? Math.floor(this.t * 12) % 2 === 0 : true;
   }
 
   particulesJoueur() {

@@ -176,7 +176,7 @@ export class KartPhysique {
 
     // --- barrières : rebond doux ---
     if (this.contreMur > 0) this.contreMur -= dt;
-    const limite = p.demi + p.marge - 1.0;
+    const limite = p.limiteLaterale(i);
     if (Math.abs(this.lateral) > limite) {
       const s = Math.sign(this.lateral);
       const depasse = Math.abs(this.lateral) - limite;

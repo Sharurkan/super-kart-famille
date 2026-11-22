@@ -245,6 +245,21 @@ export function construirePiste(def) {
   const surfaces = [];
   // Zones que les adversaires évitent : { debut, fin, lateral, demi }
   const zonesIA = [];
+  // Rétrécissements (entonnoir) : { debut, fin, demiMin } en échantillons
+  const retrecissements = [];
+
+  /** Demi-largeur où l'on peut rouler à cet endroit (jusqu'aux barrières ou à l'entonnoir). */
+  function limiteLaterale(indice) {
+    let lim = demi + marge - 1.0;
+    for (const r of retrecissements) {
+      const k = (indice - r.debut + N) % N;
+      const n = (r.fin - r.debut + N) % N;
+      if (k > n) continue;
+      const t = Math.min(1, k / (n * 0.7)); // se resserre sur 70 % de la longueur, puis reste étroit
+      lim = Math.min(lim, (demi + marge - 1.0) * (1 - t) + r.demiMin * t);
+    }
+    return lim;
+  }
 
   function ajouterTremplin(t) {
     t.longueur = t.nb * pas;
@@ -319,5 +334,5 @@ export function construirePiste(def) {
   const centre = new THREE.Vector3((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
   const rayon = Math.hypot(maxX - minX, maxZ - minZ) / 2;
 
-  return { groupe, N, L, pas, cx, cz, tx, tz, nx, nz, demi, marge, localiser, distanceCentre, angleA, centre, rayon, tremplins, hauteurTremplin, surfaces, zonesIA, ajouterTremplin };
+  return { groupe, N, L, pas, cx, cz, tx, tz, nx, nz, demi, marge, localiser, distanceCentre, angleA, centre, rayon, tremplins, hauteurTremplin, surfaces, zonesIA, ajouterTremplin, retrecissements, limiteLaterale };
 }

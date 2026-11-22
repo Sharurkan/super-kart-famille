@@ -33,6 +33,10 @@ export class PiloteIA {
       }
     }
 
+    // dans un entonnoir : on vise le centre
+    const limDevant = P.limiteLaterale((p.indice + 15) % N) - 1.5;
+    if (Math.abs(this.voie) > limDevant) this.voie = Math.sign(this.voie) * Math.max(0, limDevant);
+
     // point visé : plus loin quand on va vite
     const distance = 7 + Math.abs(p.vitesse) * 0.45;
     const j = (p.indice + Math.round(distance / P.pas)) % N;

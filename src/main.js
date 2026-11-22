@@ -169,6 +169,12 @@ function lancerCourse() {
         el.parentElement.classList.add("saute");
       },
       arrivee: annoncerArrivee,
+      croc: () => {
+        const v = document.getElementById("croc");
+        v.classList.remove("actif");
+        void v.offsetWidth;
+        v.classList.add("actif");
+      },
       podium: montrerPodium,
     }
   );
