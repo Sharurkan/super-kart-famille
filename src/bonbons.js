@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 // Bonbons à ramasser : des rangées qui dessinent des lignes faciles à suivre (ligne droite
 // sur les lignes droites, arc à l'intérieur des virages, quelques lignes sur le dos du
@@ -16,9 +17,14 @@ const ENTRE_RANGEES = 50; // mètres entre deux rangées
 const DEMI_BONBON = 0.75 * ECHELLE; // demi-longueur (papillotes comprises) : il ne touche pas les rochers
 
 // ---------------------------------------------------------------------------
-// LA FORME DU BONBON : tout est ici. Pour un modèle GLB plus tard, il suffit que cette
-// fonction renvoie { geometrie, materiau } (une seule géométrie, longueur ~1,5 le long de x,
-// centrée sur 0) : la couleur de chaque bonbon est appliquée par instance (setColorAt).
+// LA FORME DU BONBON : tout est ici.
+// 1) formeBonbon() : le bonbon dessiné en code (ovale + papillotes), affiché tout de suite.
+// 2) dès que public/bonbons/bonbons.glb est chargé (friandises du "Food Kit" de Kenney, CC0,
+//    préparé par outils/blender/bonbons_kenney.py), on passe aux vraies friandises : une rangée
+//    de sucettes, une de chocolats, une de beignets, une de cupcakes...
+// La couleur de chaque bonbon est appliquée par instance (setColorAt) ; sur les friandises,
+// seulement sur les parties "teinte" (sucre, papier, glaçage) : bâton, chocolat et pâte gardent
+// leur couleur.
 let geometrieBonbon = null;
 export function formeBonbon() {
   if (!geometrieBonbon) {
@@ -53,6 +59,74 @@ export function formeBonbon() {
   const materiau = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 70, specular: 0x777777, side: THREE.DoubleSide });
   return { geometrie: geometrieBonbon, materiau };
 }
+
+// Les friandises de bonbons.glb : plus grande dimension à l'écran (mètres, pas plus que
+// l'ancien bonbon : 2 × DEMI_BONBON) et inclinaison vers la caméra. Les rangées les prennent à tour de rôle.
+const FRIANDISES = [
+  { nom: "sucette", taille: 2.3, penche: 0.1 },
+  { nom: "chocolat", taille: 1.8, penche: 0.35 },
+  { nom: "beignet", taille: 1.8, penche: 0.15 },
+  { nom: "cupcake", taille: 1.9, penche: 0.2 },
+];
+
+/** Géométrie position + normale + couleur (rgb) + "teinte" (1 = prend la couleur du bonbon). */
+function preparer(mesh, teinte) {
+  const src = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
+  const n = src.attributes.position.count, col = src.attributes.color, rgb = new Float32Array(n * 3);
+  for (let k = 0; k < n; k++) {
+    rgb[k * 3] = col ? col.getX(k) : 1;
+    rgb[k * 3 + 1] = col ? col.getY(k) : 1;
+    rgb[k * 3 + 2] = col ? col.getZ(k) : 1;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", src.attributes.position);
+  g.setAttribute("normal", src.attributes.normal);
+  g.setAttribute("color", new THREE.BufferAttribute(rgb, 3));
+  g.setAttribute("teinte", new THREE.BufferAttribute(new Float32Array(n).fill(teinte), 1));
+  if (src.index) g.setIndex(src.index);
+  return g.index ? g.toNonIndexed() : g;
+}
+
+let chargement = null; // promesse partagée : le fichier n'est chargé qu'une fois
+let friandises = null; // { materiau, modeles } une fois prêt (gardé d'une course à l'autre)
+/** Charge bonbons.glb : { materiau, modeles: [{ nom, taille, penche, geometrie }] }, ou null si raté. */
+function chargerFriandises() {
+  chargement ??= new GLTFLoader()
+    .loadAsync(import.meta.env.BASE_URL + "bonbons/bonbons.glb")
+    .then((gltf) => {
+      gltf.scene.updateMatrixWorld(true);
+      const modeles = [];
+      for (const f of FRIANDISES) {
+        const parties = [["teinte", 1], ["fixe", 0]]
+          .map(([p, t]) => [gltf.scene.getObjectByName(f.nom + "_" + p), t])
+          .filter(([o]) => o?.isMesh)
+          .map(([o, t]) => preparer(o, t));
+        if (!parties.length) continue;
+        const geometrie = mergeGeometries(parties);
+        geometrie.computeBoundingBox();
+        const b = geometrie.boundingBox;
+        modeles.push({ ...f, geometrie, demiHauteur: ((b.max.y - b.min.y) / 2) * f.taille });
+      }
+      // papier brillant ; seules les parties "teinte" prennent la couleur de l'instance
+      const materiau = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 60, specular: 0x666666 });
+      materiau.userData.partage = true;
+      materiau.onBeforeCompile = (shader) => {
+        shader.vertexShader = shader.vertexShader
+          .replace("#include <color_pars_vertex>", "#include <color_pars_vertex>\nattribute float teinte;")
+          .replace("#include <color_vertex>", THREE.ShaderChunk.color_vertex
+            .replace("vColor.xyz *= instanceColor.xyz;", "vColor.xyz *= mix( vec3( 1.0 ), instanceColor.xyz, teinte );"));
+      };
+      materiau.customProgramCacheKey = () => "bonbon-teinte";
+      friandises = modeles.length ? { materiau, modeles } : null;
+      return friandises;
+    })
+    .catch((e) => {
+      console.warn("bonbons.glb non chargé : on garde les bonbons dessinés en code", e);
+      return null;
+    });
+  return chargement;
+}
+chargerFriandises(); // dès le démarrage du jeu, pour être prêt avant la première course
 
 // ---------------------------------------------------------------------------
 /**
@@ -160,6 +234,31 @@ export class Bonbons {
     this.o = new THREE.Object3D();
     this.t = 0;
     this.nbSurfaces = -1;
+    // les friandises Kenney remplacent le bonbon dessiné en code dès qu'elles sont chargées
+    this.scene = scene;
+    this.friandises = null; // [{ mesh, modele }]
+    if (friandises) this.passerAuxFriandises(friandises);
+    else chargerFriandises().then((r) => r && !this.friandises && this.passerAuxFriandises(r));
+  }
+
+  /** Remplace le bonbon dessiné en code par les friandises Kenney (une InstancedMesh par modèle, une rangée chacune). */
+  passerAuxFriandises({ materiau, modeles }) {
+    const nb = modeles.map(() => 0);
+    this.liste.forEach((b, i) => {
+      b.modele = Math.floor(i / PAR_RANGEE) % modeles.length;
+      b.place = nb[b.modele]++;
+    });
+    this.friandises = modeles.map((m, k) => {
+      const mesh = new THREE.InstancedMesh(m.geometrie, materiau, Math.max(1, nb[k]));
+      mesh.count = nb[k];
+      mesh.frustumCulled = false; // les bonbons bougent : pas de sphère englobante figée
+      return { mesh, modele: m };
+    });
+    const c = new THREE.Color();
+    this.liste.forEach((b, i) => this.friandises[b.modele].mesh.setColorAt(b.place, c.set(COULEURS[i % COULEURS.length])));
+    this.mesh.visible = false; // l'ancien bonbon reste dans la scène (course.js libère son matériau), caché
+    this.majMatrices();
+    for (const f of this.friandises) this.scene.add(f.mesh);
   }
 
   /** Bonbons posés sur la route : à la hauteur du sol (ex. le dos du diplodocus, chargé après coup). */
@@ -174,8 +273,7 @@ export class Bonbons {
     this.t += dt;
     if (this.piste.surfaces.length !== this.nbSurfaces) this.suivreLeSol();
     let pris = 0;
-    const o = this.o;
-    this.liste.forEach((b, i) => {
+    for (const b of this.liste) {
       if (b.attente > 0) {
         b.attente -= dt;
       } else if (phys) {
@@ -185,15 +283,27 @@ export class Bonbons {
           pris++;
         }
       }
-      const s = b.attente > 0 ? 0.0001 : ECHELLE; // caché pendant qu'il attend de réapparaître
-      // petit balancement et rotation lente (tous ensemble, légèrement décalés le long de la ligne)
-      o.position.set(b.x, b.y + Math.sin(this.t * 2.4 + i * 0.7) * 0.12, b.z);
-      o.rotation.set(0.25, this.t * 1.8 + i * 0.5, 0);
-      o.scale.setScalar(s);
-      o.updateMatrix();
-      this.mesh.setMatrixAt(i, o.matrix);
-    });
-    this.mesh.instanceMatrix.needsUpdate = true;
+    }
+    this.majMatrices();
     return pris;
+  }
+
+  /** Place chaque bonbon : petit balancement et rotation lente (légèrement décalés le long de la ligne). */
+  majMatrices() {
+    const o = this.o;
+    this.liste.forEach((b, i) => {
+      const f = this.friandises?.[b.modele];
+      // une grande friandise posée sur la route est un peu levée pour ne pas y toucher
+      const leve = f && b.dy !== undefined ? Math.max(0, f.modele.demiHauteur + 0.2 - b.dy) : 0;
+      o.position.set(b.x, b.y + leve + Math.sin(this.t * 2.4 + i * 0.7) * 0.12, b.z);
+      o.rotation.set(f ? f.modele.penche : 0.25, this.t * 1.8 + i * 0.5, 0);
+      // caché pendant qu'il attend de réapparaître
+      o.scale.setScalar(b.attente > 0 ? 0.0001 : f ? f.modele.taille : ECHELLE);
+      o.updateMatrix();
+      if (f) f.mesh.setMatrixAt(b.place, o.matrix);
+      else this.mesh.setMatrixAt(i, o.matrix);
+    });
+    if (this.friandises) for (const f of this.friandises) f.mesh.instanceMatrix.needsUpdate = true;
+    else this.mesh.instanceMatrix.needsUpdate = true;
   }
 }
