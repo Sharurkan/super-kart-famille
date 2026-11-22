@@ -17,6 +17,17 @@ export const TOURS = 3;
 const DUREE_DECOMPTE = 3.6; // 3, 2, 1, Partez !
 const RAYON_KART = 1.1;
 
+/**
+ * Entrée dans la gueule du T-rex (vue de l'enfant) : le noir se referme sur la gueule pendant
+ * que le kart y vole (en mètres par rapport au bord avant de la gueule), puis on est dedans :
+ * un court moment sans lumière, et l'intérieur s'ouvre autour du kart qui roule déjà.
+ */
+const VOILE_DEBUT = 8; // le noir commence à se refermer 8 m avant les dents...
+const VOILE_FIN = 2.5; // ...et il est complet 2,5 m dans la gueule : c'est là qu'on est croqué
+const NOIR_TENU = 0.12; // secondes de noir complet
+const NOIR_FONDU = 0.4; // secondes pour que l'intérieur apparaisse
+const lisse = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
+
 /** Vitesse de base des adversaires selon la difficulté (le joueur = 1). */
 const VITESSE_IA = { facile: 0.78, normal: 0.92, rapide: 1.0 };
 /**
@@ -80,6 +91,8 @@ export class Course {
       this.bonbonsInterieur = new Bonbons(scene, this.interieur.piste);
       this.dureeVentre = this.interieur.piste.L / 19; // temps pour en faire le tour
     }
+    this.noirRestant = 0; // fondu du noir après l'entrée dans le ventre
+    this.voileAffiche = 0;
 
     // --- les 5 pilotes : le joueur part 3e, au milieu de la grille ---
     const adversaires = PERSONNAGES.filter((p) => p !== options.perso);
@@ -135,9 +148,19 @@ export class Course {
     return [...this.arrivees, ...enCourse];
   }
 
-  /** Progression sur le circuit principal (figée pendant qu'on est dans le ventre). */
+  /**
+   * Progression sur le circuit principal. Dans le T-rex, on avance en douceur de la gueule
+   * jusqu'au point où l'on ressort, au rythme de la traversée (k.ventre.f de 0 à 1) :
+   * pas de saut de place à l'entrée ni à la sortie, et la mini-carte suit la même règle.
+   */
   progression(k) {
-    return (k.physPrincipale ?? k.phys).progression;
+    const v = k.ventre;
+    if (v) return v.debut + (v.ecart / this.piste.N) * v.f;
+    const ph = k.physPrincipale ?? k.phys, p = this.piste, i = ph.indice;
+    if (ph.piste !== p || i < 0) return ph.progression;
+    // + la position entre deux points du tracé : deux karts au même point ne s'échangent pas sans cesse
+    const fin = ((ph.x - p.cx[i]) * p.tx[i] + (ph.z - p.cz[i]) * p.tz[i]) / p.pas;
+    return ph.progression + THREE.MathUtils.clamp(fin, -0.5, 0.5) / p.N;
   }
 
   etape(dt, entreeForcee) {
@@ -158,9 +181,9 @@ export class Course {
     // --- pilotes ---
     if (this.etat !== "decompte") {
       // vitesse moyenne de l'enfant *le long de la piste* sur ~4 s (pour l'élastique) :
-      // un kart qui zigzague roule vite mais avance peu.
+      // un kart qui zigzague roule vite mais avance peu. (Moyenne gardée telle quelle dans le T-rex.)
       const prog = this.progression(joueur);
-      if (this.progPrecedente !== undefined && dt > 0) {
+      if (this.progPrecedente !== undefined && dt > 0 && !joueur.ventre) {
         const vj = Math.max(0, ((prog - this.progPrecedente) * this.piste.L) / dt / REGLAGES.vitesseMax);
         if (vj < 3) this.vitesseJoueurMoy += (vj - this.vitesseJoueurMoy) * Math.min(1, dt / 4);
       }
@@ -249,6 +272,7 @@ export class Course {
 
     const vRel = joueur.phys.vitesse / REGLAGES.vitesseMax;
     if (!joueur.scenario?.camera?.(this.cam, dt)) this.cam.update(dt, joueur.phys.x, joueur.phys.z, joueur.phys.angle, vRel, joueur.phys.y);
+    this.majVoile(dt);
     this.decor.ciel.position.set(this.camera.position.x, 0, this.camera.position.z);
     this.decor.animer(dt, this.camera);
     for (const k of this.karts) {
@@ -277,34 +301,94 @@ export class Course {
   /** Le kart arrive devant la gueule du T-rex : il est croqué. */
   croquer(k) {
     const t = this.piste.teteTrex;
-    if (!t || k.dedans) return;
-    const p = this.piste, ph = k.phys, i = t.indice;
+    if (!t) return;
+    if (k.dedans) {
+      // dans le ventre : on avance sur la mini-carte (et au classement) au rythme du tour intérieur
+      const P = k.phys.piste, depart = this.departVentre;
+      const q = (k.phys.tour * P.N + k.phys.indice - depart) / (P.N - depart);
+      k.ventre.f = Math.max(k.ventre.f, Math.min(1, Math.max(0, q)));
+      return;
+    }
+    const reste = this.resteGueule(k.phys);
+    if (reste === null || reste > -VOILE_FIN) return; // croqué une fois bien entré dans la gueule
+    const p = this.piste, ph = k.phys;
+    k.distanceCroc = reste + (t.distanceGueule ?? 15); // jusqu'au centre de la tête (pour les essais)
+    // la traversée, vue du circuit principal : de la gueule jusqu'au point où l'on est recraché
+    k.ventre = {
+      debut: this.progression(k), ecart: (t.recrache - ph.indice + p.N) % p.N, i0: ph.indice, f: 0,
+      dx: ph.x - p.cx[ph.indice], dz: ph.z - p.cz[ph.indice], // écart à la ligne du milieu (s'efface)
+    };
+    if (k.joueur && this.interieur) {
+      // l'enfant passe tout de suite dans le ventre, sans s'arrêter : le noir cache la bascule
+      audio.croc?.();
+      this.entrerDansLeVentre(k);
+      return;
+    }
+    // les adversaires y passent "invisibles" à peu près le temps que met l'enfant
+    k.mange = k.ventre.duree = this.interieur ? this.dureeVentreIA() : 1.1;
+    k.modele.groupe.visible = false;
+  }
+
+  /**
+   * Temps passé dans le T-rex par un adversaire : à peu près ce que met l'enfant qui entre
+   * lancé et fait le tour du ventre à bonne allure (mesuré : ≈ 12 s), un peu plus pour être juste.
+   */
+  dureeVentreIA() {
+    return this.dureeVentre - 0.4;
+  }
+
+  /**
+   * Distance (le long de la route) entre le kart et le bord avant de la gueule :
+   * positive avant les dents, négative dedans ; null si le kart n'est pas dans l'entonnoir.
+   */
+  resteGueule(ph) {
+    const t = this.piste.teteTrex, p = this.piste, i = t.indice;
     const gueule = t.distanceGueule ?? 15; // bord avant de la gueule, en mètres avant le centre de la tête
     const d = (i - ph.indice + p.N) % p.N;
-    if (d > (gueule + 5) / p.pas) return;
+    if (d > (gueule + 10) / p.pas) return null;
     // distance exacte le long de la route jusqu'au centre de la tête (au sol comme en plein saut)
-    const reste = (p.cx[i] - ph.x) * p.tx[i] + (p.cz[i] - ph.z) * p.tz[i];
-    if (reste > gueule - 1) return; // croqué une fois bien entré dans la gueule
-    k.distanceCroc = reste; // (pour les essais)
-    // l'enfant visite le ventre ; les adversaires y passent "invisibles" le même temps
-    k.mange = this.interieur ? (k.joueur ? 0.55 : 0.55 + this.dureeVentre) : 1.1;
-    k.versVentre = Boolean(this.interieur && k.joueur);
-    k.modele.groupe.visible = false;
-    if (k.joueur) {
-      audio.croc?.();
-      this.quand.croc?.();
+    return (p.cx[i] - ph.x) * p.tx[i] + (p.cz[i] - ph.z) * p.tz[i] - gueule;
+  }
+
+  /**
+   * Le noir de la gueule (vue de l'enfant) : il se referme autour du kart pendant qu'il vole
+   * vers les dents, reste complet un court instant, puis s'ouvre sur l'intérieur.
+   * Envoyé à l'interface : quand.voile(force 0..1, x %, y %) avec le centre à l'écran.
+   */
+  majVoile(dt) {
+    const j = this.joueur;
+    let force = 0;
+    if (this.noirRestant > 0) {
+      this.noirRestant = Math.max(0, this.noirRestant - dt);
+      force = lisse(this.noirRestant / NOIR_FONDU);
+    } else if (this.piste.teteTrex && !j.dedans && !j.mange && !j.scenario && this.etat !== "decompte") {
+      const reste = this.resteGueule(j.phys);
+      if (reste !== null) force = THREE.MathUtils.clamp((VOILE_DEBUT - reste) / (VOILE_DEBUT + VOILE_FIN), 0, 1);
     }
+    if (force === 0 && this.voileAffiche === 0) return;
+    this.voileAffiche = force;
+    // centre du cercle : entre le kart et le fond de la gueule pendant qu'on y vole,
+    // puis sur le kart dans le ventre
+    const v = (this._voile ??= new THREE.Vector3());
+    v.set(j.phys.x, j.phys.y + 0.8, j.phys.z).project(this.camera);
+    let sx = v.x, sy = v.y;
+    const T = this.piste.teteTrex, tete = T?.objet;
+    if (!j.dedans && tete) {
+      const p = this.piste, i = T.indice, recul = (T.distanceGueule ?? 12) - 3;
+      v.set(tete.position.x - p.tx[i] * recul, 4.5, tete.position.z - p.tz[i] * recul).project(this.camera);
+      sx = (sx + v.x) / 2;
+      sy = (sy + v.y) / 2;
+    }
+    const x = THREE.MathUtils.clamp((sx + 1) * 50, 10, 90), y = THREE.MathUtils.clamp((1 - sy) * 50, 10, 90);
+    this.quand.voile?.(force, x, y);
   }
 
   /** Pendant qu'il est dans la gueule ; puis le T-rex le recrache derrière lui. */
   digerer(k, dt) {
     k.mange -= dt;
+    if (k.ventre) k.ventre.f = Math.min(1, 1 - k.mange / k.ventre.duree);
     if (k.mange > 0) return;
-    if (k.versVentre) {
-      k.versVentre = false;
-      this.entrerDansLeVentre(k);
-      return;
-    }
+    k.ventre = null;
     const p = this.piste, i = p.teteTrex.recrache, ph = k.phys;
     const tourAvant = ph.tour;
     ph.x = p.cx[i];
@@ -343,17 +427,22 @@ export class Course {
     this.decor.ciel.visible = !dedans;
   }
 
-  /** Le kart tombe dans le ventre du T-rex : on bascule sur le circuit intérieur. */
+  /**
+   * Le kart file dans le ventre du T-rex : on bascule sur le circuit intérieur, en gardant
+   * son élan (vitesse, hauteur du saut) ; la caméra se replace derrière lui pendant le noir.
+   */
   entrerDansLeVentre(k) {
-    const P = this.interieur.piste;
-    k.physPrincipale = k.phys;
+    const P = this.interieur.piste, avant = k.phys;
+    k.physPrincipale = avant;
     const ph = new KartPhysique(P);
     ph.placer(P.N - 6, 0); // juste après la porte
-    ph.assistance = k.physPrincipale.assistance;
-    ph.y = 3;
-    ph.vy = 0;
+    this.departVentre = ph.indice;
+    ph.assistance = avant.assistance;
+    ph.y = Math.max(0.6, avant.y); // il finit son saut dans le ventre
+    ph.vy = Math.min(0, avant.vy);
     ph.enLair = true;
-    ph.vitesse = 10;
+    ph.vitesse = Math.max(12, avant.vitesse);
+    ph.boost = avant.boost;
     ph.xAvant = ph.x;
     ph.zAvant = ph.z;
     k.phys = ph;
@@ -361,6 +450,7 @@ export class Course {
     k.modele.groupe.visible = true;
     this.cam.angle = null;
     this.ambiance(true);
+    this.noirRestant = NOIR_TENU + NOIR_FONDU;
   }
 
   /** On passe la porte : retour sur la route, derrière le T-rex. */
@@ -370,6 +460,7 @@ export class Course {
     k.phys = ph;
     k.physPrincipale = null;
     k.dedans = false;
+    k.ventre = null;
     ph.x = p.cx[i];
     ph.z = p.cz[i];
     ph.angle = p.angleA(i);
@@ -420,6 +511,7 @@ export class Course {
     const ks = this.karts;
     for (let a = 0; a < ks.length; a++)
       for (let b = a + 1; b < ks.length; b++) {
+        if (ks[a].mange > 0 || ks[b].mange > 0) continue; // dans le T-rex : plus sur la route
         const A = ks[a].phys, B = ks[b].phys;
         const dx = B.x - A.x, dz = B.z - A.z;
         const d2 = dx * dx + dz * dz;
@@ -479,6 +571,7 @@ export class Course {
   }
 
   liberer() {
+    if (this.voileAffiche > 0) this.quand.voile?.(0, 50, 50);
     liberer(this.piste.groupe, true);
     liberer(this.decor.groupe, true);
     this.bonbons.mesh.material.dispose(); // la forme du bonbon est partagée, on la garde

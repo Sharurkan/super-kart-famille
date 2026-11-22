@@ -6,6 +6,26 @@
 const INTERVALLE = 1 / 20; // secondes entre deux dessins
 const MARGE = 0.1; // marge autour du tracé (fraction de la taille)
 
+/**
+ * Où dessiner un kart sur le circuit principal. Dans le T-rex (k.ventre, voir course.js),
+ * il glisse le long de la route de la gueule jusqu'au point où il ressort, au rythme de
+ * sa traversée (f de 0 à 1) : personne ne disparaît ni ne saute.
+ */
+export function positionCarte(piste, k) {
+  const v = k.ventre;
+  if (!v) {
+    const ph = k.physPrincipale ?? k.phys;
+    return { x: ph.x, z: ph.z };
+  }
+  const N = piste.N, s = v.i0 + v.ecart * v.f;
+  const a = Math.floor(s), u = s - a, i = ((a % N) + N) % N, j = (i + 1) % N;
+  const reste = 1 - v.f; // l'écart à la ligne du milieu s'efface
+  return {
+    x: piste.cx[i] + (piste.cx[j] - piste.cx[i]) * u + v.dx * reste,
+    z: piste.cz[i] + (piste.cz[j] - piste.cz[i]) * u + v.dz * reste,
+  };
+}
+
 export class Minimap {
   /**
    * @param {HTMLCanvasElement} canvas
@@ -135,9 +155,8 @@ export class Minimap {
     // les adversaires d'abord, le joueur par-dessus
     const ordre = [...this.karts].sort((a, b) => a.joueur - b.joueur);
     for (const k of ordre) {
-      if (k.mange > 0) continue; // dans la gueule du T-rex : caché
-      const ph = k.physPrincipale ?? k.phys;
-      const [x, y] = this.versCarte(ph.x, ph.z);
+      const pos = positionCarte(this.piste, k);
+      const [x, y] = this.versCarte(pos.x, pos.z);
       const couleur = this.couleurs[k.perso] ?? "#ff6b6b";
       if (k.joueur) this.rond(x, y, t * 0.085, couleur, k.perso, "#fff", Math.max(2, t * 0.022));
       else this.rond(x, y, t * 0.055, couleur, k.perso, couleur, Math.max(1.5, t * 0.016));

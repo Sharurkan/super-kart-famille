@@ -1049,27 +1049,17 @@ button:active {
 }
 
 /* =================== CROC du T-rex =================== */
+/* le noir se referme en cercle sur le kart qui file dans la gueule (piloté image par image
+   par course.js : --r = rayon du trou de lumière, --x/--y = son centre), puis se rouvre dedans */
 .croc {
+  --r: 115%;
+  --x: 50%;
+  --y: 50%;
   position: fixed;
   inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   pointer-events: none;
   opacity: 0;
-  background: #000;
-}
-
-.croc.actif {
-  animation: croc 1.6s ease-in-out;
-}
-
-/* noir d'un coup (plus de lumière), puis les yeux s'habituent : l'intérieur apparaît doucement */
-@keyframes croc {
-  0% { opacity: 0; }
-  8% { opacity: 1; }
-  45% { opacity: 1; }
-  100% { opacity: 0; }
+  background: radial-gradient(circle farthest-corner at var(--x) var(--y), rgba(0, 0, 0, 0) calc(var(--r) - 35%), #000 var(--r));
 }
 
 .flash {
