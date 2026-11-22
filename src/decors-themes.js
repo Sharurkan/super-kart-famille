@@ -3,6 +3,7 @@ import { instances, positions, boiteRonde } from "./decor.js";
 import { fusion, matCouleurs, nuages } from "./decors-circuits.js";
 import { creerDino } from "./dinos.js";
 import { planter } from "./vegetation.js";
+import { installerRavin } from "./ptero.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 // Décors des circuits Dinosaures, Jouets et Concert pop.
@@ -108,6 +109,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   nuages(groupe, piste, rnd);
   teteTrex(piste, groupe);
   diplodocus(piste, groupe); // après le T-rex : sa place ne change pas
+  ravinDuPtero(groupe, piste); // ligne droite du haut : le vide et le ptérodactyle
 
   let t = 0;
   const o = new THREE.Object3D();
@@ -787,4 +789,13 @@ function teteTrex(piste, groupe) {
     piste.teteTrex.placer = placer;
     groupe.add(tete);
   });
+}
+
+// ---------------------------------------------------------------------------
+/**
+ * Ravin du ptérodactyle sur la ligne droite du haut (0,175 → 0,275 du tour) : la route
+ * s'arrête au bord du vide, un ptérodactyle attrape chaque kart et le dépose en face (ptero.js).
+ */
+function ravinDuPtero(groupe, piste) {
+  installerRavin(groupe, piste, { debut: Math.round(piste.N * 0.207) });
 }

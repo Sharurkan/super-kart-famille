@@ -39,6 +39,7 @@ export function construirePiste(def) {
   const demi = def.largeur / 2;
   const marge = def.marge ?? 6;
   const groupe = new THREE.Group();
+  const morceaux = []; // route, bordures, barrières : sommets rangés par échantillon (voir trouer)
 
   // ---------- Route ----------
   {
@@ -60,6 +61,7 @@ export function construirePiste(def) {
     g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
     g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
     g.setIndex(idx);
+    morceaux.push({ g, parEchantillon: 6, cotes: 1 });
     groupe.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: textureAsphalte(), color: def.route ?? 0xffffff })));
   }
 
@@ -86,6 +88,7 @@ export function construirePiste(def) {
     g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
     g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
     g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
+    morceaux.push({ g, parEchantillon: 6, cotes: 2 });
     groupe.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })));
   }
 
@@ -145,6 +148,7 @@ export function construirePiste(def) {
     g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
     g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
     g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+    morceaux.push({ g, parEchantillon: (profil.length - 1) * 6, cotes: 2 });
     groupe.add(new THREE.Mesh(g, new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 60, specular: 0x333333 })));
   }
 
@@ -327,6 +331,29 @@ export function construirePiste(def) {
 
   const angleA = (i) => Math.atan2(tx[i], tz[i]);
 
+  // ---------- Trous ----------
+  // trouer(debut, fin) enlève la route, les bordures et les barrières des échantillons
+  // debut..fin-1 (ex. le ravin du ptérodactyle : le décor dessine le vide dessous) en
+  // aplatissant leurs triangles. piste.trous garde la liste (les bonbons l'évitent).
+  const trous = [];
+  function trouer(debut, fin) {
+    const n = (fin - debut + N) % N;
+    for (const { g, parEchantillon, cotes } of morceaux) {
+      const idx = g.index?.array, pos = g.attributes.position.array;
+      for (let c = 0; c < cotes; c++)
+        for (let m = 0; m < n; m++) {
+          const base = (c * N + ((debut + m) % N)) * parEchantillon;
+          for (let v = base; v < base + parEchantillon; v += 3) {
+            if (idx) idx[v + 1] = idx[v + 2] = idx[v];
+            else for (const w of [v + 1, v + 2]) for (let a = 0; a < 3; a++) pos[w * 3 + a] = pos[v * 3 + a];
+          }
+        }
+      if (idx) g.index.needsUpdate = true;
+      else g.attributes.position.needsUpdate = true;
+    }
+    trous.push({ debut, fin });
+  }
+
   // centre et rayon du circuit (pour le décor lointain)
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
   for (let i = 0; i < N; i++) {
@@ -336,5 +363,5 @@ export function construirePiste(def) {
   const centre = new THREE.Vector3((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
   const rayon = Math.hypot(maxX - minX, maxZ - minZ) / 2;
 
-  return { groupe, N, L, pas, cx, cz, tx, tz, nx, nz, demi, marge, localiser, distanceCentre, angleA, centre, rayon, tremplins, hauteurTremplin, surfaces, zonesIA, ajouterTremplin, retrecissements, limiteLaterale, passages: [] };
+  return { groupe, N, L, pas, cx, cz, tx, tz, nx, nz, demi, marge, localiser, distanceCentre, angleA, centre, rayon, tremplins, hauteurTremplin, surfaces, zonesIA, ajouterTremplin, retrecissements, limiteLaterale, passages: [], trous, trouer };
 }
