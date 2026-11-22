@@ -12,6 +12,10 @@ import { audio } from "./audio.js";
 import { REGLAGES } from "./physique.js";
 import { ouvrirBoutique, installerBoutique } from "./boutique.js";
 import { ajouter as ajouterBonbons } from "./portefeuille.js";
+import { chargerTexturesSol } from "./decor.js";
+
+// les photos du sol se chargent pendant que les enfants choisissent leur pilote
+chargerTexturesSol();
 
 // Choix mémorisés qui n'existent plus (kart, perso ou circuit retiré) : on revient au premier.
 if (!KARTS.includes(reglages.kart)) reglages.kart = KARTS[0];

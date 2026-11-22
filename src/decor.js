@@ -319,8 +319,8 @@ const TEXTURES_SOL = {
 };
 let texturesPhoto = null;
 
-/** Charge les photos du sol une seule fois (elles arrivent pendant le décompte). */
-function chargerTexturesSol() {
+/** Charge les photos du sol une seule fois (main.js l'appelle dès le menu : pas de sol noir au départ). */
+export function chargerTexturesSol() {
   if (!texturesPhoto) {
     const chargeur = new THREE.TextureLoader();
     texturesPhoto = {};
