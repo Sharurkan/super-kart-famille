@@ -1,0 +1,5 @@
+Super Kart Famille — crédits des modèles 3D
+
+Pteranodon (Animated) — DogexorRexUwU (oscar.lopez.riviello, https://sketchfab.com/oscar.lopez.riviello) — CC-BY 4.0 (http://creativecommons.org/licenses/by/4.0/) — https://sketchfab.com/3d-models/pteranodon-animated-7d7683df41d1405283f160e81a5dff1b
+  Fichier : dinos/pteranodon.glb (allégé : maillage décimé, texture réduite, deux extraits de l'animation de vol).
+  This work is based on "Pteranodon (Animated)" (https://sketchfab.com/3d-models/pteranodon-animated-7d7683df41d1405283f160e81a5dff1b) by DogexorRexUwU (https://sketchfab.com/oscar.lopez.riviello) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
