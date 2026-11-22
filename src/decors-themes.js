@@ -662,7 +662,9 @@ function teteTrex(piste, groupe) {
     modele.traverse((o) => {
       if (o.isMesh) {
         o.geometry.computeVertexNormals();
-        o.material = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+        const map = o.material.map; // texture projetée depuis l'image Gemini (Blender)
+        if (map) map.anisotropy = 4;
+        o.material = map ? new THREE.MeshLambertMaterial({ map, flatShading: true }) : new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
       }
     });
     // le modèle fait ~2 unités de large, gueule vers +x, socle en bas
