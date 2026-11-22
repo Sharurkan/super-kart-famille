@@ -29,6 +29,8 @@ export class Bonbons {
       (k) => Math.sin(k * 1.2) * 4, // en vague
     ];
     // une rangée environ tous les 70 m, sauf sur la grille de départ et les tremplins
+    // pas de bonbon au-dessus d'un trou de la route (ravin du ptérodactyle)
+    const auDessusDuVide = (i) => P.trous?.some((t) => (i - t.debut + P.N) % P.N < (t.fin - t.debut + P.N) % P.N);
     const pasRangee = Math.round(70 / P.pas);
     let n = 0;
     for (let debut = Math.round(40 / P.pas); debut < P.N - Math.round(40 / P.pas); debut += pasRangee) {
@@ -36,6 +38,7 @@ export class Bonbons {
       const motif = motifs[n++ % motifs.length];
       for (let k = 0; k < 5; k++) {
         const i = (debut + k * Math.round(3 / P.pas)) % P.N;
+        if (auDessusDuVide(i)) continue;
         let lat = motif(k);
         // zone évitée par les adversaires : on passe de l'autre côté de la route
         for (const z of P.zonesIA) {
@@ -52,6 +55,7 @@ export class Bonbons {
     for (const t of P.tremplins) {
       for (let k = 0; k < 3; k++) {
         const i = (t.debut + t.nb + Math.round((4 + k * 3) / P.pas)) % P.N;
+        if (auDessusDuVide(i)) continue;
         this.liste.push({ x: P.cx[i] + P.nx[i] * t.lateral, y: 2.6 + (k === 1 ? 0.3 : 0), z: P.cz[i] + P.nz[i] * t.lateral, attente: 0 });
       }
     }

@@ -71,7 +71,7 @@ export const CIRCUITS = {
     ],
     echantillons: 1120, // ~1,15 m entre deux échantillons (physique précise)
     // lignes droites : looping (départ), ptérodactyle (haut), diplodocus (droite), T-rex (bas)
-    tremplins: [0.262],
+    tremplins: [],
     tremplinsFenetre: 0.02, // on reste dans ces lignes droites (sinon ils iraient sur celle du T-rex)
     echelle: 0.85,
     largeur: 16,
