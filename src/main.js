@@ -180,7 +180,7 @@ function lancerCourse() {
   redimensionner();
   montrer(null);
   audio.musique("course");
-  if (import.meta.env.DEV) window.__jeu = { course, avancer };
+  if (import.meta.env.DEV) Object.assign(window.__jeu, { course });
 }
 
 // --- annonces au centre de l'écran ---
@@ -372,7 +372,7 @@ function avancer(secondes, entree) {
   for (let k = 0; k < secondes * 60; k++) etape(1 / 60, entree);
   renderer.render(vue.scene, vue.camera);
 }
-if (import.meta.env.DEV) window.__jeu = { avancer, vitrine, rendre: () => renderer.render(vue.scene, vue.camera) };
+if (import.meta.env.DEV) window.__jeu = { avancer, vitrine, renderer, rendre: () => renderer.render(vue.scene, vue.camera) };
 
 montrer("titre");
 redimensionner();

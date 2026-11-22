@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { instances, positions } from "./decor.js";
+import { instances, positions, boiteRonde } from "./decor.js";
 import { textureRond } from "./textures.js";
 
 // Décors des circuits Plage et Neige.
@@ -21,7 +21,7 @@ export function fusion(parties) {
   return mergeGeometries(geos);
 }
 
-export const matCouleurs = () => new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+export const matCouleurs = () => new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: false });
 const filtrer = (liste, ok) => liste.filter((p) => ok(p.x, p.z));
 
 export function nuages(groupe, piste, rnd) {
@@ -33,7 +33,7 @@ export function nuages(groupe, piste, rnd) {
     for (let k = 0; k < 4; k++)
       liste.push({ x: x + (k - 1.5) * 9 + rnd() * 4, y: y + rnd() * 4, z: z + rnd() * 6, s: 7 + rnd() * 5, sy: 4 + rnd() * 3 });
   }
-  groupe.add(instances(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), liste));
+  groupe.add(instances(new THREE.IcosahedronGeometry(1, 2), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), liste));
 }
 
 // ---------------------------------------------------------------------------
@@ -60,14 +60,14 @@ export function decorPlage(groupe, piste, rnd, horsPiste) {
   // palmiers : tronc courbé + palmes + noix de coco
   const parties = [];
   for (let k = 0; k < 5; k++)
-    parties.push({ geo: new THREE.CylinderGeometry(0.28 - k * 0.03, 0.34 - k * 0.03, 1.3, 6).translate(k * k * 0.06, 0.65 + k * 1.2, 0), couleur: k % 2 ? 0x9c6b3c : 0x8b5a2b });
+    parties.push({ geo: new THREE.CylinderGeometry(0.28 - k * 0.03, 0.34 - k * 0.03, 1.3, 12).translate(k * k * 0.06, 0.65 + k * 1.2, 0), couleur: k % 2 ? 0x9c6b3c : 0x8b5a2b });
   const sx = 16 * 0.06, sy = 6.2;
   for (let k = 0; k < 7; k++) {
-    const f = new THREE.BoxGeometry(0.5, 0.08, 3.2).translate(0, 0, 1.6).rotateX(0.45).rotateY((k / 7) * Math.PI * 2).translate(sx, sy, 0);
+    const f = boiteRonde(0.5, 0.08, 3.2).translate(0, 0, 1.6).rotateX(0.45).rotateY((k / 7) * Math.PI * 2).translate(sx, sy, 0);
     parties.push({ geo: f, couleur: k % 2 ? 0x2f9e44 : 0x40c057 });
   }
   for (let k = 0; k < 3; k++)
-    parties.push({ geo: new THREE.IcosahedronGeometry(0.25, 0).translate(sx + Math.cos(k * 2) * 0.35, sy - 0.3, Math.sin(k * 2) * 0.35), couleur: 0x6b4423 });
+    parties.push({ geo: new THREE.IcosahedronGeometry(0.25, 1).translate(sx + Math.cos(k * 2) * 0.35, sy - 0.3, Math.sin(k * 2) * 0.35), couleur: 0x6b4423 });
   const palmiers = filtrer(positions(piste, rnd, 130, horsPiste + 1, 110), surTerre);
   groupe.add(instances(fusion(parties), matCouleurs(), palmiers.map((p) => ({ ...p, s: 0.9 + rnd() * 0.5, r: rnd() * 6 }))));
 
@@ -75,32 +75,32 @@ export function decorPlage(groupe, piste, rnd, horsPiste) {
   const couleurs = [0xff6b6b, 0xffd43b, 0x4dabf7, 0xf783ac, 0x51cf66, 0xff922b];
   const auHasard = () => couleurs[Math.floor(rnd() * couleurs.length)];
   const parasols = filtrer(positions(piste, rnd, 40, horsPiste, 50), surTerre).map((p) => ({ ...p, s: 1, r: rnd() * 6, couleur: auHasard() }));
-  groupe.add(instances(new THREE.CylinderGeometry(0.06, 0.06, 2.6, 5).translate(0, 1.3, 0), new THREE.MeshLambertMaterial({ color: 0xffffff }),
+  groupe.add(instances(new THREE.CylinderGeometry(0.06, 0.06, 2.6, 12).translate(0, 1.3, 0), new THREE.MeshLambertMaterial({ color: 0xffffff }),
     parasols.map(({ couleur, ...p }) => p)));
-  groupe.add(instances(new THREE.ConeGeometry(1.6, 0.7, 8).translate(0, 2.6, 0), new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), parasols));
-  groupe.add(instances(new THREE.BoxGeometry(1, 0.04, 1.8).translate(1.4, 0.03, 0), new THREE.MeshLambertMaterial({ color: 0xffffff }),
+  groupe.add(instances(new THREE.ConeGeometry(1.6, 0.7, 16).translate(0, 2.6, 0), new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: false }), parasols));
+  groupe.add(instances(boiteRonde(1, 0.04, 1.8).translate(1.4, 0.03, 0), new THREE.MeshLambertMaterial({ color: 0xffffff }),
     parasols.map((p) => ({ ...p, couleur: auHasard() }))));
 
   // ballons de plage
   const ballons = filtrer(positions(piste, rnd, 30, piste.demi + 2, 40), surTerre);
-  groupe.add(instances(new THREE.IcosahedronGeometry(0.45, 1).translate(0, 0.45, 0), new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }),
+  groupe.add(instances(new THREE.IcosahedronGeometry(0.45, 2).translate(0, 0.45, 0), new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: false }),
     ballons.map((p) => ({ ...p, s: 1, couleur: auHasard() }))));
 
   // châteaux de sable
   const sable = 0xe9c46a;
   const chateau = fusion([
-    { geo: new THREE.BoxGeometry(2, 0.9, 2).translate(0, 0.45, 0), couleur: sable },
+    { geo: boiteRonde(2, 0.9, 2).translate(0, 0.45, 0), couleur: sable },
     ...[[-0.8, -0.8], [0.8, -0.8], [-0.8, 0.8], [0.8, 0.8]].flatMap(([x, z]) => [
-      { geo: new THREE.CylinderGeometry(0.3, 0.35, 1.3, 6).translate(x, 0.65, z), couleur: sable },
-      { geo: new THREE.ConeGeometry(0.38, 0.5, 6).translate(x, 1.55, z), couleur: 0xd4a73f },
+      { geo: new THREE.CylinderGeometry(0.3, 0.35, 1.3, 12).translate(x, 0.65, z), couleur: sable },
+      { geo: new THREE.ConeGeometry(0.38, 0.5, 12).translate(x, 1.55, z), couleur: 0xd4a73f },
     ]),
-    { geo: new THREE.CylinderGeometry(0.02, 0.02, 1, 4).translate(0, 1.4, 0), couleur: 0x8b5a2b },
-    { geo: new THREE.BoxGeometry(0.02, 0.3, 0.4).translate(0, 1.75, 0.2), couleur: 0xff6b6b },
+    { geo: new THREE.CylinderGeometry(0.02, 0.02, 1, 12).translate(0, 1.4, 0), couleur: 0x8b5a2b },
+    { geo: boiteRonde(0.02, 0.3, 0.4).translate(0, 1.75, 0.2), couleur: 0xff6b6b },
   ]);
   groupe.add(instances(chateau, matCouleurs(), filtrer(positions(piste, rnd, 14, horsPiste, 45), surTerre).map((p) => ({ ...p, s: 1, r: rnd() * 6 }))));
 
   // rochers + dunes au loin, côté terre
-  groupe.add(instances(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ color: 0xa8a29e, flatShading: true }),
+  groupe.add(instances(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshLambertMaterial({ color: 0xa8a29e, flatShading: false }),
     filtrer(positions(piste, rnd, 40, horsPiste, 120), surTerre).map((p) => ({ ...p, s: 0.6 + rnd() * 1.4, sy: 0.6 + rnd() * 0.5, r: rnd() * 6 }))));
   const dunes = [];
   for (let i = 0; i < 12; i++) {
@@ -108,13 +108,13 @@ export function decorPlage(groupe, piste, rnd, horsPiste) {
     const r = piste.rayon + 220 + rnd() * 60;
     dunes.push({ x: piste.centre.x + Math.cos(a) * r, y: -6, z: piste.centre.z + Math.sin(a) * r, s: 70 + rnd() * 50, sy: 18 + rnd() * 15, couleur: [0xf3d98b, 0xeacb75, 0xf7e2a6][i % 3] });
   }
-  groupe.add(instances(new THREE.SphereGeometry(1, 14, 8), new THREE.MeshLambertMaterial({ color: 0xffffff }), dunes));
+  groupe.add(instances(new THREE.SphereGeometry(1, 22, 13), new THREE.MeshLambertMaterial({ color: 0xffffff }), dunes));
 
   // petits bateaux
   const bateau = fusion([
-    { geo: new THREE.BoxGeometry(1.4, 0.6, 3.6).translate(0, 0.3, 0), couleur: 0xffffff },
-    { geo: new THREE.BoxGeometry(1.42, 0.15, 3.62).translate(0, 0.5, 0), couleur: 0xe8322f },
-    { geo: new THREE.CylinderGeometry(0.06, 0.06, 3.5, 4).translate(0, 2.2, 0), couleur: 0x8b5a2b },
+    { geo: boiteRonde(1.4, 0.6, 3.6).translate(0, 0.3, 0), couleur: 0xffffff },
+    { geo: boiteRonde(1.42, 0.15, 3.62).translate(0, 0.5, 0), couleur: 0xe8322f },
+    { geo: new THREE.CylinderGeometry(0.06, 0.06, 3.5, 12).translate(0, 2.2, 0), couleur: 0x8b5a2b },
     { geo: new THREE.ConeGeometry(1.2, 3, 3).scale(0.15, 1, 1).translate(0, 2.4, -0.4), couleur: 0xfff3bf },
   ]);
   const bateaux = [];
@@ -145,32 +145,32 @@ export function decorPlage(groupe, piste, rnd, horsPiste) {
 export function decorNeige(groupe, piste, rnd, horsPiste) {
   // sapins enneigés
   const sapin = fusion([
-    { geo: new THREE.CylinderGeometry(0.3, 0.4, 1.4, 6).translate(0, 0.7, 0), couleur: 0x8b5a2b },
-    { geo: new THREE.ConeGeometry(2.0, 2.4, 7).translate(0, 2.2, 0), couleur: 0x2b8a3e },
-    { geo: new THREE.ConeGeometry(1.6, 2.1, 7).translate(0, 3.4, 0), couleur: 0x2f9e44 },
-    { geo: new THREE.ConeGeometry(1.15, 1.8, 7).translate(0, 4.5, 0), couleur: 0x37b24d },
-    { geo: new THREE.ConeGeometry(0.62, 0.8, 7).translate(0, 5.25, 0), couleur: 0xffffff },
-    { geo: new THREE.ConeGeometry(1.05, 0.5, 7).translate(0, 3.85, 0), couleur: 0xffffff },
-    { geo: new THREE.ConeGeometry(1.5, 0.45, 7).translate(0, 2.75, 0), couleur: 0xffffff },
+    { geo: new THREE.CylinderGeometry(0.3, 0.4, 1.4, 12).translate(0, 0.7, 0), couleur: 0x8b5a2b },
+    { geo: new THREE.ConeGeometry(2.0, 2.4, 14).translate(0, 2.2, 0), couleur: 0x2b8a3e },
+    { geo: new THREE.ConeGeometry(1.6, 2.1, 14).translate(0, 3.4, 0), couleur: 0x2f9e44 },
+    { geo: new THREE.ConeGeometry(1.15, 1.8, 14).translate(0, 4.5, 0), couleur: 0x37b24d },
+    { geo: new THREE.ConeGeometry(0.62, 0.8, 14).translate(0, 5.25, 0), couleur: 0xffffff },
+    { geo: new THREE.ConeGeometry(1.05, 0.5, 14).translate(0, 3.85, 0), couleur: 0xffffff },
+    { geo: new THREE.ConeGeometry(1.5, 0.45, 14).translate(0, 2.75, 0), couleur: 0xffffff },
   ]);
   groupe.add(instances(sapin, matCouleurs(), positions(piste, rnd, 240, horsPiste + 1, 140).map((p) => ({ ...p, s: 0.8 + rnd() * 0.8, r: rnd() * 6 }))));
 
   // bonshommes de neige, tournés vers la piste
   const noir = 0x222222, bois = 0x8b5a2b;
   const bonhomme = fusion([
-    { geo: new THREE.IcosahedronGeometry(0.9, 1).translate(0, 0.8, 0), couleur: 0xffffff },
-    { geo: new THREE.IcosahedronGeometry(0.65, 1).translate(0, 2.0, 0), couleur: 0xffffff },
-    { geo: new THREE.IcosahedronGeometry(0.45, 1).translate(0, 2.9, 0), couleur: 0xffffff },
-    { geo: new THREE.ConeGeometry(0.09, 0.5, 5).rotateX(Math.PI / 2).translate(0, 2.88, 0.62), couleur: 0xff922b },
-    { geo: new THREE.IcosahedronGeometry(0.06, 0).translate(-0.16, 3.02, 0.4), couleur: noir },
-    { geo: new THREE.IcosahedronGeometry(0.06, 0).translate(0.16, 3.02, 0.4), couleur: noir },
-    { geo: new THREE.IcosahedronGeometry(0.07, 0).translate(0, 2.2, 0.62), couleur: noir },
-    { geo: new THREE.IcosahedronGeometry(0.07, 0).translate(0, 1.9, 0.64), couleur: noir },
-    { geo: new THREE.CylinderGeometry(0.42, 0.42, 0.06, 10).translate(0, 3.25, 0), couleur: noir },
-    { geo: new THREE.CylinderGeometry(0.28, 0.28, 0.5, 10).translate(0, 3.5, 0), couleur: noir },
-    { geo: new THREE.CylinderGeometry(0.5, 0.5, 0.15, 10).translate(0, 2.5, 0), couleur: 0xe8322f },
-    { geo: new THREE.CylinderGeometry(0.04, 0.04, 1.2, 4).rotateZ(1.1).translate(0.9, 2.2, 0), couleur: bois },
-    { geo: new THREE.CylinderGeometry(0.04, 0.04, 1.2, 4).rotateZ(-1.1).translate(-0.9, 2.2, 0), couleur: bois },
+    { geo: new THREE.IcosahedronGeometry(0.9, 2).translate(0, 0.8, 0), couleur: 0xffffff },
+    { geo: new THREE.IcosahedronGeometry(0.65, 2).translate(0, 2.0, 0), couleur: 0xffffff },
+    { geo: new THREE.IcosahedronGeometry(0.45, 2).translate(0, 2.9, 0), couleur: 0xffffff },
+    { geo: new THREE.ConeGeometry(0.09, 0.5, 10).rotateX(Math.PI / 2).translate(0, 2.88, 0.62), couleur: 0xff922b },
+    { geo: new THREE.IcosahedronGeometry(0.06, 1).translate(-0.16, 3.02, 0.4), couleur: noir },
+    { geo: new THREE.IcosahedronGeometry(0.06, 1).translate(0.16, 3.02, 0.4), couleur: noir },
+    { geo: new THREE.IcosahedronGeometry(0.07, 1).translate(0, 2.2, 0.62), couleur: noir },
+    { geo: new THREE.IcosahedronGeometry(0.07, 1).translate(0, 1.9, 0.64), couleur: noir },
+    { geo: new THREE.CylinderGeometry(0.42, 0.42, 0.06, 20).translate(0, 3.25, 0), couleur: noir },
+    { geo: new THREE.CylinderGeometry(0.28, 0.28, 0.5, 20).translate(0, 3.5, 0), couleur: noir },
+    { geo: new THREE.CylinderGeometry(0.5, 0.5, 0.15, 20).translate(0, 2.5, 0), couleur: 0xe8322f },
+    { geo: new THREE.CylinderGeometry(0.04, 0.04, 1.2, 12).rotateZ(1.1).translate(0.9, 2.2, 0), couleur: bois },
+    { geo: new THREE.CylinderGeometry(0.04, 0.04, 1.2, 12).rotateZ(-1.1).translate(-0.9, 2.2, 0), couleur: bois },
   ]);
   const bonshommes = positions(piste, rnd, 26, piste.demi + 2.5, piste.demi + piste.marge - 1)
     .concat(positions(piste, rnd, 20, horsPiste, 40))
@@ -182,19 +182,19 @@ export function decorNeige(groupe, piste, rnd, horsPiste) {
 
   // igloos
   const igloo = fusion([
-    { geo: new THREE.SphereGeometry(2.4, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), couleur: 0xe7f5ff },
-    { geo: new THREE.CylinderGeometry(0.9, 0.9, 1.6, 10, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2).translate(0, 0, 2.3), couleur: 0xd0ebff },
+    { geo: new THREE.SphereGeometry(2.4, 19, 10, 0, Math.PI * 2, 0, Math.PI / 2), couleur: 0xe7f5ff },
+    { geo: new THREE.CylinderGeometry(0.9, 0.9, 1.6, 20, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2).translate(0, 0, 2.3), couleur: 0xd0ebff },
   ]);
   groupe.add(instances(igloo, matCouleurs(), positions(piste, rnd, 6, horsPiste + 3, 50).map((p) => ({ ...p, s: 1, r: rnd() * 6 }))));
 
   // rochers
-  groupe.add(instances(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ color: 0x9aa5b1, flatShading: true }),
+  groupe.add(instances(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshLambertMaterial({ color: 0x9aa5b1, flatShading: false }),
     positions(piste, rnd, 40, horsPiste, 100).map((p) => ({ ...p, s: 0.6 + rnd() * 1.2, sy: 0.5 + rnd() * 0.5, r: rnd() * 6 }))));
 
   // montagnes enneigées au loin
   const montagne = fusion([
-    { geo: new THREE.ConeGeometry(1, 1, 7).translate(0, 0.5, 0), couleur: 0x8d9db6 },
-    { geo: new THREE.ConeGeometry(0.42, 0.42, 7).translate(0, 0.795, 0), couleur: 0xffffff },
+    { geo: new THREE.ConeGeometry(1, 1, 14).translate(0, 0.5, 0), couleur: 0x8d9db6 },
+    { geo: new THREE.ConeGeometry(0.42, 0.42, 14).translate(0, 0.795, 0), couleur: 0xffffff },
   ]);
   const montagnes = [];
   for (let i = 0; i < 18; i++) {

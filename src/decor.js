@@ -1,4 +1,11 @@
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+
+/** Boîte aux coins arrondis (les pièces très fines restent des boîtes simples). */
+export function boiteRonde(l, h, p) {
+  const m = Math.min(l, h, p);
+  return m < 0.15 ? new THREE.BoxGeometry(l, h, p) : new RoundedBoxGeometry(l, h, p, 1, m * 0.3);
+}
 import { decorPlage, decorNeige } from "./decors-circuits.js";
 import { decorDino, decorJouets, decorConcert } from "./decors-themes.js";
 
@@ -88,16 +95,16 @@ function decorPrairie(groupe, piste, rnd, horsPiste) {
   const arbres = positions(piste, rnd, 220, horsPiste + 2, 140).map((p) => ({
     ...p, s: 0.9 + rnd() * 0.7, r: rnd() * 6, couleur: verts[Math.floor(rnd() * verts.length)],
   }));
-  const troncs = new THREE.CylinderGeometry(0.35, 0.55, 2.4, 6).translate(0, 1.2, 0);
-  const feuillage = new THREE.IcosahedronGeometry(2.3, 0).translate(0, 3.8, 0);
-  groupe.add(instances(troncs, new THREE.MeshLambertMaterial({ color: 0x8b5a2b, flatShading: true }),
+  const troncs = new THREE.CylinderGeometry(0.35, 0.55, 2.4, 12).translate(0, 1.2, 0);
+  const feuillage = new THREE.IcosahedronGeometry(2.3, 2).translate(0, 3.8, 0);
+  groupe.add(instances(troncs, new THREE.MeshLambertMaterial({ color: 0x8b5a2b, flatShading: false }),
     arbres.map(({ couleur, ...p }) => p)));
-  groupe.add(instances(feuillage, new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), arbres));
+  groupe.add(instances(feuillage, new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: false }), arbres));
 
   // buissons
   const buissons = positions(piste, rnd, 90, horsPiste, 90);
-  groupe.add(instances(new THREE.IcosahedronGeometry(1, 0).translate(0, 0.5, 0),
-    new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }),
+  groupe.add(instances(new THREE.IcosahedronGeometry(1, 2).translate(0, 0.5, 0),
+    new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: false }),
     buissons.map((p) => ({ ...p, s: 0.8 + rnd() * 0.9, sy: 0.7 + rnd() * 0.4, r: rnd() * 6, couleur: verts[Math.floor(rnd() * verts.length)] }))));
 
   // fleurs (aussi dans l'herbe entre la route et la barrière)
@@ -106,8 +113,8 @@ function decorPrairie(groupe, piste, rnd, horsPiste) {
     ...positions(piste, rnd, 260, piste.demi + 2, piste.demi + piste.marge - 0.5),
     ...positions(piste, rnd, 260, horsPiste, 60),
   ];
-  groupe.add(instances(new THREE.IcosahedronGeometry(0.28, 0).translate(0, 0.25, 0),
-    new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }),
+  groupe.add(instances(new THREE.IcosahedronGeometry(0.28, 1).translate(0, 0.25, 0),
+    new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: false }),
     fleurs.map((p) => ({ ...p, s: 0.8 + rnd() * 0.6, couleur: couleursFleurs[Math.floor(rnd() * couleursFleurs.length)] }))));
 
   // collines lointaines
@@ -118,7 +125,7 @@ function decorPrairie(groupe, piste, rnd, horsPiste) {
     const s = 70 + rnd() * 60;
     collines.push({ x: piste.centre.x + Math.cos(a) * r, y: -8, z: piste.centre.z + Math.sin(a) * r, s, sy: 25 + rnd() * 30, couleur: [0x5fb83f, 0x4ea836, 0x74c94f][i % 3] });
   }
-  groupe.add(instances(new THREE.SphereGeometry(1, 14, 8), new THREE.MeshLambertMaterial({ color: 0xffffff }), collines));
+  groupe.add(instances(new THREE.SphereGeometry(1, 22, 13), new THREE.MeshLambertMaterial({ color: 0xffffff }), collines));
 
   // nuages
   const nuages = [];
@@ -129,5 +136,5 @@ function decorPrairie(groupe, piste, rnd, horsPiste) {
     for (let k = 0; k < 4; k++)
       nuages.push({ x: x + (k - 1.5) * 9 + rnd() * 4, y: y + rnd() * 4, z: z + rnd() * 6, s: 7 + rnd() * 5, sy: 4 + rnd() * 3 });
   }
-  groupe.add(instances(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), nuages));
+  groupe.add(instances(new THREE.IcosahedronGeometry(1, 2), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), nuages));
 }

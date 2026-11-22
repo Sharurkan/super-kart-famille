@@ -88,39 +88,63 @@ export function construirePiste(def) {
     groupe.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })));
   }
 
-  // ---------- Barrières (murs bas, rebond doux) ----------
+  // ---------- Barrières (boudins arrondis, rebond doux) ----------
   {
-    const pos = [], col = [];
+    const pos = [], col = [], nor = [];
     const c0 = new THREE.Color(def.barriere[0]), c1 = new THREE.Color(def.barriere[1]);
-    const h = 0.9, ep = 0.7;
+    // profil en coupe : (décalage vers l'extérieur, hauteur), du pied intérieur au pied extérieur
+    const profil = [[0, 0], [0, 0.45]];
+    for (let k = 1; k <= 6; k++) {
+      const a = Math.PI - (k / 6) * Math.PI; // demi-cercle sur le dessus
+      profil.push([0.38 + Math.cos(a) * 0.38, 0.45 + Math.sin(a) * 0.42]);
+    }
+    profil.push([0.76, 0]);
+    // normale de chaque point du profil (moyenne des deux segments voisins)
+    const normales = profil.map((_, k) => {
+      let nl = 0, ny = 0;
+      for (const [u, v] of [[k - 1, k], [k, k + 1]]) {
+        if (u < 0 || v >= profil.length) continue;
+        const dl = profil[v][0] - profil[u][0], dy = profil[v][1] - profil[u][1];
+        const l = Math.hypot(dl, dy);
+        nl += dy / l;
+        ny += -dl / l;
+      }
+      const l = Math.hypot(nl, ny);
+      return [-nl / l, -ny / l];
+    });
+    const v = new THREE.Vector3(), w = new THREE.Vector3();
     for (const cote of [1, -1]) {
-      const oi = cote * (demi + marge), oe = cote * (demi + marge + ep);
+      const base = demi + marge;
       for (let k = 0; k < N; k++) {
         const i = k, j = (k + 1) % N;
-        const p = (o, n, y) => [cx[n] + nx[n] * o, y, cz[n] + nz[n] * o];
         const c = Math.floor(k / 3) % 2 ? c1 : c0;
-        const faces = [
-          // face intérieure
-          [p(oi, i, 0), p(oi, i, h), p(oi, j, 0)], [p(oi, i, h), p(oi, j, h), p(oi, j, 0)],
-          // dessus
-          [p(oi, i, h), p(oe, i, h), p(oi, j, h)], [p(oe, i, h), p(oe, j, h), p(oi, j, h)],
-          // face extérieure
-          [p(oe, i, 0), p(oe, j, 0), p(oe, i, h)], [p(oe, i, h), p(oe, j, 0), p(oe, j, h)],
-        ];
-        for (const t of faces) {
-          const tri = cote > 0 ? t : [t[0], t[2], t[1]];
-          for (const q of tri) {
-            pos.push(...q);
-            col.push(c.r, c.g, c.b);
+        const pt = (n, q) => [cx[n] + nx[n] * cote * (base + profil[q][0]), profil[q][1], cz[n] + nz[n] * cote * (base + profil[q][0])];
+        const nm = (n, q) => [nx[n] * cote * normales[q][0], normales[q][1], nz[n] * cote * normales[q][0]];
+        for (let q = 0; q < profil.length - 1; q++) {
+          const quad = [[i, q], [j, q], [i, q + 1], [j, q], [j, q + 1], [i, q + 1]];
+          for (let t = 0; t < 6; t += 3) {
+            let tri = quad.slice(t, t + 3);
+            // on oriente le triangle pour que sa face avant regarde dans le sens de la normale
+            const [A, B, C] = tri.map(([n, r]) => pt(n, r));
+            v.set(B[0] - A[0], B[1] - A[1], B[2] - A[2]);
+            w.set(C[0] - A[0], C[1] - A[1], C[2] - A[2]);
+            v.cross(w);
+            const N0 = nm(...tri[0]);
+            if (v.x * N0[0] + v.y * N0[1] + v.z * N0[2] < 0) tri = [tri[0], tri[2], tri[1]];
+            for (const [n, r] of tri) {
+              pos.push(...pt(n, r));
+              nor.push(...nm(n, r));
+              col.push(c.r, c.g, c.b);
+            }
           }
         }
       }
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
     g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
-    g.computeVertexNormals();
-    groupe.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+    groupe.add(new THREE.Mesh(g, new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 60, specular: 0x333333 })));
   }
 
   // ---------- Ligne d'arrivée + portique ----------
