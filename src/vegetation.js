@@ -25,10 +25,30 @@ export const TAILLES = {
   Rock_Medium_3: 3,
   Grass_Common_Tall: 1.3,
   Grass_Wispy_Tall: 1.4,
+  // arbres lointains (très simplifiés)
+  Pine_5: 16,
+  CommonTree_5: 12,
+  // petits détails au bord de la route
+  Mushroom_Common: 1.4, // champignons géants (le modèle est une petite touffe)
+  Flower_3_Group: 1.8,
+  Flower_4_Group: 2,
+  Clover_1: 0.6,
+  Clover_2: 0.65,
+  Pebble_Round_1: 0.22,
+  Pebble_Round_2: 0.22,
+  Pebble_Round_3: 0.22,
+  Pebble_Round_4: 0.22,
+  Pebble_Round_5: 0.22,
+  Pebble_Square_1: 0.28,
+  Pebble_Square_2: 0.28,
+  Pebble_Square_3: 0.28,
+  RockPath_Square_Small_2: 0.2,
+  RockPath_Round_Small_1: 0.16,
 };
 
-// Certaines plantes du pack ont des feuilles violettes : on fait tourner leur teinte vers le vert (degrés)
-const TEINTES = { Plant_1: -150, Plant_1_Big: -150, Plant_7: -150, Plant_7_Big: -150 };
+// Certaines plantes du pack ont des feuilles violettes : on fait tourner leur teinte vers le vert (degrés).
+// (Plant_1 a déjà des feuilles vertes : la tourner les rendait violettes.)
+const TEINTES = { Plant_7: -150, Plant_7_Big: -150 };
 const texturesTeintees = new Map();
 
 function teinter(texture, degres) {
@@ -98,7 +118,7 @@ function chargerModeles() {
 
 /**
  * Plante un modèle à plusieurs endroits (asynchrone).
- * liste : [{ x, z, s (échelle autour de 1), r (rotation) }]
+ * liste : [{ x, z, s (échelle autour de 1), r (rotation), sy (aplatissement, facultatif), y (enfoncement, facultatif) }]
  */
 export function planter(groupe, nom, liste) {
   if (!liste.length) return;
@@ -109,10 +129,12 @@ export function planter(groupe, nom, liste) {
     const o = new THREE.Object3D();
     for (const { geometrie, materiau } of pieces) {
       const im = new THREE.InstancedMesh(geometrie, materiau, liste.length);
+      im.name = nom;
       liste.forEach((p, i) => {
-        o.position.set(p.x, 0, p.z);
+        const e = h * (p.s ?? 1);
+        o.position.set(p.x, p.y ?? 0, p.z);
         o.rotation.set(0, p.r ?? 0, 0);
-        o.scale.setScalar(h * (p.s ?? 1));
+        o.scale.set(e, e * (p.sy ?? 1), e);
         o.updateMatrix();
         im.setMatrixAt(i, o.matrix);
       });

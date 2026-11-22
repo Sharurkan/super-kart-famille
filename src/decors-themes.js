@@ -41,32 +41,39 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
 
   // forêt jurassique : vrais modèles 3D (fougères géantes, plantes tropicales, arbres, rochers)
   const varie = (liste, s0, ds) => liste.map((p) => ({ ...p, s: s0 + rnd() * ds, r: rnd() * 6.3 }));
-  planter(groupe, "Fern_1", varie(positions(piste, rnd, 150, piste.demi + 2.6, 45), 0.7, 0.9));
+  planter(groupe, "Fern_1", varie(positions(piste, rnd, 130, piste.demi + 2.6, 45), 0.7, 0.9));
   planter(groupe, "Plant_1_Big", varie(positions(piste, rnd, 45, horsPiste, 60), 0.7, 0.7));
   planter(groupe, "Plant_7_Big", varie(positions(piste, rnd, 55, horsPiste, 70), 0.7, 0.7));
   planter(groupe, "Plant_1", varie(positions(piste, rnd, 70, piste.demi + 2.6, 40), 0.8, 0.6));
   planter(groupe, "Plant_7", varie(positions(piste, rnd, 70, piste.demi + 2.6, 40), 0.8, 0.6));
-  planter(groupe, "Grass_Common_Tall", varie(positions(piste, rnd, 80, piste.demi + 2.2, 35), 0.7, 0.8));
+  planter(groupe, "Grass_Common_Tall", varie(positions(piste, rnd, 50, piste.demi + 2.2, 35), 0.7, 0.8));
   planter(groupe, "CommonTree_1", varie(positions(piste, rnd, 10, horsPiste + 8, 95), 0.8, 0.5));
   planter(groupe, "CommonTree_2", varie(positions(piste, rnd, 10, horsPiste + 8, 95), 0.8, 0.5));
   planter(groupe, "CommonTree_3", varie(positions(piste, rnd, 10, horsPiste + 8, 95), 0.8, 0.5));
   planter(groupe, "Pine_1", varie(positions(piste, rnd, 8, horsPiste + 12, 110), 0.8, 0.5));
   planter(groupe, "Pine_2", varie(positions(piste, rnd, 8, horsPiste + 12, 110), 0.8, 0.5));
   planter(groupe, "DeadTree_1", varie(positions(piste, rnd, 3, horsPiste + 6, 80), 0.8, 0.4));
-  for (const r of ["Rock_Medium_1", "Rock_Medium_2", "Rock_Medium_3"]) planter(groupe, r, varie(positions(piste, rnd, 16, horsPiste, 100), 0.6, 1.2));
-  // arbres lointains très simples (cachés par la brume, presque gratuits)
-  const arbre = fusion([
-    { geo: new THREE.CylinderGeometry(0.35, 0.55, 6, 8).translate(0, 3, 0), couleur: 0x6b4a2b },
-    { geo: new THREE.IcosahedronGeometry(3.2, 1).translate(0, 7.5, 0), couleur: 0x3f8f3a },
-  ]);
-  groupe.add(instances(arbre, matCouleurs(), positions(piste, rnd, 90, 110, 170).map((p) => ({ ...p, s: 0.9 + rnd() * 0.7, r: rnd() * 6 }))));
+  for (const r of ["Rock_Medium_1", "Rock_Medium_2", "Rock_Medium_3"]) planter(groupe, r, varie(positions(piste, rnd, 16, horsPiste, 100), 0.6, 1.2).map((p) => ({ ...p, y: -0.15 })));
+  // arbres lointains : vrais sapins et feuillus très simplifiés (cachés par la brume)
+  planter(groupe, "Pine_5", varie(positions(piste, rnd, 34, 110, 170), 0.8, 0.6));
+  planter(groupe, "CommonTree_5", varie(positions(piste, rnd, 12, 110, 160), 0.8, 0.6));
 
-  // nids d'œufs
+  // petits détails au bord de la route : cailloux, trèfles, fleurs, champignons géants
+  const cailloux = ["Pebble_Round_1", "Pebble_Round_2", "Pebble_Round_3", "Pebble_Round_4", "Pebble_Round_5", "Pebble_Square_1", "Pebble_Square_2", "Pebble_Square_3"];
+  for (const c of cailloux) planter(groupe, c, varie(positions(piste, rnd, 8, piste.demi + 0.8, piste.demi + 5), 0.7, 0.8));
+  planter(groupe, "Clover_1", varie(positions(piste, rnd, 15, piste.demi + 1.5, 30), 0.8, 0.6));
+  planter(groupe, "Clover_2", varie(positions(piste, rnd, 15, piste.demi + 1.5, 30), 0.8, 0.6));
+  planter(groupe, "Flower_3_Group", varie(positions(piste, rnd, 16, piste.demi + 2, 35), 0.8, 0.5));
+  planter(groupe, "Flower_4_Group", varie(positions(piste, rnd, 8, piste.demi + 2, 35), 0.8, 0.5));
+  planter(groupe, "Mushroom_Common", varie(positions(piste, rnd, 12, horsPiste - 1, 40), 0.8, 0.7));
+  sentiers(groupe, piste, rnd);
+
+  // nids d'œufs (aucun modèle libre équivalent : formes simples, peu de triangles)
   const nid = fusion([
-    { geo: new THREE.TorusGeometry(1, 0.35, 5, 10).rotateX(Math.PI / 2).translate(0, 0.3, 0), couleur: 0x9c7a4a },
-    { geo: new THREE.SphereGeometry(0.45, 13, 10).scale(1, 1.35, 1).translate(-0.35, 0.6, 0), couleur: 0xfff3bf },
-    { geo: new THREE.SphereGeometry(0.45, 13, 10).scale(1, 1.35, 1).translate(0.35, 0.6, 0.15), couleur: 0xd3f9d8 },
-    { geo: new THREE.SphereGeometry(0.45, 13, 10).scale(1, 1.35, 1).translate(0, 0.6, -0.4), couleur: 0xffe8cc },
+    { geo: new THREE.TorusGeometry(1, 0.35, 5, 9).rotateX(Math.PI / 2).translate(0, 0.3, 0), couleur: 0x9c7a4a },
+    { geo: new THREE.SphereGeometry(0.45, 9, 7).scale(1, 1.35, 1).translate(-0.35, 0.6, 0), couleur: 0xfff3bf },
+    { geo: new THREE.SphereGeometry(0.45, 9, 7).scale(1, 1.35, 1).translate(0.35, 0.6, 0.15), couleur: 0xd3f9d8 },
+    { geo: new THREE.SphereGeometry(0.45, 9, 7).scale(1, 1.35, 1).translate(0, 0.6, -0.4), couleur: 0xffe8cc },
   ]);
   groupe.add(instances(nid, matCouleurs(), positions(piste, rnd, 14, horsPiste, 40).map((p) => ({ ...p, s: 1, r: rnd() * 6 }))));
 
@@ -626,6 +633,27 @@ async function diplodocus(piste, groupe, eviter) {
   groupe.userData.diplodocus = { indice: iTete, debut, nb, lateral: LAT, cou: objet.userData.cou, queue: objet.userData.queue, hauteurTete: objet.userData.hauteurTete, os: Object.keys(os) };
 }
 
+/** Petits sentiers de pierres plates qui partent du bord de la route vers la forêt. */
+function sentiers(groupe, piste, rnd) {
+  const carres = [], ronds = [];
+  for (let n = 0; n < 4; n++) {
+    const j = Math.floor(rnd() * piste.N);
+    const cote = rnd() < 0.5 ? 1 : -1;
+    const dx = piste.cx[(j + 1) % piste.N] - piste.cx[j], dz = piste.cz[(j + 1) % piste.N] - piste.cz[j]; // le long de la route
+    const lt = Math.hypot(dx, dz) || 1;
+    for (let k = 0; k < 5; k++) {
+      const lat = cote * (piste.demi + 1.4 + k * 1.35);
+      const zig = (k % 2 ? 0.35 : -0.35) + (rnd() - 0.5) * 0.3;
+      const x = piste.cx[j] + piste.nx[j] * lat + (dx / lt) * zig;
+      const z = piste.cz[j] + piste.nz[j] * lat + (dz / lt) * zig;
+      if (piste.distanceCentre(x, z) < piste.demi + 0.8) break; // on ne recoupe pas la route
+      (k % 2 ? ronds : carres).push({ x, z, s: 0.85 + rnd() * 0.3, r: rnd() * 6.3 });
+    }
+  }
+  planter(groupe, "RockPath_Square_Small_2", carres);
+  planter(groupe, "RockPath_Round_Small_1", ronds);
+}
+
 // ---------------------------------------------------------------------------
 /**
  * Grosse tête de T-rex (modèle 3D généré par IA puis coloré) posée en travers de la route.
@@ -647,18 +675,20 @@ function teteTrex(piste, groupe) {
   groupe.add(piste.ajouterTremplin({ debut: debutRampe, nb: nbRampe, lateral: 0, demiLargeur: DEMI_ETROIT, hauteur: 1.3 }));
   piste.teteTrex = { indice: i, recrache: (i + Math.round(26 / piste.pas)) % N };
 
-  // rochers le long de l'entonnoir (ce sont eux qui "font" les murs)
-  const rochers = [];
+  // rochers le long de l'entonnoir (ce sont eux qui "font" les murs) : vrais rochers du pack
+  // Quaternius, trois formes en alternance (les murs physiques viennent de piste.limiteLaterale)
+  const ROCHERS = ["Rock_Medium_1", "Rock_Medium_2", "Rock_Medium_3"];
+  const rochers = ROCHERS.map(() => []);
   const longueur = (i - debutEntonnoir + N) % N;
   for (let k = 0; k <= longueur; k += 2) {
     const j = (debutEntonnoir + k) % N;
     const lim = piste.limiteLaterale(j) + 1.6;
     if (lim > piste.demi + piste.marge) continue;
     for (const s of [1, -1]) {
-      rochers.push({ x: piste.cx[j] + piste.nx[j] * s * lim, z: piste.cz[j] + piste.nz[j] * s * lim, s: 1.3 + ((k * 7) % 5) * 0.12, sy: 1.1, r: k });
+      rochers[(k / 2 + (s > 0 ? 0 : 1)) % 3].push({ x: piste.cx[j] + piste.nx[j] * s * lim, z: piste.cz[j] + piste.nz[j] * s * lim, s: 0.9 + ((k * 7) % 5) * 0.08, y: -0.2, r: k * 1.7 + s });
     }
   }
-  groupe.add(instances(new THREE.IcosahedronGeometry(1.2, 1).translate(0, 0.6, 0), new THREE.MeshLambertMaterial({ color: 0x8d7b68, flatShading: true }), rochers));
+  ROCHERS.forEach((nom, n) => planter(groupe, nom, rochers[n]));
 
   // la tête : chargée en arrière-plan
   new GLTFLoader().loadAsync(import.meta.env.BASE_URL + "dinos/tete-trex.glb").then((gltf) => {
