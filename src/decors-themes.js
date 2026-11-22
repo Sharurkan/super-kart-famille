@@ -108,6 +108,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   nuages(groupe, piste, rnd);
   teteTrex(piste, groupe);
   diplodocus(piste, groupe); // après le T-rex : sa place ne change pas
+  decorLooping(piste, groupe);
 
   let t = 0;
   const o = new THREE.Object3D();
@@ -787,4 +788,11 @@ function teteTrex(piste, groupe) {
     piste.teteTrex.placer = placer;
     groupe.add(tete);
   });
+}
+
+// ---------------------------------------------------------------------------
+// Looping dans la ligne droite du départ (tout est dans looping.js)
+import { looping } from "./looping.js";
+function decorLooping(piste, groupe) {
+  looping(piste, groupe);
 }
