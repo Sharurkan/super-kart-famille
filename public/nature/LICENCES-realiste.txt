@@ -17,3 +17,13 @@ Volcan : "Volcano" par santhu (santhu48), CC-BY 4.0
 
 Modifications : maillages simplifiés, textures réduites et converties en WebP, occlusion
 mélangée à la couleur (volcan), canal alpha ajouté à la couleur (fougère).
+
+arbres.webp + arbres.json (imposteurs : outils/blender/impostors_rendre.py puis impostors_atlas.py)
+Modèles photographiés sous 8 angles avec Blender, tous Poly Haven, CC0 :
+  Fir Tree 01 (Rob Tuytel, Rico Cilliers)             https://polyhaven.com/a/fir_tree_01
+  Island Tree 01 (Rob Tuytel, Rico Cilliers)          https://polyhaven.com/a/island_tree_01
+  Jacaranda Tree (Rob Tuytel, Rico Cilliers)          https://polyhaven.com/a/jacaranda_tree
+  Tree Small 02 (Rico Cilliers)                       https://polyhaven.com/a/tree_small_02
+  Pachira Aquatica 01 (Rob Tuytel, Rico Cilliers)     https://polyhaven.com/a/pachira_aquatica_01
+  Calathea Orbifolia 01 (Rob Tuytel, Rico Cilliers)   https://polyhaven.com/a/calathea_orbifolia_01
+  Anthurium Botany 01 (Rob Tuytel, Rico Cilliers)     https://polyhaven.com/a/anthurium_botany_01
