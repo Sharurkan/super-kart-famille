@@ -208,11 +208,13 @@ function lancerCourse() {
         void v.offsetWidth;
         v.classList.add("actif");
       },
-      croc: () => {
+      // le noir de la gueule du T-rex : un cercle qui se referme sur le kart, puis se rouvre dedans
+      voile: (force, x, y) => {
         const v = document.getElementById("croc");
-        v.classList.remove("actif");
-        void v.offsetWidth;
-        v.classList.add("actif");
+        v.style.opacity = force > 0 ? 1 : 0;
+        v.style.setProperty("--r", `${((1 - force) * 115).toFixed(1)}%`);
+        v.style.setProperty("--x", `${x.toFixed(1)}%`);
+        v.style.setProperty("--y", `${y.toFixed(1)}%`);
       },
       podium: montrerPodium,
     }
