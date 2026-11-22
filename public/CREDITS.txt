@@ -36,6 +36,11 @@ Parasaurolophus — ichigo15
 Brachiosaurus_AR card — Zinaida.Kovrova
   https://sketchfab.com/3d-models/brachiosaurus-ar-card-751b32784e1a4ddd9c95aa88d7640ab7
   Fichiers : dinos/sauropode-troupeau.glb, dinos/sauropode-troupeau-loin.glb
+Mosasaurus — Alexey Zaika (lexazaixa25)
+  https://sketchfab.com/3d-models/mosasaurus-684754a2ad8c46aca0634326b53d1f04
+  This work is based on "Mosasaurus" (https://sketchfab.com/3d-models/mosasaurus-684754a2ad8c46aca0634326b53d1f04)
+  by Alexey Zaika (https://sketchfab.com/lexazaixa25) licensed under CC-BY-4.0
+  Fichier : aquarium/mosasaure.glb (simplifié, texture réduite, un seul cycle de nage)
 
 Sago Palm, Game ready, Low poly, baked textures. — Valykor
   https://sketchfab.com/3d-models/sago-palm-game-ready-low-poly-baked-textures-85c86658224a4fe493f0f35091635555

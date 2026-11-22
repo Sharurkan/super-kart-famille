@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { clone as skeletonClone } from "three/addons/utils/SkeletonUtils.js";
 import { planter } from "./vegetation.js";
 import { audio } from "./audio.js";
 
@@ -459,10 +461,92 @@ export function installerAquarium(groupe, piste) {
 }
 
 // ---------------------------------------------------------------------------
-// Mosasaure provisoire (formes simples). Pour le remplacer par un vrai modèle GLB animé,
-// il suffit que creerMosasaure() renvoie { objet, nager(dt, vitesse) } avec la tête vers +z
-// (~17 m de long, échelle comprise) : l'aquarium ne fait que le déplacer et l'orienter.
+// Mosasaure : creerMosasaure() renvoie { objet, ouverture, nager(dt, vitesse) } avec la tête
+// vers +z (~19 m de long, échelle comprise) : l'aquarium ne fait que le déplacer et l'orienter.
+//
+// Vrai modèle : public/aquarium/mosasaure.glb, d'après « Mosasaurus » d'Alexey Zaika
+// (https://sketchfab.com/3d-models/mosasaurus-684754a2ad8c46aca0634326b53d1f04, CC-BY 4.0),
+// préparé par outils/blender/preparer_mosasaure.sh (≈5 600 triangles, un cycle de nage « Nager »
+// qui boucle, mâchoire = os Bone.026). En attendant le chargement (ou s'il échoue), c'est le
+// mosasaure en formes simples ci-dessous qui nage.
+const LONGUEUR_MOSASAURE = 19; // m
+let modeleMosasaure = null; // promesse partagée : le GLB n'est chargé qu'une fois
+
 export function creerMosasaure() {
+  const provisoire = creerMosasaureFormes();
+  const objet = new THREE.Group();
+  objet.name = "mosasaure";
+  objet.add(provisoire.objet);
+
+  let mixer = null, machoire = null, reposMachoire = null, pisteMachoire = false, ouv = 0.12;
+  const qOuv = new THREE.Quaternion(), AXE_MACHOIRE = new THREE.Vector3(1, 0, 0);
+
+  modeleMosasaure ??= new GLTFLoader().loadAsync(import.meta.env.BASE_URL + "aquarium/mosasaure.glb");
+  modeleMosasaure
+    .then((gltf) => {
+      const scene = skeletonClone(gltf.scene);
+      const clip = gltf.animations.find((c) => c.name === "Nager") ?? gltf.animations[0];
+      mixer = new THREE.AnimationMixer(scene);
+      if (clip) mixer.clipAction(clip).play();
+      mixer.update(0);
+      scene.traverse((o) => {
+        if (/^Bone\.?026/.test(o.name)) machoire = o;
+        if (!o.isMesh) return;
+        const ancien = o.material;
+        // sans brouillard (bien visible de loin dans l'eau bleue) ; un peu de lumière propre
+        // pour que la peau reste lisible sous l'eau, où le soleil est faible
+        o.material = new THREE.MeshLambertMaterial({ map: ancien.map, emissive: 0xffffff, emissiveMap: ancien.map, emissiveIntensity: 0.12, side: THREE.DoubleSide, fog: false });
+        ancien.dispose();
+        o.frustumCulled = false; // la nage sort de la boîte de la pose de repos
+      });
+      if (machoire) {
+        reposMachoire = machoire.quaternion.clone();
+        pisteMachoire = clip?.tracks.some((t) => t.name === machoire.name + ".quaternion") ?? false;
+      }
+      // orientation et taille mesurées sur la pose de nage : de la queue vers la tête = +z
+      const pivot = new THREE.Group();
+      pivot.add(scene);
+      pivot.updateMatrixWorld(true);
+      scene.traverse((o) => o.isSkinnedMesh && o.skeleton.update());
+      const boite = new THREE.Box3().setFromObject(scene, true);
+      const taille = boite.getSize(new THREE.Vector3());
+      const centre = boite.getCenter(new THREE.Vector3());
+      const tete = machoire ? machoire.getWorldPosition(new THREE.Vector3()) : centre.clone().add(new THREE.Vector3(0, 0, 1));
+      const axe = new THREE.Vector3();
+      axe.setComponent([taille.x, taille.y, taille.z].indexOf(Math.max(taille.x, taille.y, taille.z)), 1);
+      if (axe.dot(tete.clone().sub(centre)) < 0) axe.negate();
+      scene.position.sub(centre);
+      pivot.quaternion.setFromUnitVectors(axe, new THREE.Vector3(0, 0, 1));
+      pivot.scale.setScalar(LONGUEUR_MOSASAURE / Math.max(taille.x, taille.y, taille.z));
+      objet.remove(provisoire.objet);
+      objet.add(pivot);
+    })
+    .catch((e) => console.warn("Mosasaure GLB indisponible, on garde le provisoire :", e));
+
+  const moso = {
+    objet,
+    ouverture: 0.12,
+    /** Avance le cycle de nage (fréquence de la queue selon la vitesse en m/s). */
+    nager(dt, vitesse = 7) {
+      if (!mixer) {
+        provisoire.ouverture = moso.ouverture;
+        provisoire.nager(dt, vitesse);
+        return;
+      }
+      // cycle de 1,33 s : ~2 s à 7 m/s, ~1,3 s à 14 m/s (comme le provisoire)
+      mixer.update(dt * (1.6 + vitesse * 0.22) / 4.71);
+      ouv += (moso.ouverture - ouv) * Math.min(1, dt * 3);
+      if (machoire) {
+        if (!pisteMachoire) machoire.quaternion.copy(reposMachoire);
+        machoire.quaternion.multiply(qOuv.setFromAxisAngle(AXE_MACHOIRE, ouv * 0.8));
+      }
+    },
+  };
+  return moso;
+}
+
+/** Mosasaure provisoire en formes simples (repli tant que le GLB n'est pas chargé). */
+function creerMosasaureFormes() {
   const temps = { value: 0 }, ouverture = { value: 0.12 };
   const DOS = new THREE.Color(0x2e4659), VENTRE = new THREE.Color(0xe6dfcc), BOUCHE = new THREE.Color(0xc2565e);
   const parties = [];
