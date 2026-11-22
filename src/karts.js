@@ -334,7 +334,7 @@ export function creerKart(type = "classique") {
   const corps = new THREE.Group();
   groupe.add(corps);
   const roues = { avant: [], arriere: [] };
-  const info = CONSTRUCTEURS[type]({ corps, roues });
+  const info = (CONSTRUCTEURS[type] ?? CONSTRUCTEURS.classique)({ corps, roues });
   const siege = new THREE.Group();
   siege.position.set(...info.siege);
   corps.add(siege);

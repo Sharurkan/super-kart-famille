@@ -10,6 +10,12 @@ import { reglages, sauver } from "./reglages.js";
 import { audio } from "./audio.js";
 import { REGLAGES } from "./physique.js";
 
+// Choix mémorisés qui n'existent plus (kart, perso ou circuit retiré) : on revient au premier.
+if (!KARTS.includes(reglages.kart)) reglages.kart = KARTS[0];
+if (!PERSONNAGES.includes(reglages.perso)) reglages.perso = PERSONNAGES[0];
+if (!(reglages.circuit in CIRCUITS)) reglages.circuit = "prairie";
+sauver();
+
 // ---------- Rendu ----------
 const renderer = new THREE.WebGLRenderer({ antialias: devicePixelRatio < 2, powerPreference: "high-performance" });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
