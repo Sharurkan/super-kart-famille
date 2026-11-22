@@ -3,10 +3,10 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 
 // Vrais dinosaures animés.
-//  - pack gratuit CC0 de Quaternius (convertis en GLB), couleurs unies ;
-//  - Velociraptor et Triceratops plus réalistes, texturés (Sketchfab, CC-BY 4.0, voir les crédits
-//    du projet), préparés avec outils/blender/preparer_raptor_trice.sh. En cas d'échec de
-//    chargement, on retombe sur la version Quaternius.
+//  - modèles réalistes texturés (Sketchfab, CC-BY 4.0, voir public/CREDITS.txt) :
+//    Velociraptor et Triceratops (outils/blender/preparer_raptor_trice.sh), T-rex, Stégosaure,
+//    Parasaurolophus et sauropode du troupeau (outils/blender/preparer_dinos3.sh) ;
+//  - en cas d'échec de chargement, on retombe sur le pack gratuit CC0 de Quaternius (couleurs unies).
 // hauteur : taille voulue en mètres (le kart fait ~2,5 m de long).
 export const DINOS = {
   Trex: { hauteur: 7 },
@@ -20,9 +20,24 @@ export const DINOS = {
 // Modèles texturés (ils regardent vers +Z comme les Quaternius) : fichier, force de la normal map,
 // os racine dont la marche avance (on la remet sur place pour qu'ils ne dérivent pas).
 // Les animations y portent directement les noms du jeu : Idle, Walk, Run, Attack, Eat.
+// alias : animation absente du modèle → [animation jouée à la place, vitesse].
+// hauteur : remplace celle de DINOS (proportions différentes du modèle Quaternius).
+// mesure : instant de « Idle » où l'on mesure la hauteur (le sauropode broute au début, cou baissé).
+// loin : version allégée pour les troupeaux éloignés (creerDino(nom, { detail: "loin" })).
+// Triangles par dinosaure : T-rex 5 968 (loin 2 028), Stégosaure 5 949 (1 982),
+// Parasaurolophus 3 933 (1 515), sauropode 6 908 (2 301), Velociraptor 2 712, Triceratops 2 211.
 const TEXTURES = {
   Velociraptor: { fichier: "velociraptor-pbr.glb", relief: 1 },
   Triceratops: { fichier: "triceratops-lp.glb", relief: 0.25, racine: "Root001_01" },
+  // « Randaling T- Rex, animated! » (quander) : Idle, Run, Attack (rugit), Eat (tête au sol, fabriqué) ;
+  // marche = course ralentie
+  Trex: { fichier: "trex-realiste.glb", loin: "trex-realiste-loin.glb", relief: 1, alias: { Walk: ["Run", 0.55] } },
+  // « PBR Stegasaurus (Animated) » (Ferocious Industries) : Idle, Walk, Run, Attack (rugit), Eat
+  Stegosaurus: { fichier: "stego-realiste.glb", loin: "stego-realiste-loin.glb", relief: 1 },
+  // « Parasaurolophus » (ichigo15) : Idle (à quatre pattes), Attack (se dresse), Eat (broute, fabriqué) ; pas de marche
+  Parasaurolophus: { fichier: "para-realiste.glb", loin: "para-realiste-loin.glb", relief: 0.8, hauteur: 3.6, alias: { Walk: ["Idle", 1], Run: ["Idle", 1] } },
+  // « Brachiosaurus_AR card » (Zinaida.Kovrova) : Idle (broute, lève le cou, regarde autour), Eat (broute) ; pas de marche
+  Apatosaurus: { fichier: "sauropode-troupeau.glb", loin: "sauropode-troupeau-loin.glb", relief: 0.8, hauteur: 8, mesure: 7, alias: { Attack: ["Idle", 1], Walk: ["Idle", 1], Run: ["Idle", 1] } },
 };
 
 // Marche « sur place » : sur l'os racine, la composante de position qui varie le plus
@@ -70,12 +85,12 @@ function preparer(gltf, texture) {
     if (texture.racine) for (const clip of gltf.animations) if (clip.name === "Walk" || clip.name === "Run") surPlace(clip, texture.racine);
     // mesuré dans la pose « Idle » (la pose de repos de ces modèles n'est pas debout sur le sol)
     const idle = gltf.animations.find((a) => a.name === "Idle");
-    if (idle) new THREE.AnimationMixer(gltf.scene).clipAction(idle).play().getMixer().setTime(0);
+    if (idle) new THREE.AnimationMixer(gltf.scene).clipAction(idle).play().getMixer().setTime(texture.mesure ?? 0);
   }
   scene.updateMatrixWorld(true);
   scene.traverse((o) => { if (o.isSkinnedMesh) { o.skeleton.update(); o.computeBoundingBox(); } });
   const boite = new THREE.Box3().setFromObject(scene);
-  return { scene, animations: gltf.animations, hauteur: boite.max.y - boite.min.y, sol: boite.min.y };
+  return { scene, animations: gltf.animations, hauteur: boite.max.y - boite.min.y, sol: boite.min.y, texture };
 }
 
 function charger(nom) {
@@ -92,25 +107,43 @@ function charger(nom) {
   return modeles.get(nom);
 }
 
+// Version « loin » (troupeaux éloignés) : ~3 fois moins de triangles, Idle / Eat / Walk seulement
+// (les autres animations retombent sur Idle), sans normal map. Sinon, la version normale.
+function chargerLoin(nom) {
+  const texture = TEXTURES[nom];
+  if (!texture?.loin) return charger(nom);
+  const cle = nom + "-loin";
+  if (!modeles.has(cle)) {
+    modeles.set(cle, chargeur.loadAsync(url(texture.loin)).then((g) => preparer(g, texture)).catch((e) => {
+      console.warn(`dino ${nom} : version « loin » indisponible`, e);
+      return charger(nom);
+    }));
+  }
+  return modeles.get(cle);
+}
+
 /**
  * Crée un dinosaure animé (asynchrone).
- * options : { hauteur, animation: "Idle" | "Walk" | "Attack" | ..., vitesse }
+ * options : { hauteur, animation: "Idle" | "Walk" | "Attack" | "Eat" | ..., vitesse, detail: "loin" }
  * Renvoie { objet, mixer } ; le mixer doit être mis à jour à chaque image.
  */
 export async function creerDino(nom, options = {}) {
-  const m = await charger(nom);
+  const m = await (options.detail === "loin" ? chargerLoin(nom) : charger(nom));
   const objet = SkeletonUtils.clone(m.scene);
-  const echelle = (options.hauteur ?? DINOS[nom].hauteur) / m.hauteur;
+  const echelle = (options.hauteur ?? m.texture?.hauteur ?? DINOS[nom].hauteur) / m.hauteur;
   const racine = new THREE.Group();
   objet.scale.setScalar(echelle);
   objet.position.y = -m.sol * echelle;
   racine.add(objet);
   const mixer = new THREE.AnimationMixer(objet);
-  const anim = options.animation ?? "Idle";
+  let anim = options.animation ?? "Idle", vitesse = 1;
   // Quaternius : « Armature|Triceratops_Idle » ; modèles texturés : « Idle »
-  const clip = m.animations.find((a) => a.name === anim || a.name.endsWith("_" + anim)) ?? m.animations[0];
+  const trouver = (n) => m.animations.find((a) => a.name === n || a.name.endsWith("_" + n));
+  const alias = m.texture?.alias?.[anim];
+  if (!trouver(anim) && alias) [anim, vitesse] = alias;
+  const clip = trouver(anim) ?? trouver("Idle") ?? m.animations[0];
   const action = mixer.clipAction(clip);
-  action.timeScale = options.vitesse ?? 1;
+  action.timeScale = (options.vitesse ?? 1) * vitesse;
   action.play();
   mixer.setTime(Math.random() * clip.duration); // pas tous synchronisés
   return { objet: racine, mixer, clips: m.animations };
