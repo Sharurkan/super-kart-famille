@@ -1078,3 +1078,18 @@ button:active {
   0% { opacity: 1; }
   100% { opacity: 0; }
 }
+
+/* petit lien discret vers les crédits des modèles 3D (écran des options) */
+.lien-credits {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  color: #fff;
+  font: italic bold 18px/30px Georgia, serif;
+  text-align: center;
+  text-decoration: none;
+}

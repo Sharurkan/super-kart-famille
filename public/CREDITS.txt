@@ -1,5 +1,37 @@
-Super Kart Famille — crédits des modèles 3D
+Super Kart Famille — crédits des modèles 3D et textures
 
-Pteranodon (Animated) — DogexorRexUwU (oscar.lopez.riviello, https://sketchfab.com/oscar.lopez.riviello) — CC-BY 4.0 (http://creativecommons.org/licenses/by/4.0/) — https://sketchfab.com/3d-models/pteranodon-animated-7d7683df41d1405283f160e81a5dff1b
-  Fichier : dinos/pteranodon.glb (allégé : maillage décimé, texture réduite, deux extraits de l'animation de vol).
-  This work is based on "Pteranodon (Animated)" (https://sketchfab.com/3d-models/pteranodon-animated-7d7683df41d1405283f160e81a5dff1b) by DogexorRexUwU (https://sketchfab.com/oscar.lopez.riviello) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+Tous les modèles ont été modifiés pour le jeu (maillages simplifiés, textures réduites,
+animations raccourcies). CC-BY 4.0 : http://creativecommons.org/licenses/by/4.0/
+
+--- CC-BY 4.0 (attribution obligatoire) ---
+
+Pteranodon (Animated) — DogexorRexUwU (oscar.lopez.riviello)
+  https://sketchfab.com/3d-models/pteranodon-animated-7d7683df41d1405283f160e81a5dff1b
+  Fichier : dinos/pteranodon.glb
+
+PBR Velociraptor (Animated) — Ferocious Industries (ferociousindustries.matthias)
+  https://sketchfab.com/3d-models/pbr-velociraptor-animated-8f1744af7b0847a2aabe3df90be802f0
+  Fichier : dinos/velociraptor-pbr.glb
+
+Triceratops - dinosaur - low poly — Legendary Claws (Weverton.Oliveira)
+  https://sketchfab.com/3d-models/triceratops-dinosaur-low-poly-d5658e6fe77d40bda00d59bb840cd856
+  Fichier : dinos/triceratops-lp.glb
+
+Sago Palm, Game ready, Low poly, baked textures. — Valykor
+  https://sketchfab.com/3d-models/sago-palm-game-ready-low-poly-baked-textures-85c86658224a4fe493f0f35091635555
+  Fichier : nature/realiste.glb (cycas)
+
+Volcano — santhu (santhu48)
+  https://sketchfab.com/3d-models/volcano-e89153ec4f324e688f78d001dd3f7e3c
+  Fichier : nature/volcan.glb
+
+--- CC0 (domaine public, merci quand même !) ---
+
+Quaternius — Ultimate Animated Dinosaur Pack, Stylized Nature MegaKit (dinos/, nature/jurassique.glb)
+Kenney — Food Kit (bonbons/bonbons.glb) : https://kenney.nl/assets/food-kit
+Poly Haven — rock_moss_set_01, rock_07, fern_02, forrest_ground_01, grass_path_2,
+  brown_mud_leaves_01 (nature/realiste.glb, textures/) : https://polyhaven.com
+
+--- Générés pour ce jeu ---
+
+Tête de T-rex et diplodocus : images Gemini, maillages Hunyuan3D, textures projetées avec Blender.
