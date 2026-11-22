@@ -42,6 +42,7 @@ export class KartPhysique {
     this.pente = 0; // inclinaison avant/arrière (visuel)
     this.sauts = 0; // compteurs pour les sons
     this.atterrissages = 0;
+    this.boost = 0; // > 0 : petit coup d'accélérateur (bonbon)
     this.facteur = 1; // multiplicateur de vitesse max (adversaires : difficulté + élastique)
   }
 
@@ -85,7 +86,8 @@ export class KartPhysique {
     if (this.clignote > 0) this.clignote -= dt;
 
     // --- vitesse ---
-    const vMax = (this.dansHerbe ? r.vitesseHerbe : r.vitesseMax) * this.facteur;
+    if (this.boost > 0) this.boost -= dt;
+    const vMax = (this.dansHerbe ? r.vitesseHerbe : r.vitesseMax) * this.facteur * (this.boost > 0 ? 1.15 : 1);
     if (entree.frein) {
       if (this.vitesse > 0.5) this.vitesse -= r.freinage * dt;
       else this.vitesse = Math.max(this.vitesse - r.acceleration * 0.6 * dt, -r.vitesseArriere);

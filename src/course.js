@@ -10,6 +10,7 @@ import { CameraPoursuite } from "./camera.js";
 import { Particules } from "./particules.js";
 import { liberer } from "./liberer.js";
 import { audio } from "./audio.js";
+import { Bonbons } from "./bonbons.js";
 
 export const TOURS = 3;
 const DUREE_DECOMPTE = 3.6; // 3, 2, 1, Partez !
@@ -100,6 +101,8 @@ export class Course {
     this.joueur = this.karts.find((k) => k.joueur);
     this.phys = this.joueur.phys; // raccourci (tests)
 
+    this.bonbons = new Bonbons(scene, this.piste);
+    this.nbBonbons = 0;
     this.cam = new CameraPoursuite(this.camera);
     this.particules = new Particules(scene);
     this.tourAffiche = 0;
@@ -200,6 +203,16 @@ export class Course {
       this.quand.classement?.(this.classement());
     }
 
+    // --- bonbons (seul l'enfant les ramasse) ---
+    const pris = this.bonbons.update(dt, this.etat === "course" ? joueur.phys : null);
+    if (pris > 0) {
+      this.nbBonbons += pris;
+      joueur.phys.boost = 0.8;
+      joueur.phys.vitesse += 1.5;
+      audio.bonbon();
+      this.quand.bonbons?.(this.nbBonbons);
+    }
+
     // --- visuels ---
     for (const k of this.karts) this.majVisuel(k, dt);
     this.particulesJoueur();
@@ -294,6 +307,7 @@ export class Course {
   liberer() {
     liberer(this.piste.groupe, true);
     liberer(this.decor.groupe, true);
+    this.bonbons.mesh.material.dispose(); // la forme du bonbon est partagée, on la garde
     for (const k of this.karts) liberer(k.modele.groupe);
   }
 }

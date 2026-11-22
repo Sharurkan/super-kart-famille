@@ -149,6 +149,13 @@ function lancerCourse() {
         if (n > 1) audio.tour();
       },
       classement: majClassement,
+      bonbons: (n) => {
+        const el = $("#nb-bonbons");
+        el.textContent = n;
+        el.parentElement.classList.remove("saute");
+        void el.offsetWidth; // relance l'animation
+        el.parentElement.classList.add("saute");
+      },
       arrivee: annoncerArrivee,
       podium: montrerPodium,
     }
@@ -156,6 +163,7 @@ function lancerCourse() {
   vue = course;
   enPause = false;
   preparerClassement(course.karts);
+  $("#nb-bonbons").textContent = 0;
   derniereposition = 0;
   document.body.classList.toggle("mode-auto", reglages.modeAuto);
   redimensionner();
@@ -217,6 +225,7 @@ function montrerPodium(liste) {
   annonce.classList.add("cache");
   const place = liste.findIndex((k) => k.joueur) + 1;
   const joueur = liste[place - 1];
+  $("#total-bonbons-nb").textContent = course.nbBonbons;
   quitterCourse();
   vitrine.montrerPodium(liste.map((k) => ({ perso: k.perso, type: k.type })));
   audio.fanfare();

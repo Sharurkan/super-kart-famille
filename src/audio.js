@@ -210,6 +210,17 @@ class MoteurAudio {
     this.bruitFiltre(this.ctx.currentTime, 0.18, 0.5, "lowpass", 400, this.busEffets);
   }
 
+  /** "Pling" joyeux quand on ramasse un bonbon (de plus en plus aigu si on enchaîne). */
+  bonbon() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.serie = t - (this.dernierBonbon ?? 0) < 0.6 ? Math.min((this.serie ?? 0) + 1, 6) : 0;
+    this.dernierBonbon = t;
+    const base = 84 + [0, 2, 4, 5, 7, 9, 11][this.serie];
+    this.effet(freq(base), 0.12, "square", 0.3, t);
+    this.effet(freq(base + 7), 0.2, "triangle", 0.35, t + 0.06);
+  }
+
   /** "Boing" qui monte quand on s'envole d'un tremplin. */
   saut() {
     if (!this.ctx) return;

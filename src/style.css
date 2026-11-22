@@ -744,3 +744,30 @@ button:active {
 .carte-circuit {
   max-width: none;
 }
+
+/* =================== Bonbons =================== */
+.badge.bonbons {
+  position: absolute;
+  top: calc(clamp(40px, 11vh, 90px) + 18px);
+  left: 0;
+  padding: 2px 16px 2px 8px;
+  font-size: clamp(30px, 8vh, 60px);
+  line-height: 1.1;
+}
+
+.icone-bonbon {
+  font-size: 0.85em;
+}
+
+.badge.bonbons.saute {
+  animation: pop 0.3s ease-out;
+}
+
+#ecran-fin .badge.bonbons.total {
+  top: auto;
+  left: 50%;
+  translate: -50% 0;
+  bottom: max(24px, 5vh);
+  font-size: clamp(40px, 11vh, 80px);
+  padding: 4px 26px 4px 14px;
+}
