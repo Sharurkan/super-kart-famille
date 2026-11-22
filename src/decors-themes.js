@@ -4,6 +4,7 @@ import { fusion, matCouleurs, nuages } from "./decors-circuits.js";
 import { creerDino } from "./dinos.js";
 import { planter, gardeRoute } from "./vegetation.js";
 import { installerRavin } from "./ptero.js";
+import { installerAquarium } from "./aquarium.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 // Décors des circuits Dinosaures, Jouets et Concert pop.
@@ -121,6 +122,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   diplodocus(piste, groupe); // après le T-rex : sa place ne change pas
   decorLooping(piste, groupe);
   ravinDuPtero(groupe, piste); // ligne droite du haut : le vide et le ptérodactyle
+  mixers.push(aquariumGeant(groupe, piste)); // virages du bas : tunnel sous un aquarium géant (son update(dt) suit les mixers)
   // les nids passent par la garde une fois le ravin, le diplodocus et le T-rex installés
   groupe.add(instances(nid, matCouleurs(), nids.flatMap((p) => {
     const ok = garde.verifier(p.x, p.z, 1.4, 1.2, "nid");
@@ -1043,4 +1045,13 @@ function decorLooping(piste, groupe) {
  */
 function ravinDuPtero(groupe, piste) {
   installerRavin(groupe, piste, { debut: Math.round(piste.N * 0.207) });
+}
+
+/**
+ * Aquarium géant (aquarium.js) dans les virages du bas (0,73 → 0,79 du tour) : la route passe
+ * dans un tunnel de verre sous un grand bassin où nage un mosasaure. Son emprise au sol est
+ * dans piste.zonesDecor (la forêt n'y plante rien). Renvoie { update(dt) }.
+ */
+function aquariumGeant(groupe, piste) {
+  return installerAquarium(groupe, piste);
 }
