@@ -191,7 +191,7 @@ export class Course {
       if (joueur.phys.atterrissages !== this.atterrissagesVus) {
         this.atterrissagesVus = joueur.phys.atterrissages;
         audio.atterrissage();
-        for (let n = 0; n < 4; n++) this.particules.emettre(joueur.phys.x, 0.3, joueur.phys.z, 0xffffff, 1, 0.5);
+        for (let n = 0; n < 4; n++) this.particules.emettre(joueur.phys.x, joueur.phys.y + 0.3, joueur.phys.z, 0xffffff, 1, 0.5);
       }
       if (joueur.phys.chocs !== this.chocsVus) {
         this.chocsVus = joueur.phys.chocs;

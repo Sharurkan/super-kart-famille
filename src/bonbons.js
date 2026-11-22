@@ -36,7 +36,12 @@ export class Bonbons {
       const motif = motifs[n++ % motifs.length];
       for (let k = 0; k < 5; k++) {
         const i = (debut + k * Math.round(3 / P.pas)) % P.N;
-        const lat = motif(k);
+        let lat = motif(k);
+        // pas dans le ventre du diplodocus : on passe de l'autre côté de la route (zone évitée par l'IA)
+        for (const z of P.zonesIA) {
+          const dedans = (i - z.debut + P.N) % P.N <= (z.fin - z.debut + P.N) % P.N;
+          if (dedans && Math.abs(lat - z.lateral) < z.demi + 1) lat = z.lateral + (z.lateral > 0 ? -1 : 1) * (z.demi + 1.5);
+        }
         this.liste.push({ x: P.cx[i] + P.nx[i] * lat, y: 1.1, z: P.cz[i] + P.nz[i] * lat, attente: 0 });
       }
     }
