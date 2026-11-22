@@ -21,6 +21,22 @@ Triceratops - dinosaur - low poly — Legendary Claws (Weverton.Oliveira)
   https://sketchfab.com/3d-models/triceratops-dinosaur-low-poly-d5658e6fe77d40bda00d59bb840cd856
   Fichier : dinos/triceratops-lp.glb
 
+Randaling T- Rex, animated! — quander
+  https://sketchfab.com/3d-models/randaling-t-rex-animated-09a3632365344a99bb88e3dd0b684c89
+  Fichiers : dinos/trex-realiste.glb, dinos/trex-realiste-loin.glb
+
+PBR Stegasaurus (Animated) — Ferocious Industries (ferociousindustries.matthias)
+  https://sketchfab.com/3d-models/pbr-stegasaurus-animated-ec254ea1554941fe8a131f62db0faf3d
+  Fichiers : dinos/stego-realiste.glb, dinos/stego-realiste-loin.glb
+
+Parasaurolophus — ichigo15
+  https://sketchfab.com/3d-models/parasaurolophus-39aaa00e8c6d46928f8ac1fb6114ca52
+  Fichiers : dinos/para-realiste.glb, dinos/para-realiste-loin.glb
+
+Brachiosaurus_AR card — Zinaida.Kovrova
+  https://sketchfab.com/3d-models/brachiosaurus-ar-card-751b32784e1a4ddd9c95aa88d7640ab7
+  Fichiers : dinos/sauropode-troupeau.glb, dinos/sauropode-troupeau-loin.glb
+
 Sago Palm, Game ready, Low poly, baked textures. — Valykor
   https://sketchfab.com/3d-models/sago-palm-game-ready-low-poly-baked-textures-85c86658224a4fe493f0f35091635555
   Fichier : nature/realiste.glb (cycas)
