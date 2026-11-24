@@ -5,122 +5,174 @@ import { fusion, matCouleurs } from "./decors-circuits.js";
 import { instances } from "./decor.js";
 import { audio } from "./audio.js";
 
-// Looping vertical (comme sur un circuit de petites voitures) dans la ligne droite du départ.
-// La route est resserrée par un entonnoir de plots, puis chaque kart (enfant et adversaires)
-// est pris "sur des rails" : il monte, passe la tête en bas, redescend et repart un peu plus vite.
-// Entrée et sortie se superposeraient : comme un vrai looping, le ruban se décale sur le côté
-// pendant le tour (entrée au milieu de la route, sortie sur le côté droit).
+// Série de 4 loopings verticaux enchaînés (comme sur un circuit de petites voitures) dans la
+// ligne droite du départ. La route est resserrée par un entonnoir de plots, puis chaque kart
+// (enfant et adversaires) est pris "sur des rails" : boucle 1, un petit bout de route, boucle 2,
+// etc., sans jamais être lâché entre deux boucles. Il repart un peu plus vite à la fin.
 //
-// Repère local à la base du looping : s le long de la route, l en travers (> 0 = gauche),
+// Entrée et sortie d'un looping se superposeraient : comme un vrai looping, le ruban se décale
+// sur le côté pendant le tour. Les boucles alternent : gauche → droite, droite → gauche...
+// (deux voies à ±VOIE du milieu de la route), donc la série reste dans la largeur de la route.
+// Les boucles sont espacées d'un peu plus que leur diamètre : la descente d'une boucle ne
+// touche pas la montée de la suivante.
+//
+// Repère local à la base de chaque boucle : s le long de la route, l en travers (> 0 = gauche),
 // y vers le haut. Le ruban suit s = R sin θ, y = R (1 - cos θ), θ de 0 à 2π.
+// Entre les boucles, le chemin suit la vraie route (elle tourne un tout petit peu ici).
 
 const R = 8; // rayon (16 m de diamètre)
+const NB = 4; // nombre de boucles
+const ESPACE = 19.5; // mètres entre les bases de deux boucles (> 2R : elles ne se touchent pas)
+const BASE1 = 62; // échantillon de la base de la 1re boucle (~71 m après la ligne)
 const DEMI = 3.2; // demi-largeur du ruban
 const BANDE = 0.7; // largeur des bandes de bordure
-const L_ENTREE = 0; // décalage du ruban à l'entrée
-const L_SORTIE = -7.2; // ... et à la sortie (assez pour que les deux voies ne se touchent pas)
-const ELAN = 10; // mètres avant la base où le kart prend les rails
-const SORTIE = 12; // mètres après la base où on lui rend la main
+const VOIE = 3.6; // décalage des deux voies (entrée de la 1re boucle à gauche, sortie à droite...)
+const ELAN = 14; // mètres avant la 1re base où le kart prend les rails
+const SORTIE = 12; // mètres après la dernière base où on lui rend la main
 const DECALAGE_MAX = 2; // écart du kart au milieu du ruban (deux karts côte à côte restent côte à côte)
-const SERRE_SORTIE = 0.4; // à la sortie, l'écart est réduit (le kart reste sur la route)
 const V_MIN = 16; // jamais trop lent la tête en bas
+const V_MIN_SUIVEUR = 7; // un kart qui en suit un autre sur les rails ralentit, mais pas plus que ça
+const ECART_SUIVI = 4.5; // distance gardée derrière un kart sur la même voie
 const BONUS = 3; // petit coup de vitesse à la sortie
-const FRACTION_BASE = 0.059; // position de la base sur le tour (~76 m après la ligne)
 const DEMI_ENTONNOIR = 3.6;
 const DIST_CAM = 7.2, HAUT_CAM = 3.1; // comme CameraPoursuite (pas de saut de caméra à la sortie)
+const DEUX_PI = Math.PI * 2;
 
 const lisse = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
-const latRuban = (th) => L_ENTREE + (L_SORTIE - L_ENTREE) * lisse(th / (Math.PI * 2));
+/** Voie d'entrée de la boucle n (+VOIE à gauche, -VOIE à droite) ; elle sort sur l'autre. */
+const voieEntree = (n) => (n % 2 ? -VOIE : VOIE);
+/** Décalage latéral du ruban de la boucle n à l'angle θ. */
+const latBoucle = (n, th) => voieEntree(n) * (1 - 2 * lisse(th / DEUX_PI));
 
-/** Construit le looping (décor + passage scripté) ; à appeler depuis decorDino. */
+// longueur parcourue sur une boucle en fonction de θ (le décalage latéral allonge un peu le chemin ;
+// la même pour toutes les boucles, qui ne diffèrent que par le sens du décalage)
+const K = 720;
+const LONGUEURS = new Float32Array(K + 1);
+for (let k = 1, prec = [0, VOIE, 0]; k <= K; k++) {
+  const th = (k / K) * DEUX_PI;
+  const p = [R * Math.sin(th), latBoucle(0, th), R * (1 - Math.cos(th))];
+  LONGUEURS[k] = LONGUEURS[k - 1] + Math.hypot(p[0] - prec[0], p[1] - prec[1], p[2] - prec[2]);
+  prec = p;
+}
+const LB = LONGUEURS[K]; // longueur d'une boucle
+function thetaDe(g) {
+  let a = 0, b = K;
+  while (b - a > 1) {
+    const m = (a + b) >> 1;
+    if (LONGUEURS[m] <= g) a = m;
+    else b = m;
+  }
+  const f = (g - LONGUEURS[a]) / Math.max(1e-6, LONGUEURS[b] - LONGUEURS[a]);
+  return ((a + f) / K) * DEUX_PI;
+}
+
+/** Construit la série de loopings (décor + passage scripté) ; à appeler depuis decorDino. */
 export function looping(piste, groupe) {
   const N = piste.N, pas = piste.pas;
-  const iB = Math.round(N * FRACTION_BASE);
-  const iPrise = iB - Math.round(ELAN / pas) + 1; // premier échantillon où l'on prend les rails
-  const iRendu = (iB + Math.round(SORTIE / pas)) % N;
-  const O = new THREE.Vector3(piste.cx[iB], 0, piste.cz[iB]);
-  const T = new THREE.Vector3(piste.tx[iB], 0, piste.tz[iB]);
-  const Nl = new THREE.Vector3(piste.nx[iB], 0, piste.nz[iB]);
-  const angleBase = Math.atan2(T.x, T.z);
-  const monde = (s, l, y, cible = new THREE.Vector3()) =>
-    cible.set(O.x + T.x * s + Nl.x * l, y, O.z + T.z * s + Nl.z * l);
+  const ecart = Math.round(ESPACE / pas);
+  const bases = Array.from({ length: NB }, (_, n) => (BASE1 + n * ecart) % N);
+  const iPrise = (bases[0] - Math.round(ELAN / pas) + N) % N; // premier échantillon où l'on prend les rails
+  const iRendu = (bases[NB - 1] + Math.round(SORTIE / pas)) % N;
+
+  // repère local de chaque boucle (origine au milieu de la route, à la base)
+  const boucles = bases.map((i) => ({
+    i,
+    O: new THREE.Vector3(piste.cx[i], 0, piste.cz[i]),
+    T: new THREE.Vector3(piste.tx[i], 0, piste.tz[i]),
+    Nl: new THREE.Vector3(piste.nx[i], 0, piste.nz[i]),
+  }));
+  // abscisse (le long du chemin, g = 0 à la base de la 1re boucle) du début de chaque boucle
+  const G = [0];
+  for (let n = 1; n < NB; n++) G.push(G[n - 1] + LB + ((bases[n] - bases[n - 1] + N) % N) * pas);
+  const fin = G[NB - 1] + LB + SORTIE; // on rend la main ici
 
   // entonnoir : la route se resserre jusqu'à la prise des rails (pas sur la grille de départ)
   const debutEntonnoir = Math.max(25, iPrise - Math.round(40 / pas));
   piste.retrecissements.push({ debut: debutEntonnoir, fin: iPrise + 2, demiMin: DEMI_ENTONNOIR });
 
-  // table θ -> longueur parcourue sur le looping (le décalage latéral allonge un peu le chemin)
-  const K = 720;
-  const longueurs = new Float32Array(K + 1);
-  {
-    let prec = null;
-    for (let k = 0; k <= K; k++) {
-      const th = (k / K) * Math.PI * 2;
-      const p = [R * Math.sin(th), latRuban(th), R * (1 - Math.cos(th))];
-      longueurs[k] = prec ? longueurs[k - 1] + Math.hypot(p[0] - prec[0], p[1] - prec[1], p[2] - prec[2]) : 0;
-      prec = p;
-    }
+  /** Point de la route à l'échantillon (fractionnaire) iF, décalé de l en travers et y en hauteur. */
+  function route(iF, l, y, cible) {
+    const i0 = Math.floor(iF), f = iF - i0;
+    const a = ((i0 % N) + N) % N, b = (a + 1) % N;
+    const nx = piste.nx[a] + (piste.nx[b] - piste.nx[a]) * f, nz = piste.nz[a] + (piste.nz[b] - piste.nz[a]) * f;
+    return cible.set(piste.cx[a] + (piste.cx[b] - piste.cx[a]) * f + nx * l, y, piste.cz[a] + (piste.cz[b] - piste.cz[a]) * f + nz * l);
   }
-  const LB = longueurs[K];
-  const thetaDe = (g) => {
-    let a = 0, b = K;
-    while (b - a > 1) {
-      const m = (a + b) >> 1;
-      if (longueurs[m] <= g) a = m;
-      else b = m;
-    }
-    const f = (g - longueurs[a]) / Math.max(1e-6, longueurs[b] - longueurs[a]);
-    return ((a + f) / K) * Math.PI * 2;
-  };
+  /** Point dans le repère de la boucle n. */
+  function dansBoucle(n, s, l, y, cible) {
+    const B = boucles[n];
+    return cible.set(B.O.x + B.T.x * s + B.Nl.x * l, y, B.O.z + B.T.z * s + B.Nl.z * l);
+  }
 
   /**
-   * Point du chemin d'un kart à la distance g (g = 0 au pied du looping, LB en haut... de retour en bas),
-   * en repère local : { s, l, y, us, uy } (us, uy : direction "vers le haut du kart").
+   * Point du chemin à la distance g, décalé de dec en travers ; ch = { g0, l0 } pour l'arrivée
+   * en douceur sur les rails (null pour le ruban du décor). Remplit out : P, U (haut du kart),
+   * plus iF (échantillon de route le plus proche), n (boucle, ou -1 sur la route), th, l.
    */
-  function local(g, ch) {
+  function point(g, dec, ch, out) {
     if (g < 0) {
-      const t = ch.s0 < 0 ? lisse((g - ch.s0) / -ch.s0) : 1;
-      return { s: g, l: ch.l0 + (L_ENTREE + ch.dec - ch.l0) * t, y: 0, us: 0, uy: 1, th: 0 };
+      // approche : on glisse doucement de là où l'on était vers la voie d'entrée
+      const t = ch && ch.g0 < 0 ? lisse((g - ch.g0) / -ch.g0) : 1;
+      const l = ch ? ch.l0 + (voieEntree(0) + dec - ch.l0) * t : voieEntree(0) + dec;
+      out.iF = bases[0] + g / pas;
+      route(out.iF, l, 0, out.P);
+      out.U.set(0, 1, 0);
+      out.n = -1;
+      out.th = 0;
+      out.l = l;
+      return out;
     }
-    if (g <= LB) {
-      const th = thetaDe(g);
-      // l'écart au milieu se resserre pendant le tour : à la sortie on reste sur le bitume
-      const dec = ch.dec * (1 - (1 - SERRE_SORTIE) * lisse(th / (Math.PI * 2)));
-      return { s: R * Math.sin(th), l: latRuban(th) + dec, y: R * (1 - Math.cos(th)), us: -Math.sin(th), uy: Math.cos(th), th };
+    let n = NB - 1;
+    while (n > 0 && g < G[n]) n--;
+    const gl = g - G[n];
+    if (gl <= LB) {
+      const th = thetaDe(gl), B = boucles[n];
+      const l = latBoucle(n, th) + dec;
+      dansBoucle(n, R * Math.sin(th), l, R * (1 - Math.cos(th)), out.P);
+      out.U.set(-B.T.x * Math.sin(th), Math.cos(th), -B.T.z * Math.sin(th));
+      out.iF = bases[n];
+      out.n = n;
+      out.th = th;
+      out.l = l;
+      return out;
     }
-    return { s: g - LB, l: L_SORTIE + ch.dec * SERRE_SORTIE, y: 0, us: 0, uy: 1, th: Math.PI * 2 };
-  }
-  const va = new THREE.Vector3(), vb = new THREE.Vector3();
-  /** Position et repère (avant F, haut U, gauche X) dans le monde. */
-  function repere(g, ch, out) {
-    const p = local(g, ch);
-    monde(p.s, p.l, p.y, out.P);
-    const a = local(g - 0.05, ch), b = local(g + 0.05, ch);
-    monde(b.s, b.l, b.y, vb).sub(monde(a.s, a.l, a.y, va));
-    out.F.copy(vb).normalize();
-    out.U.set(T.x * p.us, p.uy, T.z * p.us);
-    out.X.crossVectors(out.U, out.F).normalize();
-    out.U.crossVectors(out.F, out.X);
-    out.l = p.l;
-    out.th = p.th;
+    // route entre deux boucles (ou après la dernière), sur la voie de sortie
+    const l = -voieEntree(n) + dec;
+    out.iF = bases[n] + (gl - LB) / pas;
+    route(out.iF, l, 0, out.P);
+    out.U.set(0, 1, 0);
+    out.n = -1;
+    out.th = DEUX_PI;
+    out.l = l;
     return out;
   }
-  const nouveauRepere = () => ({ P: new THREE.Vector3(), F: new THREE.Vector3(), U: new THREE.Vector3(), X: new THREE.Vector3(), l: 0, th: 0 });
+  const nouveauPoint = () => ({ P: new THREE.Vector3(), U: new THREE.Vector3(), F: new THREE.Vector3(), X: new THREE.Vector3(), iF: 0, n: -1, th: 0, l: 0 });
+  const pa = nouveauPoint(), pb = nouveauPoint();
+  /** Position et repère complet (avant F, haut U, gauche X) dans le monde. */
+  function repere(g, dec, ch, out) {
+    point(g, dec, ch, out);
+    point(g - 0.05, dec, ch, pa);
+    point(g + 0.05, dec, ch, pb);
+    out.F.subVectors(pb.P, pa.P).normalize();
+    out.X.crossVectors(out.U, out.F).normalize();
+    out.U.crossVectors(out.F, out.X);
+    return out;
+  }
 
   // ---------- passage scripté ----------
-  const fin = LB + SORTIE;
   const m4 = new THREE.Matrix4();
-  const camRep = nouveauRepere(), viseRep = nouveauRepere();
-  const vLoc = new THREE.Vector3(), vMonde = new THREE.Vector3();
+  const camRep = nouveauPoint(), viseRep = nouveauPoint();
+  const vLoc = new THREE.Vector3(), vMonde = new THREE.Vector3(), vPos = new THREE.Vector3(), vVise = new THREE.Vector3(), vHaut = new THREE.Vector3();
+  const qCam = new THREE.Quaternion();
   const fausseCamera = { position: new THREE.Vector3() };
   const couleursEtincelles = [0xffd43b, 0xff6b6b, 0x4dabf7, 0x69db7c, 0xf783ac, 0xffffff];
+  const surRails = new Set(); // karts en train de faire la série : { g, dec, v }
 
   piste.passages.push({
     verifier(k, course) {
       const ph = k.phys;
       if (ph.piste !== piste || k.loopingTour === ph.tour) return null;
       const d = (ph.indice - iPrise + N) % N;
-      if (d > iRendu - iPrise - 2) return null;
+      if (d > ((iRendu - iPrise + N) % N) - 2) return null;
       k.loopingTour = ph.tour;
       return scenario(k, course);
     },
@@ -128,15 +180,26 @@ export function looping(piste, groupe) {
 
   function scenario(k, course) {
     const ph = k.phys;
-    const dx = ph.x - O.x, dz = ph.z - O.z;
-    const s0 = Math.min(-1, dx * T.x + dz * T.z);
-    const l0 = dx * Nl.x + dz * Nl.z;
-    const ch = { s0, l0, dec: THREE.MathUtils.clamp(l0 * 0.55, -DECALAGE_MAX, DECALAGE_MAX) };
+    // où en est le kart sur le chemin ? (normalement juste avant la 1re boucle)
+    const B0 = boucles[0];
+    const dx = ph.x - B0.O.x, dz = ph.z - B0.O.z;
+    let g0 = Math.min(-1, dx * B0.T.x + dz * B0.T.z);
+    const l0 = dx * B0.Nl.x + dz * B0.Nl.z;
+    const dec = THREE.MathUtils.clamp(l0 * 0.55, -DECALAGE_MAX, DECALAGE_MAX);
+    const avance = (ph.indice - bases[0] + N) % N;
+    if (avance < N / 2) {
+      // (cas rare : remis sur la piste au milieu de la série) on repart à la sortie de la boucle passée
+      let n = 0;
+      while (n < NB - 1 && (bases[n + 1] - bases[0] + N) % N <= avance) n++;
+      g0 = G[n] + LB;
+    }
+    const ch = { g0, l0 };
     const vBase = Math.max(V_MIN, ph.vitesse);
+    const moi = { g: g0, dec, v: vBase };
+    surRails.add(moi);
     const indice0 = ph.indice;
-    const rep = nouveauRepere();
-    let g = s0;
-    let dansBoucle = false;
+    const rep = nouveauPoint();
+    let boucle = -1; // dernière boucle commencée (pour le "fiouuu")
     let cam = null; // { decalage, q0, t } pour le fondu d'entrée de la caméra
 
     // le pilote 2D reste debout par rapport au kart (même la tête en bas)
@@ -152,7 +215,7 @@ export function looping(piste, groupe) {
     };
 
     const placer = () => {
-      repere(g, ch, rep);
+      repere(moi.g, dec, ch, rep);
       ph.x = rep.P.x;
       ph.z = rep.P.z;
       ph.y = ph.ySol = rep.P.y; // ySol = y : l'ombre reste collée au ruban
@@ -161,10 +224,10 @@ export function looping(piste, groupe) {
       ph.pente = 0;
       ph.direction = 0;
       ph.dansHerbe = false;
-      ph.angle = angleBase;
+      ph.angle = piste.angleA(((Math.round(rep.iF) % N) + N) % N);
       ph.lateral = rep.l;
       // indice qui avance régulièrement de la prise des rails à la sortie (classement, mini-carte)
-      const t = THREE.MathUtils.clamp((g - s0) / (fin - s0), 0, 1);
+      const t = THREE.MathUtils.clamp((moi.g - g0) / (fin - g0), 0, 1);
       ph.indice = (indice0 + Math.round(t * ((iRendu - indice0 + N) % N))) % N;
     };
     placer();
@@ -172,23 +235,31 @@ export function looping(piste, groupe) {
     return {
       etape(dt) {
         const hauteur = rep.P.y / (2 * R);
-        const v = vBase * (1 - 0.12 * hauteur); // un peu moins vite en haut
-        ph.vitesse = v;
-        g += v * dt;
-        if (!dansBoucle && g >= 0) {
-          dansBoucle = true;
-          if (k.joueur) whoosh();
+        let v = vBase * (1 - 0.12 * hauteur); // un peu moins vite en haut
+        // pas de kart qui traverse celui de devant sur la même voie : on reste derrière lui
+        for (const o of surRails) {
+          if (o === moi || Math.abs(o.dec - dec) > 1.7) continue;
+          const e = o.g - moi.g;
+          if (e > 0 && e < ECART_SUIVI) v = Math.min(v, Math.max(V_MIN_SUIVEUR, o.v - (ECART_SUIVI - e) * 2));
         }
-        if (g < fin) {
+        moi.v = ph.vitesse = v;
+        moi.g += v * dt;
+        if (moi.g < fin) {
           placer();
-          if (k.joueur && g > 0 && g < LB && Math.random() < 0.7) {
+          if (rep.n > boucle) {
+            boucle = rep.n;
+            if (k.joueur) whoosh();
+          }
+          if (k.joueur && rep.n >= 0 && Math.random() < 0.7) {
             const c = couleursEtincelles[Math.floor(Math.random() * couleursEtincelles.length)];
             course.particules.emettre(rep.P.x + rep.U.x * 0.6, rep.P.y + rep.U.y * 0.6, rep.P.z + rep.U.z * 0.6, c, 0.6, 0.45);
           }
           return false;
         }
         // fin : on rend le kart à la physique, sur la route, un peu plus vite
+        moi.g = fin;
         placer();
+        surRails.delete(moi);
         const loc = piste.localiser(ph.x, ph.z, ph.indice);
         ph.indice = loc.indice;
         ph.lateral = loc.lateral;
@@ -213,28 +284,28 @@ export function looping(piste, groupe) {
       },
 
       visuel(kart) {
-        const G = kart.modele.groupe;
-        G.position.copy(rep.P); // (les chocs entre karts ne le décalent pas des rails)
+        const Gr = kart.modele.groupe;
+        Gr.position.copy(rep.P); // (les chocs entre karts ne le décalent pas des rails)
         m4.makeBasis(rep.X, rep.U, rep.F);
-        G.quaternion.setFromRotationMatrix(m4);
+        Gr.quaternion.setFromRotationMatrix(m4);
       },
 
-      /** Caméra de poursuite qui fait le tour avec le kart (elle roule sur le même chemin, derrière lui). */
+      /** Caméra de poursuite qui fait les boucles avec le kart (elle roule sur le même chemin, derrière lui). */
       camera(cp, dt) {
         const camera = cp.camera;
-        repere(g - DIST_CAM, ch, camRep);
-        repere(g + 3, ch, viseRep);
-        const pos = camRep.P.clone().addScaledVector(camRep.U, HAUT_CAM);
-        const vise = viseRep.P.clone().addScaledVector(viseRep.U, 1.1);
-        const haut = camRep.U.clone().add(rep.U).normalize();
-        m4.lookAt(pos, vise, haut);
-        const q = new THREE.Quaternion().setFromRotationMatrix(m4);
-        if (!cam) cam = { decalage: camera.position.clone().sub(pos), q0: camera.quaternion.clone(), t: 0 };
+        repere(moi.g - DIST_CAM, dec, ch, camRep);
+        repere(moi.g + 3, dec, ch, viseRep);
+        vPos.copy(camRep.P).addScaledVector(camRep.U, HAUT_CAM);
+        vVise.copy(viseRep.P).addScaledVector(viseRep.U, 1.1);
+        vHaut.copy(camRep.U).add(rep.U).normalize();
+        m4.lookAt(vPos, vVise, vHaut);
+        qCam.setFromRotationMatrix(m4);
+        if (!cam) cam = { decalage: camera.position.clone().sub(vPos), q0: camera.quaternion.clone(), t: 0 };
         cam.t += dt;
         const e = lisse(cam.t / 0.45);
-        camera.position.copy(pos).addScaledVector(cam.decalage, 1 - e);
-        camera.quaternion.slerpQuaternions(cam.q0, q, e);
-        camera.up.copy(haut);
+        camera.position.copy(vPos).addScaledVector(cam.decalage, 1 - e);
+        camera.quaternion.slerpQuaternions(cam.q0, qCam, e);
+        camera.up.copy(vHaut);
         return true;
       },
     };
@@ -244,43 +315,56 @@ export function looping(piste, groupe) {
   const decor = new THREE.Group();
   decor.name = "looping";
   groupe.add(decor);
-  construireRuban(decor, monde);
-  construireStructure(decor, monde);
-  plotsEntonnoir(decor, piste, debutEntonnoir, iPrise, iB);
+  construireRuban(decor, point, G, fin);
+  construireStructures(decor, dansBoucle);
+  plotsEntonnoir(decor, piste, debutEntonnoir, iPrise);
 
-  piste.looping = { indice: iB, prise: iPrise, rendu: iRendu, rayon: R, longueur: LB, debutEntonnoir };
+  piste.looping = { indice: bases[0], bases, prise: iPrise, rendu: iRendu, rayon: R, longueur: fin, debutEntonnoir };
 }
 
-/** Le ruban de route : bitume au milieu, bandes orange et crème, dessous et rebords colorés. */
-function construireRuban(groupe, monde) {
+/**
+ * Le ruban de route de toute la série (un seul maillage bitume + un seul maillage de couleurs) :
+ * bitume au milieu, bandes orange et crème, dessous et rebords colorés.
+ */
+function construireRuban(groupe, point, G, fin) {
   const def = CIRCUITS.dino;
   const cB0 = new THREE.Color(def.bordure[0]), cB1 = new THREE.Color(def.bordure[1]);
   const cMur0 = new THREE.Color(0xe8322f), cMur1 = new THREE.Color(0xffd43b);
   const cDessous = new THREE.Color(0x4dabf7);
   const EP = 0.35; // épaisseur du ruban
 
-  // sections : (s, l, y, us, uy, hauteur des rebords)
+  // sections le long du chemin (milieu du ruban) : P, X (en travers), U (haut du ruban), rebords
   const sections = [];
-  const nIn = 10, nLoop = 80, nOut = 12;
-  for (let k = 0; k < nIn; k++) {
-    const s = -ELAN + (ELAN * k) / nIn;
-    sections.push({ s, l: L_ENTREE, y: 0.05, us: 0, uy: 1, mur: 0 });
-  }
-  for (let k = 0; k <= nLoop; k++) {
-    const th = (k / nLoop) * Math.PI * 2;
-    const mur = 0.75 * lisse(Math.min(th, Math.PI * 2 - th) / 0.5);
-    sections.push({ s: R * Math.sin(th), l: latRuban(th), y: R * (1 - Math.cos(th)) + 0.05, us: -Math.sin(th), uy: Math.cos(th), mur });
-  }
-  for (let k = 1; k <= nOut; k++) sections.push({ s: (SORTIE * k) / nOut, l: L_SORTIE, y: 0.05, us: 0, uy: 1, mur: 0 });
-
-  // point du ruban à un décalage a (en travers) et b (vers le haut du ruban)
-  const T = new THREE.Vector3();
-  const pt = (sec, a, b) => {
-    const p = monde(sec.s, sec.l + a, sec.y);
-    // direction "haut" du ruban en monde : us le long de la route, uy vertical
-    monde(sec.us, 0, 0, T).sub(monde(0, 0, 0));
-    return [p.x + T.x * b, p.y + sec.uy * b, p.z + T.z * b];
+  const ajouter = (g) => {
+    const p = { P: new THREE.Vector3(), U: new THREE.Vector3(), iF: 0, n: -1, th: 0, l: 0 };
+    point(g, 0, null, p);
+    const a = { P: new THREE.Vector3(), U: new THREE.Vector3() }, b = { P: new THREE.Vector3(), U: new THREE.Vector3() };
+    point(g - 0.05, 0, null, a);
+    point(g + 0.05, 0, null, b);
+    const F = b.P.sub(a.P).normalize();
+    const X = new THREE.Vector3().crossVectors(p.U, F).normalize();
+    const mur = p.n >= 0 ? 0.75 * lisse(Math.min(p.th, DEUX_PI - p.th) / 0.5) : 0;
+    p.P.y += 0.05;
+    sections.push({ P: p.P, U: p.U, X, mur, air: p.P.y > 0.35 });
   };
+  const pasRoute = 2, nBoucle = 80;
+  /** Sections régulières de a (compris) à b (non compris), au plus tous les pasMax mètres. */
+  const troncon = (a, b, pasMax) => {
+    const nb = Math.max(1, Math.ceil((b - a) / pasMax - 1e-6));
+    for (let k = 0; k < nb; k++) ajouter(a + ((b - a) * k) / nb);
+  };
+  troncon(-ELAN, 0, pasRoute);
+  for (let n = 0; n < NB; n++) {
+    troncon(G[n], G[n] + LB, LB / nBoucle); // la boucle : sections serrées
+    troncon(G[n] + LB, n + 1 < NB ? G[n + 1] : fin, pasRoute); // route jusqu'à la suivante
+  }
+  ajouter(fin);
+
+  const pt = (sec, a, b) => [
+    sec.P.x + sec.X.x * a + sec.U.x * b,
+    sec.P.y + sec.X.y * a + sec.U.y * b,
+    sec.P.z + sec.X.z * a + sec.U.z * b,
+  ];
 
   // bitume (texture comme la route du circuit)
   const pos = [], uv = [];
@@ -309,20 +393,14 @@ function construireRuban(groupe, monde) {
     const A = sections[k], B = sections[k + 1];
     const cb = (k >> 1) % 2 ? cB1 : cB0;
     const cm = Math.floor(k / 3) % 2 ? cMur1 : cMur0;
+    const enLAir = A.air || B.air;
     for (const sg of [1, -1]) {
       const o1 = sg * (DEMI - BANDE), o2 = sg * DEMI;
       quad(pt(A, o1, 0), pt(B, o1, 0), pt(A, o2, 0), pt(B, o2, 0), cb);
-      const enLAir = A.y > 0.3 || B.y > 0.3;
-      if (enLAir || A.mur > 0) {
-        // tranche
-        quad(pt(A, o2, 0), pt(B, o2, 0), pt(A, o2, -EP), pt(B, o2, -EP), cDessous);
-      }
-      if (A.mur > 0 || B.mur > 0) {
-        // rebord (garde-corps) côté intérieur
-        quad(pt(A, o2, 0), pt(B, o2, 0), pt(A, o2, A.mur), pt(B, o2, B.mur), cm);
-      }
+      if (enLAir || A.mur > 0) quad(pt(A, o2, 0), pt(B, o2, 0), pt(A, o2, -EP), pt(B, o2, -EP), cDessous); // tranche
+      if (A.mur > 0 || B.mur > 0) quad(pt(A, o2, 0), pt(B, o2, 0), pt(A, o2, A.mur), pt(B, o2, B.mur), cm); // rebord
     }
-    if (A.y > 0.3 || B.y > 0.3) quad(pt(A, DEMI, -EP), pt(B, DEMI, -EP), pt(A, -DEMI, -EP), pt(B, -DEMI, -EP), cDessous);
+    if (enLAir) quad(pt(A, DEMI, -EP), pt(B, DEMI, -EP), pt(A, -DEMI, -EP), pt(B, -DEMI, -EP), cDessous);
   }
   const g2 = new THREE.BufferGeometry();
   g2.setAttribute("position", new THREE.Float32BufferAttribute(P2, 3));
@@ -331,60 +409,107 @@ function construireRuban(groupe, monde) {
   groupe.add(new THREE.Mesh(g2, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })));
 }
 
-/** Portique qui tient le looping : deux tours rayées, une poutre en haut, une étoile. */
-function construireStructure(groupe, monde) {
-  const gauche = L_ENTREE + DEMI + 1.3, droite = L_SORTIE - DEMI - 1.3;
+/**
+ * Portiques qui tiennent les boucles (deux tours rayées, une poutre, une étoile) et un grand
+ * numéro 1, 2, 3, 4 sur chaque poutre pour compter les loopings. Une même géométrie de base
+ * est recopiée pour chaque boucle, tout est fusionné : un maillage de couleurs + un de numéros.
+ */
+function construireStructures(groupe, dansBoucle) {
+  const lat = VOIE + DEMI + 1.4; // tours de part et d'autre des deux voies
   const haut = 2 * R + 0.9;
-  const parties = [];
-  const angle = Math.atan2(monde(1, 0, 0).x - monde(0, 0, 0).x, monde(1, 0, 0).z - monde(0, 0, 0).z);
-  const placer = (geo, s, l, y) => {
-    const p = monde(s, l, y);
-    return geo.rotateY(angle).translate(p.x, p.y, p.z);
-  };
-  const couleurs = [0x9775fa, 0xffffff];
-  for (const l of [gauche, droite]) {
-    // tour en tronçons de couleur
-    const nb = 6;
-    for (let n = 0; n < nb; n++) {
-      const h = haut / nb;
-      parties.push({ geo: placer(new THREE.CylinderGeometry(0.45, 0.5, h, 8, 1, true), 0, l, h * (n + 0.5)), couleur: couleurs[n % 2] });
-    }
-    // socle et boule en haut
-    parties.push({ geo: placer(new THREE.CylinderGeometry(1.0, 1.2, 0.5, 8), 0, l, 0.25), couleur: 0x7048e8 });
-    parties.push({ geo: placer(new THREE.SphereGeometry(0.75, 8, 6), 0, l, haut + 0.3), couleur: 0xffd43b });
-    // jambes de force (en A, dans le sens de la route)
-    for (const s of [-1, 1]) {
-      const g = new THREE.CylinderGeometry(0.22, 0.28, 9, 6, 1, true);
-      g.rotateX(-s * 0.42);
-      parties.push({ geo: placer(g, s * 1.85, l, 4.2), couleur: 0x9775fa });
-    }
-  }
-  // poutre au-dessus du looping (il y est "accroché")
-  const largeur = gauche - droite;
-  parties.push({ geo: placer(new THREE.BoxGeometry(largeur + 1, 0.8, 0.8), 0, (gauche + droite) / 2, haut), couleur: 0xffd43b });
-  // attache entre la poutre et le haut du ruban
-  parties.push({ geo: placer(new THREE.BoxGeometry(0.5, haut - 2 * R - 0.35, 2.2).rotateY(Math.PI / 2), 0, latRuban(Math.PI), (haut + 2 * R + 0.35) / 2 - 0.2), couleur: 0xffd43b });
-  // étoile au sommet
-  const etoile = new THREE.Shape();
+  const couleursTours = [0x9775fa, 0x4dabf7, 0x51cf66, 0xf783ac]; // une couleur par boucle
+
+  // géométries de base (repère local : x en travers, y en haut, z le long de la route)
+  const troncon = new THREE.CylinderGeometry(0.45, 0.5, haut / 6, 8, 1, true);
+  const socle = new THREE.CylinderGeometry(1.0, 1.2, 0.5, 8);
+  const boule = new THREE.SphereGeometry(0.75, 8, 6);
+  const jambe = new THREE.CylinderGeometry(0.22, 0.28, 9, 6, 1, true);
+  const poutre = new THREE.BoxGeometry(2 * lat + 1, 0.8, 0.8);
+  const attache = new THREE.BoxGeometry(2.2, haut - 2 * R - 0.35, 0.5);
+  const forme = new THREE.Shape();
   for (let n = 0; n < 10; n++) {
-    const a = (n / 10) * Math.PI * 2, r = n % 2 ? 0.9 : 2.0;
-    if (n) etoile.lineTo(Math.sin(a) * r, Math.cos(a) * r);
-    else etoile.moveTo(Math.sin(a) * r, Math.cos(a) * r);
+    const a = (n / 10) * DEUX_PI, r = n % 2 ? 0.9 : 2.0;
+    if (n) forme.lineTo(Math.sin(a) * r, Math.cos(a) * r);
+    else forme.moveTo(Math.sin(a) * r, Math.cos(a) * r);
   }
-  const gEt = new THREE.ExtrudeGeometry(etoile, { depth: 0.5, bevelEnabled: false }).translate(0, 0, -0.25);
-  parties.push({ geo: placer(gEt, 0, (gauche + droite) / 2, haut + 2.4), couleur: 0xffd43b });
+  const etoile = new THREE.ExtrudeGeometry(forme, { depth: 0.5, bevelEnabled: false }).translate(0, 0, -0.25);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(1, 1, 1);
+  const p0 = new THREE.Vector3(), p1 = new THREE.Vector3();
+
+  const parties = [];
+  const panneaux = [];
+  for (let n = 0; n < NB; n++) {
+    // repère de la boucle n : angle de la route et position dans le monde
+    dansBoucle(n, 0, 0, 0, p0);
+    dansBoucle(n, 1, 0, 0, p1);
+    const angle = Math.atan2(p1.x - p0.x, p1.z - p0.z);
+    const poser = (geo, x, y, z, rx = 0, couleur) => {
+      const p = dansBoucle(n, z, x, y, new THREE.Vector3());
+      e.set(rx, angle, 0, "YXZ");
+      m.compose(p, q.setFromEuler(e), sc);
+      parties.push({ geo: geo.clone().applyMatrix4(m), couleur });
+    };
+    for (const l of [lat, -lat]) {
+      for (let t = 0; t < 6; t++) poser(troncon, l, (haut / 6) * (t + 0.5), 0, 0, t % 2 ? 0xffffff : couleursTours[n]);
+      poser(socle, l, 0.25, 0, 0, 0x7048e8);
+      poser(boule, l, haut + 0.3, 0, 0, 0xffd43b);
+      for (const s of [-1, 1]) poser(jambe, l, 4.2, s * 1.85, -s * 0.42, couleursTours[n]); // jambes de force en A
+      poser(etoile, l, haut + 2.6, 0, 0, 0xffd43b); // étoile en haut de chaque tour
+    }
+    poser(poutre, 0, haut, 0, 0, 0xffd43b);
+    poser(attache, 0, (haut + 2 * R + 0.35) / 2 - 0.2, 0, 0, 0xffd43b); // le haut de la boucle y est accroché
+    // grand numéro rond posé sur la poutre, tourné vers les karts qui arrivent
+    const p = dansBoucle(n, -0.5, 0, haut + 0.4, new THREE.Vector3());
+    panneaux.push({ p, angle, n });
+  }
   groupe.add(new THREE.Mesh(fusion(parties), matCouleurs()));
+  for (const g of [troncon, socle, boule, jambe, poutre, attache, etoile]) g.dispose();
+
+  // numéros : une seule texture (1 2 3 4 côte à côte), un seul maillage
+  const toile = document.createElement("canvas");
+  toile.width = 128 * NB;
+  toile.height = 128;
+  const c = toile.getContext("2d");
+  c.font = "bold 104px sans-serif";
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  for (let n = 0; n < NB; n++) {
+    c.fillStyle = couleursTours[n] === 0xffffff ? "#9775fa" : "#" + couleursTours[n].toString(16).padStart(6, "0");
+    c.beginPath();
+    c.arc(64 + n * 128, 64, 60, 0, DEUX_PI);
+    c.fill();
+    c.lineWidth = 8;
+    c.strokeStyle = "#ffffff";
+    c.stroke();
+    c.fillStyle = "#ffffff";
+    c.fillText(String(n + 1), 64 + n * 128, 70);
+  }
+  const tex = new THREE.CanvasTexture(toile);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const T = 3.4; // taille du numéro (m)
+  const pos = [], uv = [];
+  for (const { p, angle, n } of panneaux) {
+    // carré vertical face aux karts qui arrivent, le bas posé sur la poutre
+    const cx = -Math.cos(angle), sx = Math.sin(angle); // direction "droite" vue depuis l'arrivée
+    const pts = [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => [p.x + cx * a * (T / 2), p.y + T / 2 + b * (T / 2), p.z + sx * a * (T / 2)]);
+    pos.push(...pts[0], ...pts[1], ...pts[2], ...pts[2], ...pts[1], ...pts[3]);
+    const u0 = n / NB, u1 = (n + 1) / NB;
+    uv.push(u0, 0, u1, 0, u0, 1, u0, 1, u1, 0, u1, 1);
+  }
+  const gNum = new THREE.BufferGeometry();
+  gNum.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  gNum.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  groupe.add(new THREE.Mesh(gNum, new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.1, side: THREE.DoubleSide })));
 }
 
 /** Plots ronds orange et crème le long de l'entonnoir (les murs physiques viennent de limiteLaterale). */
-function plotsEntonnoir(groupe, piste, debut, prise, base) {
+function plotsEntonnoir(groupe, piste, debut, prise) {
   const N = piste.N;
   const plots = [];
-  for (let j = debut; j <= base; j += 2) {
-    const lim = piste.limiteLaterale(Math.min(j, prise)) + 0.9;
+  for (let j = debut; j <= prise; j += 2) {
+    const lim = piste.limiteLaterale(j % N) + 0.9;
     if (lim > piste.demi + piste.marge - 0.5) continue;
     for (const s of [1, -1]) {
-      if (s < 0 && j > prise) continue; // à droite, la sortie du looping passe là
       const i = j % N;
       plots.push({ x: piste.cx[i] + piste.nx[i] * s * lim, z: piste.cz[i] + piste.nz[i] * s * lim, s: 1, couleur: (j >> 1) % 2 ? 0xfff3bf : 0xff922b });
     }
@@ -396,7 +521,7 @@ function plotsEntonnoir(groupe, piste, debut, prise, base) {
   groupe.add(instances(geo, matCouleurs(), plots));
 }
 
-/** "Fiouuu" : un souffle qui monte puis redescend pendant le looping (son de l'enfant seulement). */
+/** "Fiouuu" : un souffle qui monte puis redescend pendant chaque looping (son de l'enfant seulement). */
 function whoosh() {
   const ctx = audio.ctx;
   if (!ctx || !audio.bruit || !audio.busEffets) return;
