@@ -275,6 +275,18 @@ export function construirePiste(def) {
 
   /** Hauteur du sol à cet endroit, sa pente (pour incliner le kart) et son type. */
   function hauteurTremplin(indice, lateral, long = 0) {
+    // relief de la route (voir abaisser) : tout ce qui est posé dessus suit sa hauteur
+    if (profil) {
+      const r = baseRelief(indice, long);
+      if (r.h !== 0) {
+        const t = hauteurTremplinPlat(indice, lateral, long);
+        return { h: r.h + t.h, pente: t.type === "sol" ? r.pente : t.pente, type: t.type };
+      }
+    }
+    return hauteurTremplinPlat(indice, lateral, long);
+  }
+
+  function hauteurTremplinPlat(indice, lateral, long) {
     for (const t of tremplins) {
       if (Math.abs(lateral - t.lateral) > t.demiLargeur) continue;
       const k = (indice - t.debut + N) % N;
@@ -354,6 +366,51 @@ export function construirePiste(def) {
     trous.push({ debut, fin });
   }
 
+  // ---------- Relief ----------
+  // abaisser(debut, fin, hauteur) donne une hauteur à la route sur les échantillons debut..fin
+  // (hauteur(m) pour m = 0..fin-debut, en mètres, négative = plus bas que le sol ; ex. la tranchée
+  // de l'aquarium). La route, les bordures et les barrières descendent avec elle, et
+  // hauteurTremplin (physique, bonbons) en tient compte. piste.profil = hauteur par échantillon
+  // (null tant que la route est plate). Pentes douces (< ~20 %) : les karts restent collés à la
+  // route qui descend (la physique ne s'envole qu'au-dessus de 0,35 m) et montent sans buter.
+  // Pas de tremplin ni de surface sur une partie abaissée (leur envol suppose le sol à 0).
+  let profil = null, yBase = null;
+  function baseRelief(indice, long) {
+    const u = indice + long / pas;
+    const i = Math.floor(u), f = u - i;
+    const a = profil[((i % N) + N) % N], b = profil[(((i + 1) % N) + N) % N];
+    return { h: a + (b - a) * f, pente: Math.atan((b - a) / pas) };
+  }
+  function abaisser(debut, fin, hauteur) {
+    profil ??= new Float32Array(N);
+    const n = (fin - debut + N) % N;
+    for (let m = 0; m <= n; m++) profil[(debut + m) % N] = hauteur(m);
+    // sommets : hauteur d'origine + relief de leur échantillon (retrouvé par l'ordre de construction)
+    yBase ??= morceaux.map(({ g }) => Float32Array.from(g.attributes.position.array.filter((_, k) => k % 3 === 1)));
+    morceaux.forEach(({ g, parEchantillon, cotes }, n) => {
+      const pos = g.attributes.position.array, y0 = yBase[n];
+      if (g.index) {
+        // route : 2 sommets par échantillon (k = 0..N, le dernier = le premier)
+        for (let v = 0; v < pos.length / 3; v++) pos[v * 3 + 1] = y0[v] + profil[(v >> 1) % N];
+      } else {
+        // bordures, barrières : morceaux de parEchantillon sommets par segment k → k+1 ;
+        // chaque sommet est sur l'échantillon k ou k+1 (on regarde s'il est devant ou derrière)
+        for (let c = 0; c < cotes; c++)
+          for (let k = 0; k < N; k++) {
+            const base = (c * N + k) * parEchantillon;
+            for (let v = base; v < base + parEchantillon; v++) {
+              const lg = (pos[v * 3] - cx[k]) * tx[k] + (pos[v * 3 + 2] - cz[k]) * tz[k];
+              pos[v * 3 + 1] = y0[v] + profil[lg > pas / 2 ? (k + 1) % N : k];
+            }
+          }
+      }
+      g.attributes.position.needsUpdate = true;
+      g.computeBoundingSphere();
+      g.computeBoundingBox();
+    });
+    api.profil = profil;
+  }
+
   // centre et rayon du circuit (pour le décor lointain)
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
   for (let i = 0; i < N; i++) {
@@ -363,5 +420,6 @@ export function construirePiste(def) {
   const centre = new THREE.Vector3((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
   const rayon = Math.hypot(maxX - minX, maxZ - minZ) / 2;
 
-  return { groupe, N, L, pas, cx, cz, tx, tz, nx, nz, demi, marge, localiser, distanceCentre, angleA, centre, rayon, tremplins, hauteurTremplin, surfaces, zonesIA, ajouterTremplin, retrecissements, limiteLaterale, passages: [], trous, trouer };
+  const api = { groupe, N, L, pas, cx, cz, tx, tz, nx, nz, demi, marge, localiser, distanceCentre, angleA, centre, rayon, tremplins, hauteurTremplin, surfaces, zonesIA, ajouterTremplin, retrecissements, limiteLaterale, passages: [], trous, trouer, profil, abaisser };
+  return api;
 }

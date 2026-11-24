@@ -4,6 +4,7 @@ import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import { planter } from "./vegetation.js";
 import { fusion } from "./decors-circuits.js";
 import { audio } from "./audio.js";
+import { percerSol } from "./decor.js";
 
 // Le ravin du ptérodactyle (circuit dino) : la route s'arrête au bord d'un précipice,
 // le kart tombe dans le vide... et un ptérodactyle l'attrape avec ses pattes pour le
@@ -520,15 +521,8 @@ export function installerRavin(groupe, piste, { debut }) {
   }
 
   // --- trou dans le sol (le grand plan d'herbe de decor.js) ---
-  const sol = groupe.children.find((o) => o.isMesh && o.geometry?.type === "PlaneGeometry" && o.geometry.parameters.width >= 1000);
-  if (sol) {
-    const w = sol.geometry.parameters.width / 2;
-    const forme = new THREE.Shape([new THREE.Vector2(-w, -w), new THREE.Vector2(w, -w), new THREE.Vector2(w, w), new THREE.Vector2(-w, w)]);
-    // repère local du plan : x = x monde, y = -z monde (le plan est couché par rotation.x = -90°)
-    forme.holes.push(new THREE.Path(contourMonde.map((p) => new THREE.Vector2(p.x - sol.position.x, -(p.z - sol.position.z)))));
-    sol.geometry.dispose();
-    sol.geometry = new THREE.ShapeGeometry(forme);
-  }
+  // (percerSol garde les autres trous, ex. la tranchée de l'aquarium, quel que soit l'ordre)
+  percerSol(groupe, contourMonde);
 
   // --- rochers (pack Quaternius) : sur le bord, au bout des barrières, accrochés aux parois ---
   const ROCHERS = ["Rock_Medium_1", "Rock_Medium_2", "Rock_Medium_3"];

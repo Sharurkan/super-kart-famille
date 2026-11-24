@@ -4,15 +4,20 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as skeletonClone } from "three/addons/utils/SkeletonUtils.js";
 import { planter } from "./vegetation.js";
 import { audio } from "./audio.js";
+import { percerSol } from "./decor.js";
 
-// Aquarium géant du circuit Dinosaures : la route passe dans un tunnel de verre au fond
-// d'un énorme bassin (sable, algues, rochers, bulles, bancs de poissons) où nage un mosasaure.
-// Tout est décor autour de la route normale : la physique ne change pas.
+// Aquarium géant du circuit Dinosaures, enterré : la route descend dans une tranchée (murs de
+// soutènement en pierre), passe dans un tunnel de verre au fond d'un énorme bassin (sable,
+// algues, rochers, bulles, bancs de poissons) où nage un mosasaure, puis remonte au niveau du
+// sol. De la jungle, on voit un grand bassin vitré qui dépasse un peu du sol.
 //
 // Le tunnel suit le virage de la route : chaque pièce est construite dans le repère de la
-// piste (s = échantillon, l = latéral, y = hauteur), voir point().
+// piste (s = échantillon, l = latéral, y = hauteur au-dessus de la route du fond), voir
+// point() ; le groupe de l'aquarium est descendu de AQUARIUM.profondeur.
 //
 // Accroches :
+//  - piste.abaisser() : la route (et sa physique) descend dans la tranchée, voir piste.js.
+//  - percerSol() (decor.js) : trou dans le grand sol au-dessus de la tranchée et du bassin.
 //  - piste.zonesDecor : { nom, debut, fin, demi } = emprise au sol (échantillons debut..fin,
 //    demi-largeur latérale en mètres). La forêt n'y plante rien.
 //  - l'objet renvoyé a update(dt) (appelé avec les mixers du décor, temps du jeu) ;
@@ -23,10 +28,22 @@ export const AQUARIUM = {
   debut: 0.729, // fraction du tour (virages du bas, après la tête de T-rex)
   fin: 0.787, // ~75 m de tunnel
   demiTunnel: 16.5, // demi-largeur du tunnel (les barrières sont à 14,8 m)
-  hautTunnel: 8.5, // hauteur du sommet de la voûte
+  hautTunnel: 8, // hauteur du sommet de la voûte
   demi: 28, // demi-largeur du bassin
-  haut: 19, // hauteur des vitres ; l'eau s'arrête un peu en dessous
+  haut: 16, // hauteur des vitres (depuis la route du fond) ; l'eau s'arrête un peu en dessous
+  profondeur: 10, // la route du fond est 10 m sous le sol : le bassin dépasse de 6 m
+  rampeAvant: 86, // longueur de la descente (m) : pente max ~15 %
+  rampeApres: 100, // longueur de la remontée (m) : pente max ~13 %
+  murTranchee: 18, // latéral du pied des murs de la tranchée (les barrières sont à 14,8 m)
+  fruitMur: 0.22, // le mur penche vers l'extérieur de 22 cm par mètre de hauteur
 };
+
+/** Montée douce de 0 à 1 (pente en trapèze : elle augmente sur q, reste constante, diminue). */
+function rampe(u, q = 0.25) {
+  u = Math.min(1, Math.max(0, u));
+  const g = u < q ? (u * u) / (2 * q) : u <= 1 - q ? u - q / 2 : 1 - q - ((1 - u) * (1 - u)) / (2 * q);
+  return g / (1 - q);
+}
 
 /** Ambiance sous l'eau (mêmes clés que AMBIANCE_INTERIEUR de interieur.js). */
 const AMBIANCE_EAU = {
@@ -41,14 +58,40 @@ export function installerAquarium(groupe, piste) {
   const { N, pas, cx, cz, nx, nz } = piste;
   const A = AQUARIUM;
   const i0 = Math.round(N * A.debut), i1 = Math.round(N * A.fin);
-  const W = A.demi, H = A.haut, a = A.demiTunnel, h = A.hautTunnel;
+  const W = A.demi, H = A.haut, a = A.demiTunnel, h = A.hautTunnel, D = A.profondeur;
   const EAU = H - 0.6; // surface de l'eau
   const rnd = aleatoire(7);
-  (piste.zonesDecor ??= []).push({ nom: "aquarium", debut: i0 - 2, fin: i1 + 2, demi: W + 1.5 });
+
+  // --- profil de la route : descente, fond plat sous le bassin, remontée ---
+  const sA = i0 - 3 - Math.round(A.rampeAvant / pas); // début de la descente
+  const sB = i1 + 3 + Math.round(A.rampeApres / pas); // fin de la remontée
+  const nA = i0 - 3 - sA, nB = sB - (i1 + 3);
+  piste.abaisser(sA, sB, (m) => {
+    const s = sA + m;
+    if (s < i0 - 3) return -D * rampe(m / nA);
+    if (s > i1 + 3) return -D * rampe((sB - s) / nB);
+    return -D;
+  });
+  const prof = (s) => {
+    const i = Math.floor(s), f = s - i, p = piste.profil;
+    return p[i] + (p[i + 1] - p[i]) * f;
+  };
+  /** Latéral du mur de la tranchée à la hauteur y (monde) quand la route est à yr. */
+  const latMur = (y, yr) => A.murTranchee + A.fruitMur * (y - yr);
+  const latHaut = (s) => latMur(0, prof(s)); // haut du mur, au niveau du sol
+
+  (piste.zonesDecor ??= []).push(
+    { nom: "aquarium", debut: i0 - 2, fin: i1 + 2, demi: W + 2 },
+    { nom: "tranchee", debut: sA - 3, fin: sB + 3, demi: latMur(0, -D) + 2.5 },
+  );
 
   const aq = new THREE.Group();
   aq.name = "aquarium";
+  aq.position.y = -D; // tout le bassin est construit depuis la route du fond (y = 0)
   groupe.add(aq);
+  const tranchee = new THREE.Group();
+  tranchee.name = "tranchee aquarium";
+  groupe.add(tranchee);
 
   // --- repère de la piste ---
   /** Point du monde à l'échantillon s (fractionnaire), latéral l, hauteur y. */
@@ -74,16 +117,20 @@ export function installerAquarium(groupe, piste) {
   /** Hauteur de la voûte du tunnel au latéral l (0 en dehors). */
   const voute = (l) => (Math.abs(l) < a ? h * Math.sqrt(1 - (l / a) ** 2) : 0);
 
-  /** Grille le long du tunnel : fn(s, b, v) place le sommet (b de 0 à 1 en travers). */
-  function grille(nb, fn, uvEchelle = 8) {
-    const ns = Math.ceil((i1 - i0) / 2);
+  /**
+   * Grille le long du tunnel (ou de debut à fin) : fn(s, b, v) place le sommet (b de 0 à 1 en
+   * travers). UV : vue du dessus, ou (longueur, hauteur) pour un mur (mur = true).
+   */
+  function grille(nb, fn, uvEchelle = 8, { debut = i0, fin = i1, pasS = 2, mur = false } = {}) {
+    const ns = Math.ceil((fin - debut) / pasS);
     const pos = [], uv = [], idx = [], v = new THREE.Vector3();
     for (let k = 0; k <= ns; k++) {
-      const s = i0 + ((i1 - i0) * k) / ns;
+      const s = debut + ((fin - debut) * k) / ns;
       for (let j = 0; j <= nb; j++) {
         fn(s, j / nb, v);
         pos.push(v.x, v.y, v.z);
-        uv.push(v.x / uvEchelle, v.z / uvEchelle);
+        if (mur) uv.push((s * pas) / uvEchelle, v.y / uvEchelle);
+        else uv.push(v.x / uvEchelle, v.z / uvEchelle);
       }
     }
     for (let k = 0; k < ns; k++)
@@ -121,43 +168,105 @@ export function installerAquarium(groupe, piste) {
   aq.add(new THREE.Mesh(mergeGeometries(arceaux), metal));
   for (const c of [-1, 1]) aq.add(new THREE.Mesh(grille(1, (s, b, v) => point(s, c * (a + 0.25), b * 0.7, v)), beton));
 
-  // --- bassin : vitres latérales, socle, poteaux, rebord ---
+  // --- bassin : murs enterrés (sous le sol), vitres au-dessus, poteaux, rebord ---
+  // (D = niveau du sol dans le repère du bassin)
+  const murBassin = new THREE.MeshLambertMaterial({ color: 0x6f8f99, emissive: 0x3fa0c0, emissiveMap: caustique, emissiveIntensity: 0.35, side: THREE.DoubleSide });
+  const margelles = [];
   for (const c of [-1, 1]) {
-    const vitre = new THREE.Mesh(grille(1, (s, b, v) => point(s, c * W, 1.2 + b * (H - 1.2), v)), verre(0x177fbd, 0.58, 0.9));
+    const vitre = new THREE.Mesh(grille(1, (s, b, v) => point(s, c * W, D + b * (H - D), v)), verre(0x177fbd, 0.58, 0.9));
     vitre.renderOrder = 2;
     aq.add(vitre);
-    aq.add(new THREE.Mesh(grille(1, (s, b, v) => point(s, c * W, b * 1.2, v)), beton));
+    aq.add(new THREE.Mesh(grille(2, (s, b, v) => point(s, c * W, b * D, v)), murBassin));
     aq.add(new THREE.Mesh(grille(1, (s, b, v) => point(s, c * (W + 0.05), H - 0.7 + b * 0.9, v)), new THREE.MeshLambertMaterial({ color: 0x2f4650, side: THREE.DoubleSide })));
+    // margelle au ras du sol, le long des vitres (cache le bord du trou dans le sol)
+    margelles.push(grille(1, (s, b, v) => point(s, c * (W - 0.2 + b * 1.6), D + 0.06, v)));
   }
   const poteaux = [];
   const nbPoteaux = Math.round(((i1 - i0) * pas) / 9);
   for (let k = 0; k <= nbPoteaux; k++)
-    for (const c of [-1, 1]) poteaux.push(new THREE.BoxGeometry(0.7, H, 0.7).translate(c * W, H / 2, 0).applyMatrix4(repere(i0 + ((i1 - i0) * k) / nbPoteaux)));
+    for (const c of [-1, 1]) poteaux.push(new THREE.BoxGeometry(0.7, H - D, 0.7).translate(c * W, (H + D) / 2, 0).applyMatrix4(repere(i0 + ((i1 - i0) * k) / nbPoteaux)));
 
-  // --- les deux bouts : vitre percée par le tunnel, gros portique d'entrée ---
-  const forme = new THREE.Shape();
-  forme.moveTo(-W, 0);
-  forme.lineTo(-a - 0.3, 0);
-  for (let k = 0; k <= 20; k++) forme.lineTo(-(a + 0.3) * Math.cos((Math.PI * k) / 20), (h + 0.3) * Math.sin((Math.PI * k) / 20));
-  forme.lineTo(W, 0);
-  forme.lineTo(W, H);
-  forme.lineTo(-W, H);
-  const bouts = [], portiques = [];
+  // --- les deux bouts : façade en béton percée par le tunnel (sous le sol), vitre au-dessus ---
+  const facade = new THREE.Shape();
+  facade.moveTo(-W, 0);
+  facade.lineTo(-a - 0.3, 0);
+  for (let k = 0; k <= 20; k++) facade.lineTo(-(a + 0.3) * Math.cos((Math.PI * k) / 20), (h + 0.3) * Math.sin((Math.PI * k) / 20));
+  facade.lineTo(W, 0);
+  facade.lineTo(W, D);
+  facade.lineTo(-W, D);
+  const bouts = [], facades = [], portiques = [];
   for (const s of [i0, i1]) {
     const m = repere(s);
-    bouts.push(new THREE.ShapeGeometry(forme).applyMatrix4(m));
-    // portique : arche épaisse + cadre autour de la vitre
+    bouts.push(new THREE.PlaneGeometry(2 * W, H - D).translate(0, (H + D) / 2, 0).applyMatrix4(m));
+    const f = new THREE.ShapeGeometry(facade);
+    // UV en mètres (texture de pierre de la tranchée)
+    const p = f.attributes.position, uvf = f.attributes.uv;
+    for (let k = 0; k < p.count; k++) uvf.setXY(k, p.getX(k) / 4, p.getY(k) / 4);
+    facades.push(f.applyMatrix4(m));
+    // portique : arche épaisse autour de l'entrée du tunnel
     const pts = [];
     for (let k = 0; k <= 20; k++) pts.push(new THREE.Vector3((a + 0.5) * Math.cos((Math.PI * k) / 20), (h + 0.5) * Math.sin((Math.PI * k) / 20), 0));
     portiques.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.6, 6, false).applyMatrix4(m));
     poteaux.push(new THREE.BoxGeometry(2 * W + 0.7, 0.9, 0.7).translate(0, H - 0.25, 0).applyMatrix4(m));
-    for (const c of [-1, 1]) poteaux.push(new THREE.BoxGeometry(W - a, 1.2, 0.8).translate((c * (W + a)) / 2, 0.6, 0).applyMatrix4(m)); // socle de chaque côté du tunnel
+    // corniche au-dessus de l'entrée, au niveau du sol
+    margelles.push(new THREE.BoxGeometry(2 * W + 1.4, 0.6, 1.4).translate(0, D + 0.25, 0).applyMatrix4(m));
   }
   aq.add(new THREE.Mesh(mergeGeometries(poteaux), metal));
   aq.add(new THREE.Mesh(mergeGeometries(portiques), new THREE.MeshLambertMaterial({ color: 0xffb627 })));
   const finVitres = new THREE.Mesh(mergeGeometries(bouts), verre(0x177fbd, 0.6, 0.9));
   finVitres.renderOrder = 6;
   aq.add(finVitres);
+  const texPierre = texturePierre();
+  const pierre = new THREE.MeshLambertMaterial({ map: texPierre, side: THREE.DoubleSide });
+  aq.add(new THREE.Mesh(mergeGeometries(facades), pierre));
+  const matMargelle = new THREE.MeshLambertMaterial({ color: 0xb9b2a3 });
+  aq.add(new THREE.Mesh(mergeGeometries(margelles.map((g) => (g.index ? g.toNonIndexed() : g)).map((g) => { g.deleteAttribute("uv"); g.computeVertexNormals(); return g; })), matMargelle));
+
+  // --- la tranchée : murs de soutènement en pierre, corniche, fond de gravier ---
+  // (dans le repère du monde : la route y descend selon piste.profil)
+  const yr = (s) => prof(s);
+  const portionsMur = [[sA, i0], [i1, sB]];
+  const piecesMur = [], piecesCorniche = [];
+  for (const [d, f] of portionsMur)
+    for (const c of [-1, 1]) {
+      const opts = { debut: d, fin: f, pasS: 1, mur: true };
+      // mur : du pied (sous la route) au niveau du sol, un peu penché vers l'extérieur
+      piecesMur.push(grille(3, (s, b, v) => {
+        const y0 = yr(s) - 0.3, y = y0 + b * (0.0 - y0);
+        return point(s, c * latMur(y, yr(s)), y, v);
+      }, 4, opts));
+      // corniche : petit muret au bord, au-dessus du sol
+      piecesCorniche.push(grille(3, (s, b, v) => {
+        const L = latHaut(s), prof4 = [[L - 0.25, -0.05], [L - 0.25, 0.55], [L + 0.9, 0.55], [L + 0.9, -0.05]];
+        const [l, y] = prof4[Math.round(b * 3)];
+        return point(s, c * l, y, v);
+      }, 4, opts));
+    }
+  // fond de la tranchée de part et d'autre de la route (et sous le tunnel)
+  tranchee.add(new THREE.Mesh(mergeGeometries(piecesMur), pierre));
+  tranchee.add(new THREE.Mesh(mergeGeometries(piecesCorniche.map((g) => { g.deleteAttribute("uv"); return g; })), matMargelle));
+  const fond = grille(4, (s, b, v) => point(s, (b - 0.5) * 2 * (A.murTranchee + 0.3), yr(s) - 0.015, v), 6, { debut: sA, fin: sB, pasS: 1 });
+  tranchee.add(new THREE.Mesh(fond, new THREE.MeshLambertMaterial({ color: 0x8b8170, map: textureGravier() })));
+
+  // --- trou dans le grand sol : tranchée + bassin ---
+  {
+    const contour = [], v = new THREE.Vector3();
+    const bord = (s) => (s >= i0 && s <= i1 ? W + 0.3 : latHaut(s) + 0.35);
+    for (let s = sA + 1; s <= sB - 1; s++) {
+      if (s === i0 || s === i1) {
+        // marche nette contre la façade du bassin
+        const avant = s === i0 ? latHaut(s) + 0.35 : W + 0.3, apres = s === i0 ? W + 0.3 : latHaut(s) + 0.35;
+        contour.push(point(s, avant, 0, v).clone(), point(s, apres, 0, v).clone());
+      } else contour.push(point(s, bord(s), 0, v).clone());
+    }
+    for (let s = sB - 1; s >= sA + 1; s--) {
+      if (s === i0 || s === i1) {
+        const avant = s === i1 ? latHaut(s) + 0.35 : W + 0.3, apres = s === i1 ? W + 0.3 : latHaut(s) + 0.35;
+        contour.push(point(s, -avant, 0, v).clone(), point(s, -apres, 0, v).clone());
+      } else contour.push(point(s, -bord(s), 0, v).clone());
+    }
+    percerSol(groupe, contour);
+  }
 
   // --- fond de sable (reflets d'eau qui bougent) et surface de l'eau ---
   const sable = new THREE.MeshLambertMaterial({ color: 0xd8c690, emissive: 0x8fe3ff, emissiveMap: caustique, emissiveIntensity: 0.7, side: THREE.DoubleSide });
@@ -263,7 +372,6 @@ export function installerAquarium(groupe, piste) {
   // --- le mosasaure ---
   const moso = creerMosasaure();
   aq.add(moso.objet);
-  const M = { pos: point((i0 + i1) / 2, -18, 7), dir: new THREE.Vector3(piste.tx[i0], 0, piste.tz[i0]), v: 7, phi: 0, etat: "patrouille", indice: Math.round((i0 + i1) / 2) };
   const marge = 6 / pas; // ne pas s'approcher des vitres du bout à moins de 6 m
 
   // --- caméra, scène et ambiance ---
@@ -338,62 +446,124 @@ export function installerAquarium(groupe, piste) {
   const v3 = new THREE.Vector3(), cible = new THREE.Vector3(), o = new THREE.Object3D();
   let t = 0, sCamAvant = null, vCam = 20;
 
-  // Le moment "waouh" : quand le kart arrive, le mosasaure attend sur le côté du bassin
-  // puis traverse au-dessus de la voûte, juste devant le kart (vu de profil par la caméra).
-  const sX = i0 + 48 / pas; // là où il passe au-dessus de la route
-  const ATTENTE = { s: sX + 2 / pas, l: -20, y: h + 2.2 };
-  const V_TRAVERSE = 14, AVANCE = 21; // m/s ; il croise la route ~21 m devant la caméra
-  function nagerMosasaure(dt, sCam, vCam) {
-    // où est le mosasaure dans le bassin ?
-    const L = local(M.pos, M.indice);
-    M.indice = L.indice;
-    const approche = sCam !== null && sCam > i0 - 160 / pas && sCam < sX - AVANCE / pas;
-    if (sCam === null || sCam > i1) M.fait = false;
-    if (M.etat === "traverse") {
-      if (L.l > 17 || sCam === null) { M.etat = "patrouille"; M.fait = true; }
-    } else if (approche && !M.fait) {
-      // temps avant que la caméra soit à AVANCE m du point de passage / temps pour y nager
-      const tKart = ((sX - AVANCE / pas - sCam) * pas) / Math.max(6, vCam);
-      const tMoso = (Math.abs(L.l) + 2) / V_TRAVERSE + 0.8; // + le temps de tourner et d'accélérer
-      if (tKart <= tMoso) {
-        if (L.l < -6) M.etat = "traverse";
-        else { M.etat = "patrouille"; M.fait = true; } // pas à sa place à temps : tant pis pour ce tour
-      } else M.etat = "attente";
-    } else if (M.etat === "attente") M.etat = "patrouille";
-    let vDes = 7, virage = 1.7;
-    if (M.etat === "attente") {
-      // il tourne doucement en rond près de son point de départ, sur le côté du tunnel
-      point(ATTENTE.s + (Math.cos(t * 0.6) * 5) / pas, ATTENTE.l + Math.sin(t * 0.6) * 3, ATTENTE.y, cible);
-      vDes = M.pos.distanceTo(cible) > 9 ? 14 : 4;
-      virage = 2.2;
-    } else if (M.etat === "traverse") {
-      // il fonce de l'autre côté en frôlant la voûte, gueule ouverte
-      point(sX - 3 / pas, 26, h + 1.9, cible);
-      vDes = V_TRAVERSE;
-      virage = 3.5;
-    } else {
-      // patrouille en "8" au-dessus et autour du tunnel
-      M.phi += dt * (Math.PI * 2) / 26;
-      const ph = M.phi + 0.35;
-      const u = 0.5 + 0.4 * Math.sin(ph), l = 20 * Math.sin(2 * ph);
-      point(i0 + marge + u * (i1 - i0 - 2 * marge), l, Math.max(voute(l) + 3.2, 5.5), cible);
+  // Le mosasaure nage sur un grand circuit ovale fermé dans le bassin (repère de la piste, en
+  // mètres depuis la vitre d'entrée) : deux longueurs le long des vitres où il plonge entre le
+  // tunnel et les vitres, deux demi-tours au-dessus de la voûte, où il passe en travers de la
+  // route. Ce circuit est dessiné pour que tout son corps (19 m, raide : il est juste orienté
+  // le long du chemin) reste dans l'eau ; contraindre() le vérifie à chaque image et le remet
+  // dedans s'il le fallait (filet de sécurité, voir les essais numériques).
+  // Le moment "waouh" : quand le kart arrive, il règle sa vitesse sur le chemin pour passer
+  // en travers de la route (demi-tour du fond, gueule ouverte) ~22 m devant la caméra.
+  const LONG = ((i1 - i0) * pas); // longueur du bassin (m)
+  const CORPS = { demi: LONGUEUR_MOSASAURE / 2, lat: 2.2, vert: 1.9 }; // demi-longueur, demi-largeur (nage comprise), demi-hauteur (m)
+  const RAYON = 19, C1 = 3 + RAYON, C2 = LONG - 3.6 - RAYON; // demi-tours : centres (m) et rayon
+  const DROIT = C2 - C1, PERIM = 2 * DROIT + 2 * Math.PI * RAYON;
+  const Y_HAUT = h + CORPS.vert + 1.4, Y_BAS = 6.3; // au-dessus de la voûte / plongée le long des vitres
+  const pApex = DROIT + Math.PI * RAYON / 2; // milieu du demi-tour du fond : en travers de la route
+  const sX = C2 + RAYON; // (m) là où il croise la route
+  const AVANCE = 22;
+  /** Point du chemin à l'abscisse p (m) : { s (m), l, y } et courbure (pour s'incliner). */
+  function chemin(p, r = {}) {
+    p = ((p % PERIM) + PERIM) % PERIM;
+    if (p < DROIT) {
+      // longueur côté -l, vers le fond, en plongeant
+      const u = p / DROIT;
+      return Object.assign(r, { s: C1 + p, l: -RAYON, y: Y_HAUT - (Y_HAUT - Y_BAS) * 0.5 * (1 - Math.cos(2 * Math.PI * u)), k: 0 });
     }
-    // direction : on tourne doucement vers la cible
-    v3.subVectors(cible, M.pos).normalize();
-    M.dir.lerp(v3, Math.min(1, dt * virage));
-    M.dir.y = THREE.MathUtils.clamp(M.dir.y, -0.45, 0.45);
-    M.dir.normalize();
-    M.v += (vDes - M.v) * Math.min(1, dt * (M.etat === "traverse" ? 4 : 1.5));
-    M.pos.addScaledVector(M.dir, M.v * dt);
-    // reste dans l'eau : entre les vitres, au-dessus de la voûte, sous la surface
-    const P = local(M.pos, M.indice);
-    const s = THREE.MathUtils.clamp(P.s, i0 + marge * 0.6, i1 - marge * 0.6);
-    const l = THREE.MathUtils.clamp(P.l, -W + 4, W - 4);
-    const y = THREE.MathUtils.clamp(M.pos.y, Math.max(voute(l) + 2, 2.5), EAU - 2.5);
-    if (s !== P.s || l !== P.l || y !== M.pos.y) point(s, l, y, M.pos);
+    p -= DROIT;
+    if (p < Math.PI * RAYON) {
+      const th = p / RAYON - Math.PI / 2; // demi-tour du fond, de -l vers +l
+      return Object.assign(r, { s: C2 + RAYON * Math.cos(th), l: RAYON * Math.sin(th), y: Y_HAUT, k: 1 / RAYON });
+    }
+    p -= Math.PI * RAYON;
+    if (p < DROIT) {
+      const u = p / DROIT;
+      return Object.assign(r, { s: C2 - p, l: RAYON, y: Y_HAUT - (Y_HAUT - Y_BAS) * 0.5 * (1 - Math.cos(2 * Math.PI * u)), k: 0 });
+    }
+    p -= DROIT;
+    const th = p / RAYON + Math.PI / 2; // demi-tour de l'entrée, de +l vers -l
+    return Object.assign(r, { s: C1 + RAYON * Math.cos(th), l: RAYON * Math.sin(th), y: Y_HAUT, k: 1 / RAYON });
+  }
+  const M = { p: DROIT * 0.3, v: 6, indice: Math.round((i0 + i1) / 2), pos: new THREE.Vector3(), dir: new THREE.Vector3(), roulis: 0, ouv: 0.1, corrige: 0 };
+  const cA1 = {}, cA2 = {}, dirAvant = new THREE.Vector3(), tete = new THREE.Vector3(), queueP = new THREE.Vector3();
+  function placerChemin(p, pos, dir) {
+    chemin(p, cA1);
+    chemin(p + 0.5, cA2);
+    point(i0 + cA1.s / pas, cA1.l, cA1.y, pos);
+    point(i0 + cA2.s / pas, cA2.l, cA2.y, dir).sub(pos).normalize();
+    return cA1.k;
+  }
+
+  // --- filet de sécurité : le corps (segment de ±CORPS.demi, section CORPS.lat × CORPS.vert)
+  // reste dans le volume d'eau, hors du tunnel. Chaque point du corps est ramené dans l'eau
+  // (repère piste), puis le segment est recalé sur ces points (moindres carrés).
+  const NB_PTS = 9, ptsT = [], ptsQ = [];
+  for (let k = 0; k < NB_PTS; k++) { ptsT.push(-1 + (2 * k) / (NB_PTS - 1)); ptsQ.push(new THREE.Vector3()); }
+  const mL = 0.35; // marge (m) en plus de la section du corps
+  function dansLeau(P, q) {
+    const L = local(P, M.indice);
+    let s = L.s, l = L.l, y = P.y;
+    const sMin = i0 + (CORPS.lat + mL) / pas, sMax = i1 - (CORPS.lat + mL) / pas;
+    s = THREE.MathUtils.clamp(s, sMin, sMax);
+    l = THREE.MathUtils.clamp(l, -W + CORPS.lat + mL, W - CORPS.lat - mL);
+    y = THREE.MathUtils.clamp(y, CORPS.vert + mL, EAU - CORPS.vert - mL);
+    // hors de la voûte gonflée de la section du corps
+    const ea = a + CORPS.lat + mL, eh = h + CORPS.vert + mL, e = (l / ea) ** 2 + (y / eh) ** 2;
+    if (e < 1) {
+      const f = 1 / Math.sqrt(Math.max(e, 1e-6));
+      l *= f;
+      y *= f;
+    }
+    if (s === L.s && l === L.l && y === P.y) return q.copy(P), false;
+    point(s, l, y, q);
+    return true;
+  }
+  function contraindre(pos, dir) {
+    let corrige = false;
+    for (let it = 0; it < 6; it++) {
+      let bouge = false;
+      for (let k = 0; k < NB_PTS; k++) bouge = dansLeau(v3.copy(pos).addScaledVector(dir, ptsT[k] * CORPS.demi), ptsQ[k]) || bouge;
+      if (!bouge) break;
+      corrige = true;
+      // segment le plus proche des points corrigés : centre = moyenne, direction ∝ Σ t·q
+      pos.set(0, 0, 0);
+      for (const q of ptsQ) pos.add(q);
+      pos.multiplyScalar(1 / NB_PTS);
+      tete.set(0, 0, 0);
+      for (let k = 0; k < NB_PTS; k++) tete.addScaledVector(v3.copy(ptsQ[k]).sub(pos), ptsT[k]);
+      if (tete.lengthSq() > 1e-6) dir.copy(tete.normalize());
+    }
+    return corrige;
+  }
+
+  function nagerMosasaure(dt, sCam, vCam) {
+    if (sCam === null || sCam > i1) M.fait = false;
+    let vDes = 6;
+    const sCamM = sCam === null ? null : (sCam - i0) * pas;
+    const tKart = sCamM === null ? Infinity : (sX - AVANCE - sCamM) / Math.max(6, vCam);
+    if (sCamM !== null && !M.fait && tKart > 0) {
+      // le kart arrive : passer au milieu du demi-tour du fond quand il sera à AVANCE m
+      let dP = (((pApex - M.p) % PERIM) + PERIM) % PERIM;
+      if (dP / tKart < 3) dP += PERIM;
+      vDes = THREE.MathUtils.clamp(dP / tKart, 3, 16);
+      if (tKart < 0.25) M.fait = true;
+    }
+    M.v += (vDes - M.v) * Math.min(1, dt * 2.5);
+    M.p = (M.p + M.v * dt) % PERIM;
+    M.indice = local(M.pos, M.indice).indice;
+    dirAvant.copy(M.dir);
+    placerChemin(M.p, M.pos, M.dir);
+    if (contraindre(M.pos, M.dir)) M.corrige++;
+    // gueule : grande ouverte en passant devant le kart, quelques bâillements sinon
+    const dApex = Math.abs(((M.p - pApex + PERIM * 1.5) % PERIM) - PERIM / 2);
+    const traverse = sCamM !== null && dApex < 14 && sCamM > -40 && sCamM < sX;
+    moso.ouverture = traverse ? 0.75 : 0.08 + 0.12 * Math.max(0, Math.sin(t * 0.7) * Math.sin(t * 0.23)) ** 2;
+    // un peu penché vers l'intérieur des virages (vitesse de rotation autour de la verticale)
+    const omega = dt > 0 && dirAvant.lengthSq() > 0 ? (dirAvant.z * M.dir.x - dirAvant.x * M.dir.z) / dt : 0;
+    M.roulis += (THREE.MathUtils.clamp(-omega * M.v * 0.12, -0.22, 0.22) - M.roulis) * Math.min(1, dt * 2);
     moso.objet.position.copy(M.pos);
     moso.objet.lookAt(v3.copy(M.pos).add(M.dir));
-    moso.ouverture = M.etat === "traverse" ? 0.55 : 0.12;
+    moso.objet.rotateZ(M.roulis);
     moso.nager(dt, M.v);
   }
 
@@ -410,7 +580,7 @@ export function installerAquarium(groupe, piste) {
       const p = camera.position;
       const C = local(p, -1);
       if (C.s > i0 - 170 / pas && C.s < i1 + 10 / pas && Math.abs(C.l) < W + 20) sCam = C.s;
-      if (Math.abs(C.l) < a && p.y < voute(C.l) + 0.5)
+      if (Math.abs(C.l) < a && p.y + D < voute(C.l) + 0.5) // (repère du bassin : la route du fond est à y = 0)
         f = THREE.MathUtils.clamp(((C.s - i0) * pas) / 6, 0, 1) * THREE.MathUtils.clamp(((i1 - C.s) * pas) / 6, 0, 1);
     }
     // vitesse de la caméra le long de la route (pour régler le passage du mosasaure)
@@ -441,7 +611,7 @@ export function installerAquarium(groupe, piste) {
       const ph = t * 0.16 + b.ph;
       const u = 0.5 + 0.38 * Math.sin(ph);
       const l = b.cote ? b.cote * (a + 5.5 + 2.5 * Math.sin(ph * 2.3)) : 6 * Math.sin(ph * 1.7);
-      const y = b.cote ? 4 + 2.5 * Math.sin(ph * 1.3) : h + 5.5 + 1.5 * Math.sin(ph * 2);
+      const y = b.cote ? 4 + 2.5 * Math.sin(ph * 1.3) : h + 4.4 + 0.9 * Math.sin(ph * 2);
       point(i0 + marge + u * (i1 - i0 - 2 * marge), l, y, cible);
       if (cible.distanceToSquared(b.pos) > 1e-6) b.dir.subVectors(cible, b.pos).normalize();
       b.pos.copy(cible);
@@ -457,7 +627,7 @@ export function installerAquarium(groupe, piste) {
     }
   }
 
-  return { update, objet: aq, mosasaure: moso };
+  return { update, objet: aq, mosasaure: moso, nage: M, corps: CORPS, eau: { W, H, EAU, a, h, D, i0, i1 } }; // (nage, corps, eau : pour les essais)
 }
 
 // ---------------------------------------------------------------------------
@@ -470,6 +640,9 @@ export function installerAquarium(groupe, piste) {
 // qui boucle, mâchoire = os Bone.026). En attendant le chargement (ou s'il échoue), c'est le
 // mosasaure en formes simples ci-dessous qui nage.
 const LONGUEUR_MOSASAURE = 19; // m
+// rotation de la mâchoire (os Bone.026, autour de son axe x local) par unité d’"ouverture" :
+// le signe ouvre vers le bas (vérifié sur des captures), 1 = ~57° au maximum.
+const SENS_MACHOIRE = 0.8;
 let modeleMosasaure = null; // promesse partagée : le GLB n'est chargé qu'une fois
 
 export function creerMosasaure() {
@@ -478,20 +651,31 @@ export function creerMosasaure() {
   objet.name = "mosasaure";
   objet.add(provisoire.objet);
 
-  let mixer = null, machoire = null, reposMachoire = null, pisteMachoire = false, ouv = 0.12;
+  let mixer = null, machoire = null, reposMachoire = null, ouv = 0.1;
   const qOuv = new THREE.Quaternion(), AXE_MACHOIRE = new THREE.Vector3(1, 0, 0);
 
   modeleMosasaure ??= new GLTFLoader().loadAsync(import.meta.env.BASE_URL + "aquarium/mosasaure.glb");
   modeleMosasaure
     .then((gltf) => {
       const scene = skeletonClone(gltf.scene);
-      const clip = gltf.animations.find((c) => c.name === "Nager") ?? gltf.animations[0];
+      scene.traverse((o) => {
+        if (!machoire && /^Bone\.?026/.test(o.name)) machoire = o;
+      });
+      let clip = gltf.animations.find((c) => c.name === "Nager") ?? gltf.animations[0];
+      // La mâchoire est pilotée par le jeu seul : on retire ses pistes du cycle de nage.
+      // (Elles sont constantes : le mixer, qui n'écrit une valeur que si elle change, ne remettait
+      // donc jamais l'os à sa pose ; la rotation d'ouverture s'ajoutait à chaque image et la
+      // mâchoire tournait sur elle-même, à travers la tête.)
+      if (clip && machoire) {
+        clip = clip.clone();
+        clip.tracks = clip.tracks.filter((t) => !t.name.startsWith(machoire.name + "."));
+      }
       mixer = new THREE.AnimationMixer(scene);
       if (clip) mixer.clipAction(clip).play();
       mixer.update(0);
       scene.traverse((o) => {
-        if (/^Bone\.?026/.test(o.name)) machoire = o;
         if (!o.isMesh) return;
+        moso.peau = o;
         const ancien = o.material;
         // sans brouillard (bien visible de loin dans l'eau bleue) ; un peu de lumière propre
         // pour que la peau reste lisible sous l'eau, où le soleil est faible
@@ -499,10 +683,7 @@ export function creerMosasaure() {
         ancien.dispose();
         o.frustumCulled = false; // la nage sort de la boîte de la pose de repos
       });
-      if (machoire) {
-        reposMachoire = machoire.quaternion.clone();
-        pisteMachoire = clip?.tracks.some((t) => t.name === machoire.name + ".quaternion") ?? false;
-      }
+      if (machoire) reposMachoire = machoire.quaternion.clone();
       // orientation et taille mesurées sur la pose de nage : de la queue vers la tête = +z
       const pivot = new THREE.Group();
       pivot.add(scene);
@@ -535,11 +716,9 @@ export function creerMosasaure() {
       }
       // cycle de 1,33 s : ~2 s à 7 m/s, ~1,3 s à 14 m/s (comme le provisoire)
       mixer.update(dt * (1.6 + vitesse * 0.22) / 4.71);
-      ouv += (moso.ouverture - ouv) * Math.min(1, dt * 3);
-      if (machoire) {
-        if (!pisteMachoire) machoire.quaternion.copy(reposMachoire);
-        machoire.quaternion.multiply(qOuv.setFromAxisAngle(AXE_MACHOIRE, ouv * 0.8));
-      }
+      // ouverture lissée (s'ouvre en ~0,5 s, se referme un peu plus vite), toujours depuis la pose de repos
+      ouv += (moso.ouverture - ouv) * Math.min(1, dt * (moso.ouverture > ouv ? 4 : 6));
+      if (machoire) machoire.quaternion.copy(reposMachoire).multiply(qOuv.setFromAxisAngle(AXE_MACHOIRE, ouv * SENS_MACHOIRE));
     },
   };
   return moso;
@@ -774,6 +953,60 @@ function textureRayon() {
     g.fillRect(x, 0, 1, 128);
   }
   return new THREE.CanvasTexture(c);
+}
+
+/** Mur de grosses pierres taillées (4 m × 4 m par répétition), pour la tranchée. */
+function texturePierre() {
+  const S = 256, rnd = aleatoire(11);
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const g = c.getContext("2d");
+  g.fillStyle = "#6f6a60"; // joints
+  g.fillRect(0, 0, S, S);
+  const rangs = 5, hR = S / rangs;
+  for (let r = 0; r < rangs; r++) {
+    let x = r % 2 ? -hR * 0.6 : 0;
+    while (x < S) {
+      const w = hR * (1.1 + rnd() * 0.9), v = 150 + rnd() * 45;
+      const t = rnd() * 14 - 7;
+      g.fillStyle = `rgb(${v + t + 8},${v + t},${v - 12 + t})`;
+      for (const dx of [0, S, -S]) g.fillRect(x + dx + 2, r * hR + 2, w - 4, hR - 4);
+      x += w;
+    }
+  }
+  // grain
+  const img = g.getImageData(0, 0, S, S);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const n = (rnd() - 0.5) * 22;
+    img.data[i] += n;
+    img.data[i + 1] += n;
+    img.data[i + 2] += n;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
+/** Gravier (fond de la tranchée). */
+function textureGravier() {
+  const S = 128, rnd = aleatoire(5);
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const g = c.getContext("2d");
+  g.fillStyle = "#9a917f";
+  g.fillRect(0, 0, S, S);
+  for (let k = 0; k < 900; k++) {
+    const v = 110 + rnd() * 100;
+    g.fillStyle = `rgb(${v},${v - 6},${v - 16})`;
+    g.fillRect(rnd() * S, rnd() * S, 1 + rnd() * 3, 1 + rnd() * 2.5);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 function textureBulle() {

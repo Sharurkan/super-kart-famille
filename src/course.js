@@ -566,8 +566,8 @@ export class Course {
     const ax = Math.sin(phys.angle), az = Math.cos(phys.angle);
     const cote = Math.random() < 0.5 ? 1 : -1;
     const px = phys.x - ax * 1.1 + az * 0.9 * cote, pz = phys.z - az * 1.1 - ax * 0.9 * cote;
-    if (phys.dansHerbe && Math.abs(phys.vitesse) > 3) this.particules.emettre(px, 0.3, pz, this.def.horsPiste, 0.7, 0.5);
-    else if (Math.abs(phys.direction) > 0.6 && vRel > 0.6) this.particules.emettre(px, 0.3, pz, 0xffffff, 0.8, 0.5);
+    if (phys.dansHerbe && Math.abs(phys.vitesse) > 3) this.particules.emettre(px, phys.ySol + 0.3, pz, this.def.horsPiste, 0.7, 0.5); // ySol : route abaissée (tranchée)
+    else if (Math.abs(phys.direction) > 0.6 && vRel > 0.6) this.particules.emettre(px, phys.ySol + 0.3, pz, 0xffffff, 0.8, 0.5);
   }
 
   liberer() {

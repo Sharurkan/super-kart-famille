@@ -9,6 +9,28 @@ export function boiteRonde(l, h, p) {
 import { decorPlage, decorNeige } from "./decors-circuits.js";
 import { decorDino, decorJouets, decorConcert } from "./decors-themes.js";
 
+/**
+ * Perce un trou dans le grand sol (contour = [{x, z}, ...] dans le monde, sans le refermer) :
+ * ex. la tranchée de l'aquarium. Compatible avec le ravin de ptero.js, qui remplace déjà le plan
+ * par une ShapeGeometry trouée : les trous existants sont gardés, celui-ci s'ajoute.
+ */
+export function percerSol(groupe, contour) {
+  const sol = groupe.children.find((o) => o.userData.solPrincipal);
+  if (!sol) return false;
+  const g = sol.geometry;
+  let forme;
+  if (g.type === "ShapeGeometry") forme = [g.parameters.shapes].flat()[0];
+  else {
+    const w = g.parameters.width / 2;
+    forme = new THREE.Shape([new THREE.Vector2(-w, -w), new THREE.Vector2(w, -w), new THREE.Vector2(w, w), new THREE.Vector2(-w, w)]);
+  }
+  // repère local du plan : x = x monde, y = -z monde (le plan est couché par rotation.x = -90°)
+  forme.holes.push(new THREE.Path(contour.map((p) => new THREE.Vector2(p.x - sol.position.x, -(p.z - sol.position.z)))));
+  g.dispose();
+  sol.geometry = new THREE.ShapeGeometry(forme);
+  return true;
+}
+
 /** Générateur aléatoire reproductible (même décor à chaque partie). */
 function aleatoire(graine) {
   let a = graine >>> 0;
@@ -81,6 +103,7 @@ export function construireDecor(def, piste) {
   const sol = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), materiauSol(def, piste));
   sol.rotation.x = -Math.PI / 2;
   sol.position.set(piste.centre.x, 0, piste.centre.z);
+  sol.userData.solPrincipal = true; // pour percerSol (sa géométrie peut changer)
   groupe.add(sol);
 
   const DECORS = { prairie: decorPrairie, plage: decorPlage, neige: decorNeige, dino: decorDino, jouets: decorJouets, concert: decorConcert };
