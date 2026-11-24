@@ -51,7 +51,8 @@ Chaque œuvre : « This work is based on "<titre>" by <auteur> licensed under CC
 
 "Volcano" — santhu (santhu48)
   https://sketchfab.com/3d-models/volcano-e89153ec4f324e688f78d001dd3f7e3c
-  Fichier : nature/volcan.glb (occlusion mélangée à la couleur, étiré en hauteur)
+  Fichier : nature/volcan.glb (occlusion mélangée à la couleur, étiré en hauteur ;
+  sommet creusé en cratère et recoloré en roche volcanique : outils/blender/volcan_realiste.py)
 
 === CC0 (domaine public, merci quand même !) ===
 Licence : https://creativecommons.org/publicdomain/zero/1.0/

@@ -240,6 +240,38 @@ class MoteurAudio {
     o.stop(t + 1.1);
   }
 
+  /** Grondement sourd du volcan qui entre en éruption (force 0..1 : plus faible quand on est loin). */
+  grondement(force = 1) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    // bruit très grave qui enfle puis s'éteint
+    const s = this.ctx.createBufferSource();
+    s.buffer = this.bruit;
+    s.loop = true;
+    const f = this.ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = 140;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.9 * force, t + 0.35);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 2.6);
+    s.connect(f).connect(g).connect(this.busEffets);
+    s.start(t);
+    s.stop(t + 2.7);
+    // une basse qui tremble un peu (la terre gronde)
+    const o = this.ctx.createOscillator();
+    const go = this.ctx.createGain();
+    o.type = "sine";
+    o.frequency.setValueAtTime(48, t);
+    o.frequency.exponentialRampToValueAtTime(30, t + 2.2);
+    go.gain.setValueAtTime(0.0001, t);
+    go.gain.exponentialRampToValueAtTime(0.35 * force, t + 0.2);
+    go.gain.exponentialRampToValueAtTime(0.001, t + 2.3);
+    o.connect(go).connect(this.busEffets);
+    o.start(t);
+    o.stop(t + 2.4);
+  }
+
   /** "Boing" qui monte quand on s'envole d'un tremplin. */
   saut() {
     if (!this.ctx) return;

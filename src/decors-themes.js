@@ -6,6 +6,7 @@ import { planter, gardeRoute, planterJungle } from "./vegetation.js";
 import { installerRavin } from "./ptero.js";
 import { installerAquarium } from "./aquarium.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { creerVolcan } from "./volcan.js";
 
 // Décors des circuits Dinosaures, Jouets et Concert pop.
 // Astuce couleurs : les parties "blanches" d'un objet fusionné prennent la couleur
@@ -311,11 +312,11 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   ]);
   const nids = horsTroupeaux(positions(piste, rnd, nb(14), horsPiste, 40)).map((p) => ({ ...p, s: 1, r: rnd() * 6 })); // posés plus bas
 
-  // volcan au loin avec sa fumée (vrai modèle 3D, voir volcan() plus bas)
+  // volcan en éruption au fond de la plaine (vrai modèle 3D, fumée, lave : voir volcan.js)
   const xV = piste.centre.x + Math.cos(ANGLE_VOLCAN) * (piste.rayon + 260);
   const zV = piste.centre.z + Math.sin(ANGLE_VOLCAN) * (piste.rayon + 260);
-  const sommet = { x: 0, y: VOLCAN.hauteur, z: 0 }; // cratère, par rapport au pied du volcan (mesuré au chargement)
-  volcan(groupe, xV, zV, sommet);
+  const volcan = creerVolcan(groupe, xV, zV, { versPiste: Math.atan2(piste.centre.z - zV, piste.centre.x - xV) });
+  if (import.meta.env.DEV) window.__volcan = volcan;
   // collines lointaines : même sol que la forêt (vraies textures), un peu plus sombres
   const collines = [];
   for (let i = 0; i < 14; i++) {
@@ -326,13 +327,8 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   }
   const sol = groupe.children.find((o) => o.isMesh && o.geometry?.type === "PlaneGeometry" && o.geometry.parameters.width >= 1000);
   groupe.add(instances(new THREE.SphereGeometry(1, 16, 10), sol?.material ?? new THREE.MeshLambertMaterial({ color: 0x74b816 }), collines));
-  const NB_FUMEE = 16;
-  const fumee = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, opacity: 0.8, depthWrite: false }), NB_FUMEE);
-  // panache : gris foncé près du cratère, plus clair en montant (couleur fixée par boule, voir l'animation)
-  const gris = new THREE.Color();
-  for (let k = 0; k < NB_FUMEE; k++) fumee.setColorAt(k, gris.setHex(0x8a8580));
-  groupe.add(fumee);
-  nuages(groupe, piste, rnd);
+  // pas de petit nuage blanc devant le volcan (ni devant son panache)
+  nuages(groupe, piste, rnd, (a) => Math.abs(Math.atan2(Math.sin(a - ANGLE_VOLCAN), Math.cos(a - ANGLE_VOLCAN))) < 0.6);
   teteTrex(piste, groupe);
   diplodocus(piste, groupe); // après le T-rex : sa place ne change pas
   decorLooping(piste, groupe);
@@ -341,30 +337,16 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   // la jungle (imposteurs réalistes), une fois le ravin, le diplodocus, le T-rex et l'aquarium installés ;
   // rien sur le pied du volcan ni sur les troupeaux des plaines (ni dans piste.zonesDecor)
   if (import.meta.env.DEV) window.__troupeaux = Object.assign(clairieres, { plaines: PLAINES, trex, dinos: poses });
-  planterJungle(groupe, piste, rnd, garde, { plaines: PLAINES, exclusions: [{ x: xV, z: zV, r: 150 }, ...clairieres] });
+  planterJungle(groupe, piste, rnd, garde, { plaines: PLAINES, exclusions: [{ x: xV, z: zV, r: volcan.rayonPied + 5 }, ...clairieres] });
   // les nids passent par la garde une fois le ravin, le diplodocus et le T-rex installés
   groupe.add(instances(nid, matCouleurs(), nids.flatMap((p) => {
     const ok = garde.verifier(p.x, p.z, 1.4, 1.2, "nid");
     return ok ? [{ ...p, ...ok }] : [];
   })));
 
-  let t = 0;
-  const o = new THREE.Object3D();
   return (dt, camera) => {
-    t += dt;
     rugir(camera);
-    for (let k = 0; k < NB_FUMEE; k++) {
-      const vie = (t * 0.07 + k / NB_FUMEE) % 1;
-      o.position.set(xV + sommet.x + Math.sin(k * 3 + t * 0.2) * 12 * vie + vie * vie * 30, sommet.y + 4 + vie * 110, zV + sommet.z + Math.cos(k * 2) * 9 * vie);
-      o.scale.setScalar(8 + vie * 30);
-      o.updateMatrix();
-      fumee.setMatrixAt(k, o.matrix);
-      // en bas, éclairée par la lave (orange), puis grise et de plus en plus claire
-      const g = 0.4 + vie * 0.42, lave = Math.max(0, 1 - vie * 6);
-      fumee.setColorAt(k, gris.setRGB(g + (1 - g) * lave, g + (0.35 - g) * lave, g + (0.08 - g) * lave));
-    }
-    fumee.instanceMatrix.needsUpdate = true;
-    fumee.instanceColor.needsUpdate = true;
+    volcan.update(dt, camera);
     for (const m of mixers) m.update(dt);
     // dinosaures qui marchent en rond, lentement, autour de leur troupeau
     for (const D of marcheurs) {
@@ -375,56 +357,8 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   };
 }
 
-// Volcan : "Volcano" de santhu48 (Sketchfab, CC-BY 4.0), préparé par outils/blender/pack_volcan.py
-// (AO mélangée à la couleur, textures 1024). Le modèle est bas et large : on l'étire en hauteur.
+// Volcan : voir volcan.js (modèle, matériau, éruption)
 const ANGLE_VOLCAN = 1.056; // direction depuis le centre du circuit (là où était l'ancien cône)
-const VOLCAN = { hauteur: 115, largeur: 270 }; // mètres (l'ancien cône : 127 m de haut, 220 m de large)
-
-function volcan(groupe, x, z, sommet) {
-  new GLTFLoader().loadAsync(import.meta.env.BASE_URL + "nature/volcan.glb").then((gltf) => {
-    const modele = gltf.scene;
-    modele.traverse((o) => {
-      if (!o.isMesh) return;
-      const a = o.material;
-      // même éclairage simple que le reste du décor
-      o.material = new THREE.MeshLambertMaterial({ map: a.map, normalMap: a.normalMap });
-      if (a.normalMap) o.material.normalScale.copy(a.normalScale);
-      if (a.map) a.map.anisotropy = 4;
-      a.dispose();
-    });
-    const boite = new THREE.Box3().setFromObject(modele);
-    const taille = boite.getSize(new THREE.Vector3()), centre = boite.getCenter(new THREE.Vector3());
-    const sh = VOLCAN.largeur / Math.max(taille.x, taille.z), sv = VOLCAN.hauteur / taille.y;
-    modele.scale.set(sh, sv, sh);
-    modele.position.set(-centre.x * sh, -boite.min.y * sv - 3, -centre.z * sh); // un peu enfoncé : pas de bord visible
-    const support = new THREE.Group();
-    support.name = "volcan";
-    support.position.set(x, 0, z);
-    support.add(modele);
-    groupe.add(support);
-    // cratère : sommets les plus hauts du modèle (centre et rayon du bord)
-    support.updateMatrixWorld(true);
-    const v = new THREE.Vector3(), haut = [];
-    let yMax = -Infinity;
-    modele.traverse((o) => {
-      if (!o.isMesh) return;
-      const p = o.geometry.attributes.position;
-      for (let k = 0; k < p.count; k++) {
-        v.fromBufferAttribute(p, k).applyMatrix4(o.matrixWorld).sub(support.position);
-        yMax = Math.max(yMax, v.y);
-        haut.push(v.clone());
-      }
-    });
-    const bord = haut.filter((p) => p.y > yMax - VOLCAN.hauteur * 0.06);
-    const cx = bord.reduce((s, p) => s + p.x, 0) / bord.length, cz = bord.reduce((s, p) => s + p.z, 0) / bord.length;
-    const rayon = bord.reduce((s, p) => s + Math.hypot(p.x - cx, p.z - cz), 0) / bord.length;
-    // lave qui rougeoie au fond du cratère (visible de loin, comme sur l'ancien volcan)
-    const lave = new THREE.Mesh(new THREE.CircleGeometry(rayon * 0.85, 20).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff7b1c }));
-    lave.position.set(cx, yMax - VOLCAN.hauteur * 0.04, cz);
-    support.add(lave);
-    Object.assign(sommet, { y: yMax, x: cx, z: cz });
-  });
-}
 
 // ---------------------------------------------------------------------------
 export function decorJouets(groupe, piste, rnd, horsPiste) {
