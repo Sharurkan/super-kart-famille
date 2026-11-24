@@ -68,14 +68,18 @@ export function creerPilote(nom) {
 
   return {
     mesh,
-    /** yawParent : rotation Y totale du parent (kart + dérapage). */
-    orienter(camera, yawParent) {
+    /**
+     * yawParent : rotation Y totale du parent (kart + dérapage).
+     * suivi : part de l'angle vers la caméra que le panneau rattrape (course : 30 % ; menus : 1,
+     * panneau exactement face à la caméra). Le 3e argument (ancienne direction du kart) est ignoré.
+     */
+    orienter(camera, yawParent, _yawKart, suivi = SUIVI) {
       mesh.getWorldPosition(v);
       const versCamera = Math.atan2(camera.position.x - v.x, camera.position.z - v.z);
       const delta = enveloppe(versCamera - yawParent);
       const deFace = Math.cos(delta) > 0;
       const base = deFace ? 0 : Math.PI;
-      mesh.rotation.y = base + enveloppe(delta - base) * SUIVI;
+      mesh.rotation.y = base + enveloppe(delta - base) * suivi;
       mesh.material = deFace ? face : dos;
 
       mains.visible = false;

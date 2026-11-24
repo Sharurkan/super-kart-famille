@@ -6,8 +6,11 @@ import { liberer } from "./liberer.js";
 
 /**
  * Petite scène 3D pour les menus :
- * - "titre" : les 5 personnages dans leurs karts, la caméra tourne doucement ;
- * - "kart" : un seul kart sur un plateau tournant, avec le personnage choisi.
+ * - "titre" : les 5 personnages dans leurs karts, alignés côte à côte ;
+ * - "kart" : un seul kart au centre, sur un plateau, avec le personnage choisi ;
+ * - "podium" : les 3 premiers sur les marches.
+ * Les pilotes sont des dessins plats : dans les menus, tous les karts regardent la caméra, qui
+ * reste presque de face (balancement de quelques degrés), pour ne jamais les voir de biais.
  */
 export class Vitrine {
   constructor() {
@@ -63,9 +66,11 @@ export class Vitrine {
     this.vider();
     this.mode = "titre";
     this.plateau.visible = false;
+    // en ligne, tous de face (avant du kart = +Z, vers la caméra)
     PERSONNAGES.forEach((p, i) => {
-      const a = (i - 2) * 0.55;
-      this.ajouter(KARTS[i % KARTS.length], p, Math.sin(a) * 7, Math.cos(a) * 7 - 7, a + 0.15 * (i - 2));
+      const x = (i - (PERSONNAGES.length - 1) / 2) * ECART_TITRE;
+      // chaque kart pointe vers la caméra (ceux des bouts tournent un peu vers le centre)
+      this.ajouter(KARTS[i % KARTS.length], p, x, -3, Math.atan2(-x, 14));
     });
   }
 
@@ -87,7 +92,7 @@ export class Vitrine {
     this.marches.confettis.visible = true;
     podium.slice(0, 3).forEach((p, i) => {
       const m = MARCHES[i];
-      const o = this.ajouter(p.type, p.perso, m.x, 0.3, 0);
+      const o = this.ajouter(p.type, p.perso, m.x, 0.3, Math.atan2(-m.x, 13)); // tourné vers la caméra
       o.kart.groupe.position.y = m.h;
       o.base = m.h;
       o.place = i;
@@ -103,9 +108,12 @@ export class Vitrine {
     this.t += dt;
     const c = this.camera;
     if (this.marches && this.mode !== "podium") this.marches.groupe.visible = this.marches.confettis.visible = false;
+    // léger balancement de la caméra : au plus ~5° de chaque côté, jamais de profil
+    const balance = Math.sin(this.t * 0.35);
     if (this.mode === "podium") {
-      c.position.set(1.6 + Math.sin(this.t * 0.3) * 1.2, 3.6, 12.5);
-      c.lookAt(1.6, 1.3, 0);
+      const d = distanceCadre(c, 5.2, 12.5);
+      c.position.set(balance * d * 0.08, 3.4, 0.3 + d);
+      c.lookAt(0, 1.6, 0.3);
       // le gagnant saute de joie
       for (const o of this.objets) {
         const saut = o.place === 0 ? Math.abs(Math.sin(this.t * 4)) * 0.5 : Math.abs(Math.sin(this.t * 3 + o.place)) * 0.15;
@@ -113,14 +121,15 @@ export class Vitrine {
       }
       this.marches.animer(dt);
     } else if (this.mode === "titre") {
-      const a = Math.sin(this.t * 0.25) * 0.35;
-      c.position.set(Math.sin(a) * 15, 4.5, Math.cos(a) * 15 - 2);
-      c.lookAt(0, 0.6, -3);
+      // toute la rangée tient dans l'écran, même en 4:3 (tablette)
+      const d = distanceCadre(c, ((PERSONNAGES.length - 1) * ECART_TITRE) / 2 + 1.4, 10);
+      c.position.set(balance * d * 0.08, 0.35 * d, -3 + d);
+      c.lookAt(0, 0.2, -3);
     } else {
-      c.position.set(0, 2.6, 7.4);
+      const d = distanceCadre(c, 2.6, 7.4);
+      c.position.set(balance * d * 0.08, 2.6, d);
       c.lookAt(0, 1.05, 0);
-      // le plateau se balance pour montrer surtout le visage, un peu le côté
-      this.plateau.rotation.y = 0.5 + Math.sin(this.t * 0.8) * 0.9;
+      this.plateau.rotation.y = 0; // le plateau ne tourne plus : kart et pilote de face
       this.pop = Math.max(0, this.pop - dt * 3);
       const s = 1 + Math.sin(this.pop * Math.PI) * 0.15;
       this.plateau.scale.setScalar(s);
@@ -132,9 +141,17 @@ export class Vitrine {
       k.corps.position.y = Math.abs(Math.sin(this.t * 6 + k.groupe.position.x)) * 0.03;
       k.groupe.updateMatrixWorld();
       const yaw = k.groupe.rotation.y + (o.parent === this.plateau ? this.plateau.rotation.y : 0);
-      o.pilote.orienter(c, yaw, yaw);
+      o.pilote.orienter(c, yaw, yaw, 1); // panneau exactement face à la caméra
     }
   }
+}
+
+const ECART_TITRE = 2.7; // mètres entre deux karts de l'accueil
+
+/** Recul de la caméra pour que la demi-largeur voulue tienne dans l'écran (jamais sous "mini"). */
+function distanceCadre(camera, demiLargeur, mini) {
+  const demiAngle = Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect);
+  return Math.max(mini, demiLargeur / Math.tan(demiAngle));
 }
 
 // ---------- Podium ----------
