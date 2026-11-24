@@ -1074,9 +1074,14 @@ function sentiers(groupe, piste, rnd, nombre, garde) {
  * La route se resserre entre deux rangées de rochers jusqu'à un tremplin qui envoie les
  * karts dans la gueule : le T-rex les croque puis les recrache derrière lui (voir course.js).
  */
-// dans le modèle, la gueule ne regarde pas exactement +x et n'est pas centrée : on corrige
-const ROTATION_GUEULE = 0.5; // réglé à l'œil depuis la vue du kart (le modèle n'est pas symétrique)
-const DECALAGE_GUEULE = -1; // mètres vers la droite de la route, réglé depuis le tremplin (là où on vise la gueule)
+// Dans le modèle, la gueule ne regarde pas +x et la tête n'est pas centrée sur l'origine.
+// Mesuré (pas réglé à l'œil) : on cherche le plan vertical de symétrie gauche/droite de la tête,
+// celui pour lequel le reflet de chaque sommet retombe au plus près d'un autre sommet (recherche
+// sur l'angle et le décalage, sommets au-dessus du socle) : un seul minimum net, erreur moyenne
+// 0,024 unité contre ~0,07 ailleurs. Le milieu de la gueule ouverte est sur ce plan.
+const ROTATION_GUEULE = 0.86; // radians : direction du museau dans le modèle (axe de symétrie)
+const PLAN_SYMETRIE = 0.06; // unités du modèle : écart du plan de symétrie à l'origine (≈ 1 m une fois agrandi)
+const DECALAGE_GUEULE = 0; // mètres vers la droite de la route : la gueule est centrée sur l'axe
 
 // bord avant de la gueule (lèvres et dents), en mètres avant le centre de la tête : mesuré sur
 // le modèle placé (≈ 11,8 m) ; remplacé par la vraie mesure quand le modèle est chargé
@@ -1140,41 +1145,20 @@ function teteTrex(piste, groupe) {
         o.material = map ? new THREE.MeshLambertMaterial({ map, flatShading: true }) : new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
       }
     });
-    // le modèle fait ~2 unités de large, gueule vers +x, socle en bas
+    // le modèle fait ~2 unités de large, socle en bas, museau à ROTATION_GUEULE de +x (vers +z)
     const boite = new THREE.Box3().setFromObject(modele);
     const echelle = 17;
-    // centrage automatique : on cherche le milieu de la gueule (les points tout à l'avant)
-    modele.updateMatrixWorld(true);
-    const pts = [];
     const v = new THREE.Vector3();
-    modele.traverse((o) => {
-      if (!o.isMesh) return;
-      const pa = o.geometry.attributes.position;
-      for (let k = 0; k < pa.count; k++) {
-        v.fromBufferAttribute(pa, k).applyMatrix4(o.matrixWorld);
-        pts.push(v.x, v.y, v.z);
-      }
-    });
-    const hautMin = boite.min.y + (boite.max.y - boite.min.y) * 0.25;
     const tete = new THREE.Group();
     tete.add(modele);
     modele.scale.setScalar(echelle);
     modele.position.y = -boite.min.y * echelle - 0.6; // socle un peu enfoncé dans le sol
     tete.position.set(piste.cx[i] + piste.nx[i] * DECALAGE_GUEULE, 0, piste.cz[i] + piste.nz[i] * DECALAGE_GUEULE);
-    // oriente la tête (angle de la gueule dans le modèle) et centre le milieu de la gueule sur la route
-    const placer = (angleGueule) => {
-      const d = new THREE.Vector2(Math.cos(angleGueule), Math.sin(angleGueule));
-      const perp = new THREE.Vector2(-d.y, d.x);
-      let smax = -Infinity;
-      for (let k = 0; k < pts.length; k += 3) smax = Math.max(smax, pts[k] * d.x + pts[k + 2] * d.y);
-      let somme = 0, n = 0;
-      for (let k = 0; k < pts.length; k += 3) {
-        const sk = pts[k] * d.x + pts[k + 2] * d.y;
-        if (sk > smax - 0.35 && pts[k + 1] > hautMin) { somme += pts[k] * perp.x + pts[k + 2] * perp.y; n++; }
-      }
-      const milieu = n ? somme / n : 0;
-      modele.position.x = -perp.x * milieu * echelle;
-      modele.position.z = -perp.y * milieu * echelle;
+    // oriente la tête (axe du museau dans le modèle) et pose son plan de symétrie sur l'axe de la route
+    const placer = (angleGueule, plan = PLAN_SYMETRIE) => {
+      const perp = new THREE.Vector2(-Math.sin(angleGueule), Math.cos(angleGueule));
+      modele.position.x = -perp.x * plan * echelle;
+      modele.position.z = -perp.y * plan * echelle;
       tete.rotation.y = piste.angleA(i) + Math.PI / 2 + angleGueule; // gueule tournée vers les karts qui arrivent
       piste.teteTrex.distanceGueule = mesurerGueule();
     };

@@ -277,7 +277,8 @@ export class Course {
     this.decor.animer(dt, this.camera);
     for (const k of this.karts) {
       k.modele.groupe.updateMatrixWorld();
-      k.pilote.orienter(this.camera, k.phys.angle + k.modele.corps.rotation.y, k.phys.angle);
+      const angle = (this.physAffichee(k) ?? k.phys).angle;
+      k.pilote.orienter(this.camera, angle + k.modele.corps.rotation.y, angle);
     }
   }
 
@@ -324,8 +325,13 @@ export class Course {
       this.entrerDansLeVentre(k);
       return;
     }
-    // les adversaires y passent "invisibles" à peu près le temps que met l'enfant
+    // les adversaires ne roulent pas vraiment dans le ventre : ils le traversent en à peu près le
+    // temps que met l'enfant, et n'y sont dessinés que s'il y est aussi (voir physAffichee)
     k.mange = k.ventre.duree = this.interieur ? this.dureeVentreIA() : 1.1;
+    if (this.interieur) {
+      const lim = this.interieur.piste.demi - 1.5;
+      k.ventre.voie = THREE.MathUtils.clamp(k.ia.voie ?? 0, -lim, lim); // sa voie dans le tunnel
+    }
     k.modele.groupe.visible = false;
   }
 
@@ -534,8 +540,53 @@ export class Course {
       }
   }
 
+  /**
+   * Ce qu'on affiche d'un kart : sa vraie physique, ou, pour un adversaire qui traverse le T-rex
+   * pendant que l'enfant y est aussi, sa place sur le circuit du ventre. L'adversaire n'y roule pas
+   * vraiment : il avance au rythme de sa traversée (k.ventre.f, la même mesure que la mini-carte et
+   * le classement), donc devant ou derrière l'enfant comme au classement. null : caché (dans la gueule).
+   */
+  physAffichee(k, dt = 0) {
+    if (!(k.mange > 0)) return k.phys;
+    const v = k.ventre;
+    if (!v || !this.interieur || !this.joueur.dedans) return null;
+    const P = this.interieur.piste, depart = this.departVentre ?? 6;
+    const s = depart + v.f * (P.N - depart); // indice (avec la fraction) sur le tour intérieur
+    const i0 = Math.floor(s) % P.N, i1 = (i0 + 1) % P.N, u = s - Math.floor(s);
+    // pas de collisions dans le ventre, mais on ne passe pas à travers l'enfant :
+    // l'adversaire se décale doucement sur le côté quand il le croise
+    const J = this.joueur.phys, lim = P.demi - 1.5;
+    const ds = ((((s - J.indice) % P.N) + 1.5 * P.N) % P.N - P.N / 2) * P.pas; // devant (+) / derrière (-) l'enfant
+    let cible = v.voie;
+    if (Math.abs(ds) < 4.5 && Math.abs(cible - J.lateral) < 2.6) {
+      const cote = cible >= J.lateral ? 1 : -1;
+      cible = J.lateral + cote * 2.6;
+      if (Math.abs(cible) > lim) cible = J.lateral - cote * 2.6;
+      cible = THREE.MathUtils.clamp(cible, -lim, lim);
+    }
+    v.lat ??= v.voie;
+    v.lat += (cible - v.lat) * Math.min(1, dt * 4);
+    const lat = v.lat;
+    const a0 = P.angleA(i0), da = Math.atan2(Math.sin(P.angleA(i1) - a0), Math.cos(P.angleA(i1) - a0));
+    // il tombe dans le ventre comme l'enfant : petite chute juste après la gueule
+    const chute = Math.max(0, 1 - (v.duree - k.mange) / 0.45);
+    const a = (v.affiche ??= { ySol: 0, pente: 0, direction: 0, dansHerbe: false, clignote: 0 });
+    a.x = P.cx[i0] + P.nx[i0] * lat + (P.cx[i1] + P.nx[i1] * lat - P.cx[i0] - P.nx[i0] * lat) * u;
+    a.z = P.cz[i0] + P.nz[i0] * lat + (P.cz[i1] + P.nz[i1] * lat - P.cz[i0] - P.nz[i0] * lat) * u;
+    a.y = 2.2 * chute * chute;
+    a.angle = a0 + da * u;
+    a.vitesse = ((P.N - depart) * P.pas) / v.duree;
+    a.direction = THREE.MathUtils.clamp(-da * 6, -1, 1); // braque un peu dans les virages
+    return a;
+  }
+
   majVisuel(k, dt) {
-    const { phys, modele } = k;
+    const { modele } = k;
+    const phys = this.physAffichee(k, dt);
+    if (!phys) {
+      modele.groupe.visible = false; // dans la gueule, ou dans le ventre sans l'enfant
+      return;
+    }
     const vRel = phys.vitesse / REGLAGES.vitesseMax;
     modele.groupe.position.set(phys.x, phys.y, phys.z);
     modele.corps.rotation.x += (phys.pente - modele.corps.rotation.x) * Math.min(1, dt * 10);
@@ -554,8 +605,7 @@ export class Course {
       r.pivot.rotation.y = -phys.direction * 0.45;
     }
     for (const r of modele.roues.arriere) r.tourne.rotation.x += (phys.vitesse * dt) / r.rayon;
-    if (k.mange > 0) modele.groupe.visible = false;
-    else modele.groupe.visible = phys.clignote > 0 ? Math.floor(this.t * 12) % 2 === 0 : true;
+    modele.groupe.visible = phys.clignote > 0 ? Math.floor(this.t * 12) % 2 === 0 : true;
     k.scenario?.visuel?.(k);
   }
 
