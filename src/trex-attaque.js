@@ -149,6 +149,20 @@ export function attaqueTrex({ objet, mixer, clips, piste, cote, iFrappe }) {
     return y;
   };
   const qMachoireRepos = machoire.quaternion.clone(); // « Idle » : gueule fermée
+  // PIÈGE (la mâchoire « partait en vrille ») : le mixer de three.js n'écrit un os que si la valeur du
+  // clip a CHANGÉ depuis l'image précédente (PropertyMixer.apply). Or dans « Idle » la mâchoire, Spine1,
+  // etc. ont une piste constante, et le bassin (bn_Spine) n'en a pas du tout : le mixer ne les
+  // réécrivait jamais et nos rotations s'ajoutaient d'image en image (mâchoire jusqu'à 180°).
+  // Correction : avant chaque mixer.update, chaque os modifié retrouve la valeur du clip mémorisée
+  // juste avant nos rotations (base) ; le mixer écrit par-dessus si le clip a bougé.
+  const repos0 = new Map(touches.map((o) => [o, o.quaternion.clone()])); // (mesures en dev)
+  let modifie = false; // des os ont été tournés à cette image
+  /** À appeler juste AVANT mixer.update(dt). */
+  function remettre() {
+    if (!modifie) return;
+    for (const o of touches) o.quaternion.copy(base.get(o));
+    modifie = false;
+  }
 
   // --- pose : base (clips) + lacet / tangage + tête + mâchoire ---
   const opts = { regard: null, wTete: 0, ouvre: 0, ferme: 0, secoue: 0 };
@@ -184,13 +198,13 @@ export function attaqueTrex({ objet, mixer, clips, piste, cote, iFrappe }) {
       tourner(chaine[4], qa.setFromAxisAngle(HAUT, opts.secoue * 0.5));
       tourner(tete, qa.setFromAxisAngle(HAUT, opts.secoue * 0.6));
     }
-    // le museau vise le kart (au plus 0,9 rad de correction)
+    // le museau vise le kart (au plus 0,6 rad de correction)
     if (opts.regard && opts.wTete > 0.001) {
       posF(tete, pT);
       pS.copy(EH.bout).applyMatrix4(tete.matrixWorld).applyMatrix4(invF);
       dCur.copy(pS).sub(pT).normalize();
       dVoulu.copy(opts.regard).sub(pT).normalize();
-      const a = Math.min(dCur.angleTo(dVoulu), 0.9) * opts.wTete;
+      const a = Math.min(dCur.angleTo(dVoulu), 0.6) * opts.wTete;
       if (a > 1e-4) {
         axe.crossVectors(dCur, dVoulu).normalize();
         tourner(tete, qa.setFromAxisAngle(axe, a));
@@ -321,7 +335,7 @@ export function attaqueTrex({ objet, mixer, clips, piste, cote, iFrappe }) {
       // un petit recul (il prend son élan), puis le plongeon
       wFrappe = u < 0.22 ? -0.18 * lisse(u / 0.22) : -0.18 + 1.18 * lisse((u - 0.22) / 0.78);
       regardCible = 1;
-      ouvre = 0.12 + 0.25 * lisse(u);
+      ouvre = 0.1 + 0.05 * lisse(u); // le clip ouvre déjà la gueule de ~55° : à peine plus
       if (u >= 1) {
         E.phase = "clac";
         E.tau = 0;
@@ -363,7 +377,8 @@ export function attaqueTrex({ objet, mixer, clips, piste, cote, iFrappe }) {
     objet.rotation.y = angle0 + E.pivot;
     objet.updateMatrixWorld(true);
     invF.copy(objet.matrixWorld).invert();
-    for (const o of touches) base.get(o).copy(o.quaternion);
+    for (const o of touches) base.get(o).copy(o.quaternion); // valeurs du clip (voir remettre)
+    modifie = true;
     // cible : la gueule à côté du kart (côté T-rex), au-dessus du bord de la route
     if (J) {
       const lat = clamp(cote * (J.phys.lateral ?? 0) + A.cote, 2.5, piste.demi + 1.5) * cote;
@@ -414,6 +429,6 @@ export function attaqueTrex({ objet, mixer, clips, piste, cote, iFrappe }) {
     E.dernier = { psi, theta, kappa, bas: plusBas() - yRef, bouche: M.clone().applyMatrix4(objet.matrixWorld), cible: cible.clone() };
   }
 
-  const outils = import.meta.env.DEV ? { mixer, repos, cri, poser, resoudre, bouche, restaurer, residu, sol, opts, invF, pivot, base, touches, objet, posF, chaine } : null;
-  return { update, etat, plusBas, outils };
+  const outils = import.meta.env.DEV ? { repos0, bassin, tete, machoire, mixer, repos, cri, poser, resoudre, bouche, restaurer, residu, sol, opts, invF, pivot, base, touches, objet, posF, chaine } : null;
+  return { update, remettre, etat, plusBas, outils };
 }

@@ -253,7 +253,8 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
     groupe.add(objet);
     // il fait semblant d'attraper le joueur (clips + os tournés par-dessus, après son mixer)
     trex.attaque = attaqueTrex({ objet, mixer, clips, piste, cote: P3.cote, iFrappe: trex.place.iFrappe });
-    mixers.push({ update: (dt) => { mixer.update(dt); trex.attaque.update(dt); } });
+    // ordre : os remis aux valeurs du clip, clips (mixer), puis les os tournés par-dessus (voir remettre())
+    mixers.push({ update: (dt) => { trex.attaque.remettre(); mixer.update(dt); trex.attaque.update(dt); } });
     trex.objet = objet;
     trex.boite = boite;
     poses.push({ objet, espece: "Trex" });
