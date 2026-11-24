@@ -113,10 +113,15 @@ function lignes(P, int, force) {
   for (let i = DEBUT; i < FIN; i++) {
     const j = i + 1;
     if (force(i - DEBUT) < 0.02 && force(j - DEBUT) < 0.02) continue;
+    // la route n'a que 2 sommets en travers : quand le dévers change d'un échantillon au suivant,
+    // ses deux triangles ne sont plus dans le même plan (écart au plus 1/4 de la différence de
+    // hauteur du bord haut) ; on lève les lignes d'autant pour qu'elles ne passent pas dessous
+    const dHaut = Math.abs(P.hDevers(P.devers[j], -int * demi) - P.hDevers(P.devers[i], -int * demi));
+    const dessus = 0.05 + dHaut * 0.3;
     for (const B of bandes) {
       cc.set(B.c);
       const l0 = int * (demi - B.de), l1 = int * (demi - B.a);
-      const h = (k, l) => P.hDevers(P.devers[k], l) + 0.05;
+      const h = (k, l) => P.hDevers(P.devers[k], l) + dessus;
       const a0 = pt(P, i, l0, h(i, l0)), a1 = pt(P, i, l1, h(i, l1)), b0 = pt(P, j, l0, h(j, l0)), b1 = pt(P, j, l1, h(j, l1));
       pos.push(...a0, ...b0, ...a1, ...a1, ...b0, ...b1);
       for (let n = 0; n < 6; n++) col.push(cc.r, cc.g, cc.b);

@@ -36,7 +36,7 @@ const SORTIE = 10; // mètres après la vrille où on lui rend la main
 const DECALAGE_MAX = 2; // écart du kart au milieu du ruban (deux karts côte à côte restent côte à côte)
 const V_MIN = 16; // jamais trop lent la tête en bas
 const V_MIN_SUIVEUR = 7; // un kart qui en suit un autre sur les rails ralentit, mais pas plus que ça
-const ECART_SUIVI = 4.5; // distance gardée derrière un kart sur la même voie
+const ECART_SUIVI = 8.5; // distance gardée derrière un kart sur la même voie (> DIST_CAM : pas de kart entre la caméra et l'enfant)
 const BONUS = 3; // petit coup de vitesse à la sortie
 const DEMI_ENTONNOIR = 3.6;
 const DIST_CAM = 7.2, HAUT_CAM = 3.1; // comme CameraPoursuite (pas de saut de caméra à la sortie)
@@ -239,7 +239,7 @@ export function looping(piste, groupe) {
     }
     const ch = { g0, l0 };
     const vBase = Math.max(V_MIN, ph.vitesse);
-    const moi = { g: g0, dec, v: vBase };
+    const moi = { g: g0, dec, v: vBase, joueur: !!k.joueur };
     surRails.add(moi);
     const indice0 = ph.indice;
     const rep = nouveauPoint();
@@ -282,7 +282,8 @@ export function looping(piste, groupe) {
         let v = vBase * (1 - 0.12 * hauteur); // un peu moins vite en haut
         // pas de kart qui traverse celui de devant sur la même voie : on reste derrière lui
         for (const o of surRails) {
-          if (o === moi || Math.abs(o.dec - dec) > 1.7) continue;
+          // (derrière l'enfant, on reste derrière même sur le côté : pas de kart entre lui et la caméra)
+          if (o === moi || (Math.abs(o.dec - dec) > 1.7 && !o.joueur)) continue;
           const e = o.g - moi.g;
           if (e > 0 && e < ECART_SUIVI) v = Math.min(v, Math.max(V_MIN_SUIVEUR, o.v - (ECART_SUIVI - e) * 2));
         }
