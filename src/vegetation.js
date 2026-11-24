@@ -262,7 +262,8 @@ export function gardeRoute(piste) {
     const D = piste.diplodocus;
     if (D && dans(i, (D.indice - 3 + N) % N, (D.fin + 3) % N) && lat - r < 16.5) return "diplodocus";
     // autres grands décors posés sur la route (ex. l'aquarium, le T-rex couché) : [{ debut, fin, demi }]
-    for (const Z of piste.zonesDecor ?? []) if (dans(i, Z.debut, Z.fin) && lat - r < Z.demi) return "decor";
+    // (demiPlus / demiMoins facultatifs : emprise différente de chaque côté, latéral > 0 / < 0)
+    for (const Z of piste.zonesDecor ?? []) if (dans(i, Z.debut, Z.fin) && lat - r < ((lateral > 0 ? Z.demiPlus : Z.demiMoins) ?? Z.demi)) return "decor";
     // 3. le ravin : rien qui pende au-dessus du vide (rectangle aux bouts arrondis, bords bruités)
     const V = piste.ravin;
     if (V) {
