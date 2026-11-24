@@ -27,7 +27,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   // s'ouvre sur une grande plaine où l'on voit des troupeaux de dinosaures (et le volcan).
   // debut/fin : fractions du tour ; cote : "ext" (côté extérieur du circuit) ou "int" ;
   // largeur : profondeur de la plaine (m) avant la lisière de la forêt.
-  // (rien entre 0,70 et 0,82 : l'aquarium y sort de la jungle)
+  // (rien entre 0,70 et 0,92 : l'aquarium y sort de la jungle)
   const mixers = [], marcheurs = [];
   // tout ce qui est posé autour de la route passe par la garde : rien sur la route ni devant la caméra
   const garde = gardeRoute(piste);
@@ -1218,7 +1218,7 @@ function ravinDuPtero(groupe, piste) {
 }
 
 /**
- * Aquarium géant (aquarium.js) dans les virages du bas (0,73 → 0,79 du tour) : la route passe
+ * Aquarium géant (aquarium.js) dans les virages du bas (0,73 → 0,84 du tour) : la route passe
  * dans un tunnel de verre sous un grand bassin où nage un mosasaure. Son emprise au sol est
  * dans piste.zonesDecor (la forêt n'y plante rien). Renvoie { update(dt) }.
  */
