@@ -23,7 +23,11 @@ function materiau(nom, cote) {
   return cache.get(cle);
 }
 
-const TAILLE = 2.2;
+// Taille du panneau : sur le dessin, la ceinture est à 13 % du bas, les épaules à 42 % et le
+// haut du casque tout en haut. À 1.6 m, posé 0.15 m sous le creux du siège, la ceinture est au
+// niveau du baquet, les épaules à hauteur du volant et le casque dépasse bien du dossier,
+// comme un enfant dans un vrai kart (avant : 2.2 m, il dominait tout le kart).
+const TAILLE = 1.6;
 const geo = new THREE.PlaneGeometry(TAILLE, TAILLE).translate(0, TAILLE / 2, 0);
 const v = new THREE.Vector3();
 
@@ -35,7 +39,7 @@ export function creerPilote(nom) {
   const face = materiau(nom, "face");
   const dos = materiau(nom, "dos");
   const mesh = new THREE.Mesh(geo, dos);
-  mesh.position.y = -0.4; // le bas du sprite (jambes coupées) s'enfonce dans le siège
+  mesh.position.y = -0.15; // le bas du sprite (jambes coupées) s'enfonce dans le siège
 
   return {
     mesh,
