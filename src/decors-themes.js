@@ -11,6 +11,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { creerVolcan } from "./volcan.js";
 import { creerMeteorite } from "./meteorite.js";
 import { attaqueTrex } from "./trex-attaque.js";
+import { installerRaptors } from "./raptors.js";
 
 // Décors des circuits Dinosaures, Jouets et Concert pop.
 // Astuce couleurs : les parties "blanches" d'un objet fusionné prennent la couleur
@@ -51,6 +52,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   // heros : version détaillée du modèle (proche de la route) ; sinon la version « loin », ~3 fois
   // plus légère (budget de triangles ; raptor et tricératops n'existent qu'en une version).
   // Le T-rex n'est pas dans ce tableau : il attend tout près de la route, avant sa tête géante (TREX plus bas).
+  // Les vélociraptors non plus : meutes, chasseurs et coureurs sont dans raptors.js (installés plus bas).
   const PLAINES = [
     // ligne droite du haut (le ravin du ptérodactyle) : le volcan au fond de la plaine
     { debut: 0.155, fin: 0.3, cote: "ext", largeur: 230, troupeaux: [
@@ -65,7 +67,6 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
     ] },
     // ligne droite du T-rex (le T-rex géant couché de ventre.js ; un T-rex debout avant sa tête : voir TREX)
     { debut: 0.525, fin: 0.64, cote: "ext", largeur: 200, troupeaux: [
-      { espece: "Velociraptor", n: 3, t: 0.04, lat: 52, S: 3.0 }, // au-delà du corps du T-rex couché (ventre.js)
       { espece: "Stegosaurus", n: 2, t: 0.13, lat: 58, S: 2.9, heros: true },
     ] },
     // ligne droite du départ (le looping), côté intérieur du circuit
@@ -339,6 +340,9 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   // la jungle (imposteurs réalistes), une fois le ravin, le diplodocus, le T-rex et l'aquarium installés ;
   // rien sur le pied du volcan ni sur les troupeaux des plaines (ni dans piste.zonesDecor)
   if (import.meta.env.DEV) window.__troupeaux = Object.assign(clairieres, { plaines: PLAINES, trex, dinos: poses });
+  // vélociraptors (meutes, chasseurs, coureurs) : placés maintenant que tous les grands décors sont sur la
+  // piste ; leurs trajets sont réservés dans la garde (la jungle, les rochers et les plantes les évitent)
+  const animerRaptors = installerRaptors(groupe, piste, { garde, plaines: PLAINES, clairieres, evite: [{ x: xV, z: zV, r: volcan.rayonPied + 5 }] });
   planterJungle(groupe, piste, rnd, garde, { plaines: PLAINES, exclusions: [{ x: xV, z: zV, r: volcan.rayonPied + 5 }, ...clairieres], trouee: troueesVolcan(piste, xV, zV) });
   // les nids passent par la garde une fois le ravin, le diplodocus et le T-rex installés
   groupe.add(instances(nid, matCouleurs(), nids.flatMap((p) => {
@@ -350,6 +354,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
     volcan.update(dt, camera);
     meteorite.update(dt, camera); // avant le ventre et l'aquarium : ils gardent la main sur la brume
     for (const m of mixers) m.update(dt);
+    animerRaptors(dt, camera);
     // dinosaures qui marchent en rond, lentement, autour de leur troupeau
     for (const D of marcheurs) {
       D.a += D.w * dt;
