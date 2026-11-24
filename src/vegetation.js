@@ -123,6 +123,18 @@ function teinter(texture, filtre) {
 
 // Les deux fichiers de modèles : pack Quaternius (stylisé) et pack réaliste (scans, cycas, fougère)
 const FICHIERS = ["nature/jurassique.glb", "nature/realiste.glb"];
+
+/** Rayon réel au sol (m, à l'échelle 1) d'un rocher posé sans garde (entonnoirs, ravin), ou null. */
+export function placeRocher(nom) {
+  return REMPLACEMENTS[nom]?.place ?? null;
+}
+
+// Les rochers (même les cailloux et les pierres plates des sentiers) restent hors de portée des
+// karts : on ne peut ni rouler dessus ni les traverser (aucun n'a de collision). La portée d'un
+// kart = la limite latérale où il peut rouler (piste.limiteLaterale, plus étroite dans les
+// entonnoirs) + sa demi-largeur et un peu de marge.
+const ROCHER = /Rock|Rocher|Caillou|Pebble/;
+export const MARGE_ROCHER = 1.3;
 let chargement = null;
 
 /** Charge les fichiers une fois ; renvoie { nom: [{ geometrie, materiau }] } normalisés (hauteur 1, posés au sol). */
@@ -235,7 +247,8 @@ const CAM_RECUL = 7.2, CAM_HAUT = 3.1; // comme CameraPoursuite
 /**
  * gardeRoute(piste).verifier(x, z, rayon, hauteur, nom, deplacer = true) -> { x, z } (éventuellement
  * repoussé loin de la route) ou null (retiré). gardeRoute(piste).bilan : compte par modèle.
- * gardeRoute(piste).probleme(x, z, rayon, hauteur) -> raison du refus ou "" (sans rien compter).
+ * gardeRoute(piste).probleme(x, z, rayon, hauteur, rocher) -> raison du refus ou "" (sans rien compter).
+ * Les rochers (nom Rock, Rocher, Caillou, Pebble) sont en plus tenus hors de portée des karts.
  */
 export function gardeRoute(piste) {
   const { N, pas, cx, cz, nx, nz, tx, tz, demi, marge } = piste;
@@ -246,15 +259,17 @@ export function gardeRoute(piste) {
   const ecart = (i, j) => { const d = (i - j + N) % N; return d > N / 2 ? d - N : d; };
 
   /** Raison du refus à cet endroit, ou "" si la place est bonne. */
-  function probleme(x, z, r, h) {
+  function probleme(x, z, r, h, rocher = false) {
     const { indice: i, lateral, long } = piste.localiser(x, z);
     const lat = Math.abs(lateral);
     const plat = h <= 0.4, bas = h <= 1.0;
     // 1. la route et ses bordures (plus une marge), les plantes hautes derrière les barrières
     if (lat - r < bordure + (plat ? 0 : bas ? 0.3 : 1.2)) return "route";
     if (!bas && lat < barriere) return "route";
-    // dans les entonnoirs, même les petites plantes restent derrière les rochers et les plots
     const lim = piste.limiteLaterale(i);
+    // les rochers, même plats, jamais là où un kart peut rouler (l'herbe du bord compte)
+    if (rocher && lat - r < lim + MARGE_ROCHER) return "voie";
+    // dans les entonnoirs, même les petites plantes restent derrière les rochers et les plots
     if (lim < demi + marge - 1.5 && lat < barriere && lat - r < lim + 2.6) return "entonnoir";
     const L = piste.looping;
     if (L && dans(i, (L.prise - 4 + N) % N, (L.rendu + 4) % N) && lat - r < barriere) return "looping";
@@ -301,7 +316,8 @@ export function gardeRoute(piste) {
   function verifier(x, z, r, h, nom = "?", deplacer = true) {
     const b = (bilan[nom] ??= { plantes: 0, deplacees: 0, retirees: 0, raisons: {} });
     b.plantes++;
-    let raison = probleme(x, z, r, h);
+    const rocher = ROCHER.test(nom);
+    let raison = probleme(x, z, r, h, rocher);
     if (!raison) return { x, z };
     b.raisons[raison] = (b.raisons[raison] ?? 0) + 1;
     // forêt dense : l'arbre est simplement retiré (pas de paquets d'arbres repoussés au bord)
@@ -311,7 +327,7 @@ export function gardeRoute(piste) {
     const cote = Math.sign(lateral) || 1;
     for (let d = 4; d <= 24; d += 4) {
       const nxp = x + nx[i] * cote * d, nzp = z + nz[i] * cote * d;
-      if (!probleme(nxp, nzp, r, h)) {
+      if (!probleme(nxp, nzp, r, h, rocher)) {
         b.deplacees++;
         return { x: nxp, z: nzp };
       }

@@ -296,8 +296,10 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   planter(groupe, "Gros_Rocher", varie(zone(6, horsPiste + 20, 100), 0.7, 0.6).map((p) => ({ ...p, y: -0.4 })), garde);
 
   // petits détails au bord de la route : cailloux (scannés), fleurs, champignons géants
+  // (les cailloux au pied des barrières, pas dans l'herbe où l'on roule : voir gardeRoute)
   const cailloux = ["Pebble_Round_1", "Pebble_Round_2", "Pebble_Round_3", "Pebble_Round_4", "Pebble_Round_5", "Pebble_Square_1", "Pebble_Square_2", "Pebble_Square_3"];
-  for (const c of cailloux) planter(groupe, c, varie(positions(piste, rnd, nb(8), piste.demi + 0.8, piste.demi + 5), 0.7, 0.8), garde);
+  const pied = piste.demi + piste.marge + 1.2;
+  for (const c of cailloux) planter(groupe, c, varie(positions(piste, rnd, nb(8), pied, pied + 4), 0.7, 0.8), garde);
   planter(groupe, "Flower_3_Group", varie(zone(16, piste.demi + 2, 35), 0.8, 0.5), garde);
   planter(groupe, "Flower_4_Group", varie(zone(8, piste.demi + 2, 35), 0.8, 0.5), garde);
   planter(groupe, "Mushroom_Common", varie(zone(6, horsPiste - 1, 40), 0.8, 0.7), garde);
@@ -1059,7 +1061,7 @@ function butteDeTerre(B, sJ, hJ, coupe) {
   return { S: Float32Array.from(S), L: Float32Array.from(L), Y: Float32Array.from(Y), index, geo };
 }
 
-/** Petits sentiers de pierres plates qui partent du bord de la route vers la forêt. */
+/** Petits sentiers de pierres plates qui partent de derrière les barrières vers la forêt. */
 function sentiers(groupe, piste, rnd, nombre, garde) {
   const carres = [], ronds = [];
   for (let n = 0; n < nombre; n++) {
@@ -1068,7 +1070,8 @@ function sentiers(groupe, piste, rnd, nombre, garde) {
     const dx = piste.cx[(j + 1) % piste.N] - piste.cx[j], dz = piste.cz[(j + 1) % piste.N] - piste.cz[j]; // le long de la route
     const lt = Math.hypot(dx, dz) || 1;
     for (let k = 0; k < 5; k++) {
-      const lat = cote * (piste.demi + 2.4 + k * 1.35); // la première pierre juste après la bordure
+      // la première pierre juste derrière la barrière (pas dans l'herbe où l'on roule)
+      const lat = cote * (piste.demi + piste.marge + 1.8 + k * 1.35);
       const zig = (k % 2 ? 0.35 : -0.35) + (rnd() - 0.5) * 0.3;
       const x = piste.cx[j] + piste.nx[j] * lat + (dx / lt) * zig;
       const z = piste.cz[j] + piste.nz[j] * lat + (dz / lt) * zig;
