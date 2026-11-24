@@ -10,6 +10,7 @@ import { installerTrex, indicesTrex } from "./ventre.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { creerVolcan } from "./volcan.js";
 import { creerMeteorite } from "./meteorite.js";
+import { attaqueTrex } from "./trex-attaque.js";
 
 // Décors des circuits Dinosaures, Jouets et Concert pop.
 // Astuce couleurs : les parties "blanches" d'un objet fusionné prennent la couleur
@@ -210,20 +211,33 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
       });
     }
   }
-  // Le T-rex : debout tout près de la route (derrière les rochers de l'entonnoir, sans toucher les barrières), 60 m avant
-  // le centre de la tête du T-rex géant couché (ventre.js, indicesTrex), côté plaine. Il regarde les karts
-  // arriver et rugit (clip Attack) quand le joueur passe.
-  const TREX = { avant: 60, lat: 38, S: 2.4, rugir: 60 }; // avant la gueule (m), du milieu de la route (m), taille, distance du rugissement (m)
+  // Le T-rex : un géant (~27 m de haut) debout tout près de la route (derrière les rochers de l'entonnoir,
+  // sans toucher les barrières), 60 m avant le centre de la tête du T-rex géant couché (ventre.js,
+  // indicesTrex), côté plaine, entre la queue du diplodocus et la tête géante. Il regarde les karts
+  // arriver ; quand le joueur passe, il fait semblant de l'attraper (trex-attaque.js).
+  // avant : m avant le centre de la tête géante ; lat : du milieu de la route (m) ; S : taille (×7 m) ;
+  // tourne : rad, il regarde les karts qui arrivent (le long de la route), un peu tourné vers la route ;
+  // frappe : m avant lui (le long de la route) où sa gueule claque à côté du kart (voir trex-attaque.js),
+  // sur le plat entre la queue du diplodocus et l'entonnoir de rochers de la gueule géante
+  const TREX = { avant: 60, lat: 30, S: 3.9, tourne: 0.26, frappe: 6 };
   const P3 = PLAINES[2];
   const placeTrex = (iTete) => {
     const i = (iTete - Math.round(TREX.avant / piste.pas) + N) % N;
     const l = TREX.lat * P3.cote;
-    const iVise = (i - Math.round(35 / piste.pas) + N) % N; // il regarde la route 35 m avant lui
     const x = piste.cx[i] + piste.nx[i] * l, z = piste.cz[i] + piste.nz[i] * l;
-    return { i, x, z, angle: Math.atan2(piste.cx[iVise] - x, piste.cz[iVise] - z) };
+    const c = Math.cos(TREX.tourne), s = Math.sin(TREX.tourne) * P3.cote;
+    const dx = -piste.tx[i] * c - piste.nx[i] * s, dz = -piste.tz[i] * c - piste.nz[i] * s;
+    return { i, x, z, angle: Math.atan2(dx, dz), iFrappe: (i - Math.round(TREX.frappe / piste.pas) + N) % N };
   };
-  const trex = { place: placeTrex(indicesTrex(piste).tete), pret: false, arme: true };
+  const trex = { place: placeTrex(indicesTrex(piste).tete), pret: false };
   clairiereDino(trex.place.x, trex.place.z, trex.place.angle, LONGUEUR.Trex * TREX.S, "Trex", trex.place.i);
+  {
+    // couloir de la tête quand il mord : pas d'arbre entre lui et la route (les plantes basses restent :
+    // la tête passe à plus de 4 m au-dessus)
+    const { x, z, iFrappe: j } = trex.place, l = (piste.demi + 6) * P3.cote;
+    const bx = piste.cx[j] + piste.nx[j] * l, bz = piste.cz[j] + piste.nz[j] * l;
+    for (let f = 0; f <= 1.001; f += 0.2) clairieres.push({ x: x + (bx - x) * f, z: z + (bz - z) * f, r: 12, occupe: 3, espece: "Trex", i: j });
+  }
   creerDino("Trex", { animation: "Idle", hauteur: HAUTEUR.Trex * TREX.S }).then(({ objet, mixer, clips }) => {
     // toute son emprise est vérifiée (route, barrières, vue de la caméra, tête géante)
     const boite = new THREE.Box3().setFromObject(objet);
@@ -237,38 +251,14 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
     objet.position.set(x, 0, z);
     objet.rotation.y = angle;
     groupe.add(objet);
-    mixers.push(mixer);
-    const racine = objet.children[0];
-    const trouver = (n) => clips.find((c) => c.name === n);
-    trex.repos = mixer.clipAction(trouver("Idle"), racine);
-    const cri = trouver("Attack");
-    if (cri) {
-      trex.cri = mixer.clipAction(cri, racine);
-      trex.cri.setLoop(THREE.LoopOnce, 1);
-      trex.cri.clampWhenFinished = true;
-      mixer.addEventListener("finished", (e) => {
-        if (e.action !== trex.cri) return;
-        trex.repos.reset().play();
-        trex.repos.crossFadeFrom(trex.cri, 0.5, false);
-      });
-    }
+    // il fait semblant d'attraper le joueur (clips + os tournés par-dessus, après son mixer)
+    trex.attaque = attaqueTrex({ objet, mixer, clips, piste, cote: P3.cote, iFrappe: trex.place.iFrappe });
+    mixers.push({ update: (dt) => { mixer.update(dt); trex.attaque.update(dt); } });
     trex.objet = objet;
+    trex.boite = boite;
     poses.push({ objet, espece: "Trex" });
     trex.pret = true;
   });
-  const rugir = (camera) => {
-    if (!trex.pret || !trex.cri || !camera) return;
-    const { x, z, i } = trex.place;
-    const d = Math.hypot(camera.position.x - x, camera.position.z - z);
-    if (d > 120) { trex.arme = true; return; }
-    // le joueur arrive (le T-rex est encore devant lui sur la route) et passe tout près : il rugit, une fois par passage
-    const devant = (x - camera.position.x) * piste.tx[i] + (z - camera.position.z) * piste.tz[i] > 0;
-    if (trex.arme && devant && d < TREX.rugir) {
-      trex.arme = false;
-      trex.cri.reset().play();
-      trex.cri.crossFadeFrom(trex.repos, 0.3, false);
-    }
-  };
 
   // plantes, rochers et nids : pas sur les dinosaures des plaines
   const horsTroupeaux = (liste) => liste.filter((p) => clairieres.every((c) => Math.hypot(p.x - c.x, p.z - c.z) > c.occupe));
@@ -352,7 +342,6 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   })));
 
   return (dt, camera) => {
-    rugir(camera);
     volcan.update(dt, camera);
     meteorite.update(dt, camera); // avant le ventre et l'aquarium : ils gardent la main sur la brume
     for (const m of mixers) m.update(dt);
