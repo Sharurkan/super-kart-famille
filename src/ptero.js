@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
-import { planter } from "./vegetation.js";
+import { planter, placeRocher, MARGE_ROCHER } from "./vegetation.js";
 import { fusion } from "./decors-circuits.js";
 import { audio } from "./audio.js";
 import { percerSol } from "./decor.js";
@@ -533,7 +533,13 @@ export function installerRavin(groupe, piste, { debut }) {
     const p = contourMonde[k], dehors = new THREE.Vector3(p.x - centre.x, 0, p.z - centre.z).normalize();
     ajouter(p.clone().addScaledVector(dehors, 1.2 + rnd() * 1.5), 0.8 + rnd() * 1.0);
   });
-  for (const s of [-1.2, W + 1.2]) for (const c of [1, -1]) ajouter(monde(s, c * (piste.demi + piste.marge + 0.6)), 1.25, -0.2);
+  // au bout des barrières, mais hors de portée des karts (leur face intérieure derrière la
+  // limite où l'on roule : ils n'ont pas de collision)
+  for (const [s, i] of [[-1.2, (ib - 1 + N) % N], [W + 1.2, (il + 1) % N]]) for (const c of [1, -1]) {
+    const n = Math.floor(rnd() * 3), e = 1.25;
+    const l = piste.limiteLaterale(i) + MARGE_ROCHER + placeRocher(ROCHERS[n]) * e;
+    rochers[n].push({ ...monde(s, c * l), y: -0.2, s: e, r: rnd() * 6.3 });
+  }
   const iCascade = contour.findIndex(([, l]) => l > B + R * 0.9);
   for (let n = 0; n < 22; n++) {
     const k = Math.floor(rnd() * nb), j = 2 + Math.floor(rnd() * 5);
