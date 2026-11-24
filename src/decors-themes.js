@@ -9,6 +9,7 @@ import { installerBrachio } from "./brachio.js";
 import { installerTrex, indicesTrex } from "./ventre.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { creerVolcan } from "./volcan.js";
+import { creerMeteorite } from "./meteorite.js";
 
 // Décors des circuits Dinosaures, Jouets et Concert pop.
 // Astuce couleurs : les parties "blanches" d'un objet fusionné prennent la couleur
@@ -319,6 +320,9 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   const zV = piste.centre.z + Math.sin(ANGLE_VOLCAN) * (piste.rayon + 260);
   const volcan = creerVolcan(groupe, xV, zV, { versPiste: Math.atan2(piste.centre.z - zV, piste.centre.x - xV) });
   if (import.meta.env.DEV) window.__volcan = volcan;
+  // la météorite qui grossit tour après tour et percute le volcan au 3e tour (meteorite.js)
+  const meteorite = creerMeteorite(groupe, volcan, piste);
+  if (import.meta.env.DEV) window.__meteorite = meteorite;
   // collines lointaines : même sol que la forêt (vraies textures), un peu plus sombres
   const collines = [];
   for (let i = 0; i < 14; i++) {
@@ -350,6 +354,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   return (dt, camera) => {
     rugir(camera);
     volcan.update(dt, camera);
+    meteorite.update(dt, camera); // avant le ventre et l'aquarium : ils gardent la main sur la brume
     for (const m of mixers) m.update(dt);
     // dinosaures qui marchent en rond, lentement, autour de leur troupeau
     for (const D of marcheurs) {

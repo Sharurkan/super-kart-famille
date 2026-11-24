@@ -53,6 +53,7 @@ export function creerVolcan(groupe, x, z, { versPiste = 0 } = {}) {
     prochaine: 8 + Math.random() * 6, // première grosse éruption assez tôt
     eruption: -1, // temps écoulé depuis le début de la grosse éruption en cours (-1 : aucune)
     emisFumee: 0, emisLave: 0,
+    forceMax: 1, renfort: 0,
   };
 
   // ---------- la montagne ----------
@@ -109,12 +110,12 @@ export function creerVolcan(groupe, x, z, { versPiste = 0 } = {}) {
   });
 
   // ---------- sprites (fumée, lave) ----------
-  const fumee = new Sprites(NB_FUMEE, textureFumee(), THREE.NormalBlending);
-  const lave = new Sprites(NB_LAVE, textureLueur(), THREE.AdditiveBlending);
+  const fumee = new Sprites(NB_FUMEE, textureParticules(), THREE.NormalBlending);
+  const lave = new Sprites(NB_LAVE, textureParticules(), THREE.AdditiveBlending);
   support.add(fumee.mesh, lave.mesh);
 
   // fumée : position, vitesse, âge, durée de vie, taille de départ/fin, sombre (cendres)
-  const F = Array.from({ length: NB_FUMEE }, () => ({ vivant: false, p: new THREE.Vector3(), v: new THREE.Vector3(), age: 0, vie: 1, t0: 1, t1: 1, sombre: 0, rot: 0, dr: 0 }));
+  const F = Array.from({ length: NB_FUMEE }, () => ({ vivant: false, p: new THREE.Vector3(), v: new THREE.Vector3(), age: 0, vie: 1, t0: 1, t1: 1, sombre: 0, rot: 0, dr: 0, cell: 0 }));
   // projections : position, vitesse, âge ; posee = temps passé sur le flanc (refroidit)
   const L = Array.from({ length: NB_LAVE - 2 }, () => ({ vivant: false, p: new THREE.Vector3(), v: new THREE.Vector3(), age: 0, posee: -1, taille: 6 }));
   let iF = 0, iL = 0;
@@ -130,6 +131,7 @@ export function creerVolcan(groupe, x, z, { versPiste = 0 } = {}) {
     f.t1 = f.t0 * (4 + Math.random()) * (1 + force * 0.3);
     f.sombre = Math.min(1, force * 1.2 + Math.random() * 0.25);
     f.rot = Math.random() * 6.283; f.dr = (Math.random() - 0.5) * 0.15;
+    f.cell = CELLULES_FUMEE[Math.floor(Math.random() * CELLULES_FUMEE.length)];
     f.vivant = true;
   }
 
@@ -158,21 +160,22 @@ export function creerVolcan(groupe, x, z, { versPiste = 0 } = {}) {
     // --- calendrier : grosse éruption toutes les 15 à 25 s ---
     etat.prochaine -= dt;
     if (etat.prochaine <= 0) declencher();
-    let force = 0; // 0 : activité normale ; jusqu'à 1 au plus fort d'une grosse éruption
+    let force = 0; // 0 : activité normale ; 1 au plus fort d'une grosse éruption (plus après la météorite)
     if (etat.eruption >= 0) {
       etat.eruption += dt;
-      const e = etat.eruption;
-      force = e < 0.4 ? e / 0.4 : Math.max(0, 1 - (e - 0.4) / 5);
-      if (e > 6) etat.eruption = -1;
+      const e = etat.eruption, duree = 5 * etat.forceMax; // une éruption plus forte dure plus longtemps
+      force = (e < 0.4 ? e / 0.4 : Math.max(0, 1 - (e - 0.4) / duree)) * etat.forceMax;
+      if (e > duree + 1) etat.eruption = -1;
     }
+    const b = etat.renfort; // activité de fond renforcée (après l'impact de la météorite)
     // rougeoiement : respire doucement, flambe pendant l'éruption
-    uniformes.uLueur.value = 0.65 + 0.12 * Math.sin(etat.t * 1.7) + 0.08 * Math.sin(etat.t * 4.3) + force * 1.2;
+    uniformes.uLueur.value = 0.65 + 0.12 * Math.sin(etat.t * 1.7) + 0.08 * Math.sin(etat.t * 4.3) + force * 1.2 + b * 0.6;
 
-    // --- émission ---
-    etat.emisFumee += dt * (3 + force * 9);
-    while (etat.emisFumee >= 1) { etat.emisFumee--; lancerFumee(force); }
-    etat.emisLave += dt * (0.8 + force * (etat.eruption < 1.8 ? 34 : 4));
-    while (etat.emisLave >= 1) { etat.emisLave--; lancerLave(force); }
+    // --- émission --- (les projections restent assez lentes pour retomber sur les flancs)
+    etat.emisFumee += dt * (3 + b * 3 + force * 9);
+    while (etat.emisFumee >= 1) { etat.emisFumee--; lancerFumee(Math.max(force, b * 0.5)); }
+    etat.emisLave += dt * (0.8 + b * 2.5 + force * (etat.eruption < 1.8 ? 34 : 4));
+    while (etat.emisLave >= 1) { etat.emisLave--; lancerLave(Math.min(1.2, Math.max(force, b * 0.4))); }
 
     camLocale.copy(camera.position).sub(support.position);
 
@@ -194,7 +197,7 @@ export function creerVolcan(groupe, x, z, { versPiste = 0 } = {}) {
       const g = (0.48 + 0.32 * u) * (1 - 0.45 * f.sombre);
       const feu = Math.max(0, 1 - u * 7) * Math.min(1.5, uniformes.uLueur.value);
       coul.setRGB(g + (1 - g) * feu, g + (0.45 - g) * feu, g + (0.15 - g) * feu);
-      fumee.poser(n++, f.p, s, f.rot, coul, alpha, camLocale);
+      fumee.poser(n++, f.p, s, f.rot, coul, alpha, camLocale, f.cell);
     }
     fumee.finir(n, true);
 
@@ -216,22 +219,24 @@ export function creerVolcan(groupe, x, z, { versPiste = 0 } = {}) {
       const froid = l.posee < 0 ? Math.min(1, l.age / 4) * 0.6 : 0.6 + l.posee / 2.5 * 0.4;
       if (froid < 0.5) coul.copy(chaud).lerp(orange, froid / 0.5);
       else coul.copy(orange).lerp(rouge, (froid - 0.5) / 0.5);
-      lave.poser(n++, l.p, l.taille * (1 - froid * 0.35), 0, coul, 1 - Math.max(0, froid - 0.7) / 0.3 * 0.9, camLocale);
+      lave.poser(n++, l.p, l.taille * (1 - froid * 0.35), 0, coul, 1 - Math.max(0, froid - 0.7) / 0.3 * 0.9, camLocale, CELLULE.lueur);
     }
     // lueur au-dessus du cratère (deux halos qui respirent)
     const lu = uniformes.uLueur.value;
     halo.set(etat.sommet.x, etat.sommet.y + etat.rayon * 0.2, etat.sommet.z);
-    lave.poser(n++, halo, etat.rayon * (2.6 + lu * 0.8), 0, coul.setRGB(1, 0.38, 0.08), Math.min(1, 0.35 + lu * 0.3), camLocale);
+    lave.poser(n++, halo, etat.rayon * (2.6 + lu * 0.8), 0, coul.setRGB(1, 0.38, 0.08), Math.min(1, 0.35 + lu * 0.3), camLocale, CELLULE.lueur);
     halo.y += etat.rayon * 0.6;
-    lave.poser(n++, halo, etat.rayon * (1.5 + lu * 0.9), 0, coul.setRGB(1, 0.75, 0.35), Math.min(1, 0.2 + lu * 0.35), camLocale);
+    lave.poser(n++, halo, etat.rayon * (1.5 + lu * 0.9), 0, coul.setRGB(1, 0.75, 0.35), Math.min(1, 0.2 + lu * 0.35), camLocale, CELLULE.lueur);
     lave.finir(n, false);
   }
 
-  function declencher() {
-    etat.prochaine = 15 + Math.random() * 10;
+  function declencher(forceMax = 1, son = true) {
+    // une fois renforcé (météorite), le volcan repart toutes les 7 à 12 s
+    etat.prochaine = etat.renfort > 0 ? 7 + Math.random() * 5 : 15 + Math.random() * 10;
     etat.eruption = 0;
+    etat.forceMax = forceMax;
     // grondement si on est assez près pour l'entendre (le volcan est à 300 m et plus de la piste)
-    if (camPos) {
+    if (camPos && son) {
       const d = Math.hypot(camPos.x - support.position.x, camPos.z - support.position.z);
       if (d < 800) audio.grondement?.(Math.min(1, Math.max(0.15, 1 - (d - 300) / 500)));
     }
@@ -248,8 +253,10 @@ export function creerVolcan(groupe, x, z, { versPiste = 0 } = {}) {
       camPos = camera.position;
       update(dt, camera);
     },
-    /** Déclenche tout de suite une grosse éruption (tests). */
-    eruption: () => declencher(),
+    /** Déclenche tout de suite une grosse éruption (force 1 : normale ; jusqu'à ~1,5 : maximale et plus longue). */
+    eruption: (force = 1, son = true) => declencher(force, son),
+    /** Activité de fond renforcée jusqu'à la fin de la course (0..1). */
+    renforcer: (niveau = 1) => { etat.renfort = niveau; },
   };
 }
 
@@ -327,9 +334,33 @@ totalEmissiveRadiance += vec3(0.6, 0.16, 0.03) * uLueur * 0.22 * smoothstep(0.18
   return m;
 }
 
+
 // ---------------------------------------------------------------------------
+// Planche de particules (public/meteorite/particules.webp) : 8 images du Kenney Particle Pack
+// (CC0, https://kenney.nl/assets/particle-pack), en blanc, teintées dans le shader.
+// Grille 4 × 2, de gauche à droite puis de haut en bas.
+export const CELLULE = {
+  fumee1: 0, fumee2: 1, fumee3: 2, // bouffées de fumée (smoke_04, smoke_08, smoke_07)
+  feu1: 3, feu2: 4, // flammes (fire_01, fire_02) : alternées comme une petite animation
+  lueur: 5, // halo rond et doux (circle_05)
+  anneau: 6, // anneau (circle_03) : onde de choc
+  eclair: 7, // éclat en étoile (scorch_01) : flash de l'impact
+};
+export const CELLULES_FUMEE = [CELLULE.fumee1, CELLULE.fumee2, CELLULE.fumee3];
+const GRILLE = [4, 2];
+let texturePartagee = null;
+/** La planche de particules (chargée une seule fois, partagée par le volcan et la météorite). */
+export function textureParticules() {
+  if (!texturePartagee) {
+    texturePartagee = new THREE.TextureLoader().load(import.meta.env.BASE_URL + "meteorite/particules.webp");
+    texturePartagee.colorSpace = THREE.SRGBColorSpace;
+  }
+  return texturePartagee;
+}
+
 // Sprites face caméra instanciés : 1 draw call pour toute une famille (fumée ou lave).
-class Sprites {
+// Chaque sprite choisit son image dans la planche (cellule).
+export class Sprites {
   constructor(max, texture, blending) {
     const geo = new THREE.InstancedBufferGeometry();
     geo.setAttribute("position", new THREE.Float32BufferAttribute([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0], 3));
@@ -337,10 +368,10 @@ class Sprites {
     geo.setIndex([0, 1, 2, 0, 2, 3]);
     this.pos = new Float32Array(max * 4); // x, y, z, taille
     this.coul = new Float32Array(max * 4); // r, g, b, alpha
-    this.rot = new Float32Array(max);
+    this.rot = new Float32Array(max * 2); // rotation, cellule
     this.aPos = new THREE.InstancedBufferAttribute(this.pos, 4).setUsage(THREE.DynamicDrawUsage);
     this.aCoul = new THREE.InstancedBufferAttribute(this.coul, 4).setUsage(THREE.DynamicDrawUsage);
-    this.aRot = new THREE.InstancedBufferAttribute(this.rot, 1).setUsage(THREE.DynamicDrawUsage);
+    this.aRot = new THREE.InstancedBufferAttribute(this.rot, 2).setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute("aPos", this.aPos);
     geo.setAttribute("aCoul", this.aCoul);
     geo.setAttribute("aRot", this.aRot);
@@ -352,13 +383,17 @@ class Sprites {
       uniforms: this.uniforms,
       transparent: true, depthWrite: false, blending,
       vertexShader: `
-attribute vec4 aPos; attribute vec4 aCoul; attribute float aRot;
+attribute vec4 aPos; attribute vec4 aCoul; attribute vec2 aRot;
 varying vec2 vUv; varying vec4 vCoul; varying float vBrume;
 uniform vec2 uBrumeNF;
 void main() {
-  vUv = uv; vCoul = aCoul;
+  // image de la planche (grille ${GRILLE[0]} × ${GRILLE[1]}, la première en haut à gauche)
+  float cel = aRot.y;
+  vec2 cellule = vec2(mod(cel, ${GRILLE[0]}.0), ${GRILLE[1] - 1}.0 - floor(cel / ${GRILLE[0]}.0));
+  vUv = (cellule + uv) / vec2(${GRILLE[0]}.0, ${GRILLE[1]}.0);
+  vCoul = aCoul;
   vec4 mv = modelViewMatrix * vec4(aPos.xyz, 1.0);
-  float c = cos(aRot), s = sin(aRot);
+  float c = cos(aRot.x), s = sin(aRot.x);
   mv.xy += mat2(c, s, -s, c) * position.xy * aPos.w;
   vBrume = smoothstep(uBrumeNF.x, uBrumeNF.y, -mv.z) * ${(BROUILLARD * 0.5).toFixed(2)}; // fumée sombre : contraste avec le ciel
   gl_Position = projectionMatrix * mv;
@@ -378,6 +413,7 @@ void main() {
     this.geo = geo;
     this.max = max;
     this.tri = []; // pour trier la fumée
+    this.parDistance = (a, b) => this.tri[b] - this.tri[a]; // créée une fois (pas de déchets à chaque image)
   }
 
   /** Copie la brume de la scène (une fois la scène trouvée). */
@@ -392,70 +428,34 @@ void main() {
     return true;
   }
 
-  poser(i, p, taille, rot, c, alpha, cam) {
+  poser(i, p, taille, rot, c, alpha, cam, cellule = CELLULE.lueur) {
     if (i >= this.max) return;
     this.pos[i * 4] = p.x; this.pos[i * 4 + 1] = p.y; this.pos[i * 4 + 2] = p.z; this.pos[i * 4 + 3] = taille;
     this.coul[i * 4] = c.r; this.coul[i * 4 + 1] = c.g; this.coul[i * 4 + 2] = c.b; this.coul[i * 4 + 3] = alpha;
-    this.rot[i] = rot;
+    this.rot[i * 2] = rot; this.rot[i * 2 + 1] = cellule;
     this.tri[i] = (p.x - cam.x) ** 2 + (p.y - cam.y) ** 2 + (p.z - cam.z) ** 2;
   }
 
   finir(n, trier) {
+    n = Math.min(n, this.max);
     if (trier && n > 1) {
       // du plus loin au plus près (transparence correcte) ; tableaux réutilisés (pas de déchets à chaque image)
       if (!this.ordre) {
         this.ordre = [];
-        this.copie = { p: new Float32Array(this.max * 4), c: new Float32Array(this.max * 4), r: new Float32Array(this.max) };
+        this.copie = { p: new Float32Array(this.max * 4), c: new Float32Array(this.max * 4), r: new Float32Array(this.max * 2) };
       }
-      const ordre = this.ordre, { p, c, r } = this.copie, tri = this.tri;
+      const ordre = this.ordre, { p, c, r } = this.copie;
       ordre.length = n;
       for (let i = 0; i < n; i++) ordre[i] = i;
-      ordre.sort((a, b) => tri[b] - tri[a]);
-      p.set(this.pos.subarray(0, n * 4)); c.set(this.coul.subarray(0, n * 4)); r.set(this.rot.subarray(0, n));
+      ordre.sort(this.parDistance);
+      p.set(this.pos.subarray(0, n * 4)); c.set(this.coul.subarray(0, n * 4)); r.set(this.rot.subarray(0, n * 2));
       for (let i = 0; i < n; i++) {
         const j = ordre[i];
         for (let k = 0; k < 4; k++) { this.pos[i * 4 + k] = p[j * 4 + k]; this.coul[i * 4 + k] = c[j * 4 + k]; }
-        this.rot[i] = r[j];
+        this.rot[i * 2] = r[j * 2]; this.rot[i * 2 + 1] = r[j * 2 + 1];
       }
     }
-    this.geo.instanceCount = Math.min(n, this.max);
+    this.geo.instanceCount = n;
     this.aPos.needsUpdate = this.aCoul.needsUpdate = this.aRot.needsUpdate = true;
   }
-}
-
-// Textures dessinées dans un canvas (aucun fichier à charger)
-function textureFumee() {
-  const T = 128, cv = document.createElement("canvas");
-  cv.width = cv.height = T;
-  const g = cv.getContext("2d");
-  // une bouffée = plusieurs disques flous qui se chevauchent (bord irrégulier, volume)
-  let graine = 7;
-  const rnd = () => ((graine = (graine * 16807) % 2147483647) / 2147483647);
-  for (let k = 0; k < 14; k++) {
-    const a = rnd() * 6.283, d = rnd() * T * 0.2, r = T * (0.14 + rnd() * 0.16);
-    const x = T / 2 + Math.cos(a) * d, y = T / 2 + Math.sin(a) * d;
-    const l = Math.round(205 + rnd() * 50 - (y / T) * 40); // un peu plus sombre en bas (ombre)
-    const dg = g.createRadialGradient(x, y, 0, x, y, r);
-    dg.addColorStop(0, `rgba(${l},${l},${l},0.55)`);
-    dg.addColorStop(1, `rgba(${l},${l},${l},0)`);
-    g.fillStyle = dg;
-    g.fillRect(0, 0, T, T);
-  }
-  const t = new THREE.CanvasTexture(cv);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
-function textureLueur() {
-  const T = 64, cv = document.createElement("canvas");
-  cv.width = cv.height = T;
-  const g = cv.getContext("2d");
-  const dg = g.createRadialGradient(T / 2, T / 2, 0, T / 2, T / 2, T / 2);
-  dg.addColorStop(0, "rgba(255,255,255,1)");
-  dg.addColorStop(0.25, "rgba(255,255,255,0.8)");
-  dg.addColorStop(0.55, "rgba(255,255,255,0.25)");
-  dg.addColorStop(1, "rgba(255,255,255,0)");
-  g.fillStyle = dg;
-  g.fillRect(0, 0, T, T);
-  return new THREE.CanvasTexture(cv);
 }

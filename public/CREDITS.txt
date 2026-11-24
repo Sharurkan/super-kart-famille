@@ -69,11 +69,18 @@ Quaternius — https://quaternius.com
 
 Kenney — Food Kit : bonbons/bonbons.glb
   https://kenney.nl/assets/food-kit
+Kenney — Particle Pack : meteorite/particules.webp (8 images réunies en une planche : smoke_04,
+  smoke_08, smoke_07, fire_01, fire_02, circle_05, circle_03, scorch_01) : fumée, feu et lave du
+  volcan, traînée et explosion de la météorite
+  https://kenney.nl/assets/particle-pack
+Kenney — Sci-Fi Sounds : meteorite/explosionCrunch_004.ogg, lowFrequency_explosion_000.ogg,
+  thrusterFire_000.ogg (impact et chute de la météorite)
+  https://kenney.nl/assets/sci-fi-sounds
 
 Poly Haven — https://polyhaven.com
   Rochers et fougère (nature/realiste.glb, outils/blender/pack_realiste.py) :
     rock_moss_set_01                                  https://polyhaven.com/a/rock_moss_set_01
-    rock_07                                           https://polyhaven.com/a/rock_07
+    rock_07 (aussi : la météorite)                    https://polyhaven.com/a/rock_07
     fern_02 (canal alpha ajouté à la couleur)         https://polyhaven.com/a/fern_02
   Textures du sol (textures/, outils/blender/textures_sol.py) :
     forrest_ground_01   -> sol-herbe.jpg              https://polyhaven.com/a/forrest_ground_01

@@ -272,6 +272,40 @@ class MoteurAudio {
     o.stop(t + 2.4);
   }
 
+  /**
+   * Sons enregistrés (fichiers .ogg de public/) : chargés tôt, décodés dès que le son est
+   * démarré (premier toucher), joués sans attendre. Renvoie false si le son n'est pas encore prêt.
+   */
+  precharger(url) {
+    this.sons ??= new Map();
+    let e = this.sons.get(url);
+    if (!e) {
+      e = { buffer: null, decodage: null, donnees: fetch(url).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null) };
+      this.sons.set(url, e);
+    }
+    if (this.ctx && !e.decodage) {
+      e.decodage = e.donnees
+        .then((d) => (d ? this.ctx.decodeAudioData(d.slice(0)) : null))
+        .then((b) => { e.buffer = b; })
+        .catch(() => {}); // format non lu par ce navigateur : on garde le son de secours
+    }
+    return e;
+  }
+
+  jouer(url, volume = 1, vitesse = 1) {
+    if (!this.ctx) return false;
+    const e = this.precharger(url);
+    if (!e.buffer) return false;
+    const s = this.ctx.createBufferSource();
+    s.buffer = e.buffer;
+    s.playbackRate.value = vitesse;
+    const g = this.ctx.createGain();
+    g.gain.value = volume;
+    s.connect(g).connect(this.busEffets);
+    s.start();
+    return true;
+  }
+
   /** "Boing" qui monte quand on s'envole d'un tremplin. */
   saut() {
     if (!this.ctx) return;

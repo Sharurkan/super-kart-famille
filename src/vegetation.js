@@ -197,6 +197,9 @@ function chargerModeles() {
   return chargement;
 }
 
+/** Les modèles des deux fichiers ({ nom: [{ geometrie, materiau }] }, hauteur 1, posés au sol) ; ex. la météorite (rocher scanné). */
+export const chargerModelesNature = () => chargerModeles();
+
 /**
  * Plante un modèle à plusieurs endroits (asynchrone).
  * liste : [{ x, z, s (échelle autour de 1), r (rotation), sy (aplatissement, facultatif), y (enfoncement, facultatif) }]
@@ -525,5 +528,13 @@ export function planterJungle(groupe, piste, rnd, garde, { plaines = [], exclusi
   // du plus près de la route au plus loin : les arbres de devant cachent ceux de derrière
   // et le GPU ne colorie pas deux fois les mêmes pixels
   arbres.sort((a, b) => a.d - b.d);
+  // pour le décor : ce point est-il dans la forêt dense (arbres de 10 à 25 m) ? (ex. la météorite
+  // vérifie que les arbres ne cachent pas le volcan) ; rapide : quelques centaines d'opérations
+  piste.dansJungle = (x, z) => {
+    const { i, lat, d } = local(x, z);
+    if (d < barriere || d > 290) return false;
+    if (exclusions.some((e) => (x - e.x) ** 2 + (z - e.z) ** 2 < e.r * e.r)) return false;
+    return ouverture(i, lat).o < 0.5;
+  };
   return planterImposteurs(groupe, arbres, garde);
 }

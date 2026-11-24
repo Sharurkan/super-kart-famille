@@ -100,6 +100,9 @@ export class Course {
     });
     this.joueur = this.karts.find((k) => k.joueur);
     this.piste.humains = this.karts.filter((k) => k.joueur); // suivis par le décor (ex. le brachiosaure qui fait coucou)
+    // où en est la course, pour le décor (ex. la météorite qui percute le volcan au 3e tour) :
+    // tour et progression du joueur humain le plus avancé, temps depuis « Partez ! »
+    this.piste.infoCourse = { tours: TOURS, tour: 0, progression: 0, etat: this.etat, temps: 0 };
     this.phys = this.joueur.phys; // raccourci (tests)
 
     this.bonbons = new Bonbons(scene, this.piste);
@@ -237,6 +240,15 @@ export class Course {
     const vRel = joueur.phys.vitesse / REGLAGES.vitesseMax;
     if (!joueur.scenario?.camera?.(this.cam, dt)) this.cam.update(dt, joueur.phys.x, joueur.phys.z, joueur.phys.angle, vRel, joueur.phys.y);
     this.decor.ciel.position.set(this.camera.position.x, 0, this.camera.position.z);
+    const info = this.piste.infoCourse;
+    info.etat = this.etat;
+    if (this.etat !== "decompte") info.temps += dt;
+    info.tour = 0;
+    info.progression = 0;
+    for (const k of this.piste.humains) {
+      info.tour = Math.max(info.tour, k.phys.tour);
+      info.progression = Math.max(info.progression, this.progression(k));
+    }
     this.decor.animer(dt, this.camera);
     for (const k of this.karts) {
       k.modele.groupe.updateMatrixWorld();
