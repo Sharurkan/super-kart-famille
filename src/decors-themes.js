@@ -740,11 +740,11 @@ function tunnelTrex(piste) {
  * Zinaida.Kovrova, CC-BY 4.0) mis en pose couchée avec son squelette dans Blender
  * (outils/blender/coucher_sauropode.py) : ventre au sol, pattes repliées, cou tendu jusqu'à la
  * tête posée par terre, queue droite. Il occupe presque toute la ligne droite de droite : la
- * route se resserre jusqu'à une butte de terre qui monte sur son cou ; sa tête est posée à côté
- * de la butte (bout du cou en S), tournée vers les karts qui arrivent. On remonte le cou jusqu'au
- * dos, puis on redescend par sa queue. Tout le monde passe dessus (joueur et adversaires).
+ * route se resserre jusqu'à un petit talus de terre devant son museau, on monte sur sa tête (le
+ * talus est étroit et bas : on voit ses yeux et sa mâchoire sur les côtés), on remonte son cou
+ * jusqu'au dos, puis on redescend par sa queue. Tout le monde passe dessus (joueur et adversaires).
  *
- * Le modèle est agrandi uniformément (~4,4 m par unité), seuls le cou et la queue sont un peu
+ * Le modèle est agrandi uniformément (~4,3 m par unité), tête, cou, dos et queue un peu
  * élargis pour qu'on y roule ; il est "plié" le long de la ligne centrale. La hauteur est
  * mesurée en "dessinant" ses triangles dans une grille (piste.surfaces) : les karts roulent sur
  * ce qu'on voit. Sur le corps, des barrières invisibles (piste.retrecissements) empêchent de
@@ -753,15 +753,21 @@ function tunnelTrex(piste) {
 const DIPLO = {
   longueur: 108, // m, du bout du museau au bout de la queue
   // élargissement en travers (1 = agrandissement uniforme), le long du corps (u : 0 = museau, 1 = queue)
-  largeur: [[0, 1], [0.15, 1], [0.21, 1.3], [0.3, 1.3], [0.38, 1], [0.6, 1], [0.7, 1.15], [1, 1.3]],
+  largeur: [[0, 2.1], [0.04, 2.0], [0.1, 1.75], [0.3, 1.7], [0.38, 1.3], [0.45, 1.2], [0.6, 1.2], [0.7, 1.3], [1, 1.4]],
   // demi-largeur où l'on roule (barrières invisibles) : tête, cou, dos, queue ; au bout de la
   // queue (basse) plus de barrière, on redescend sur la route
-  voie: [[0, 1.0], [0.18, 1.0], [0.25, 1.3], [0.3, 1.5], [0.38, 1.8], [0.42, 2.1], [0.62, 2.1], [0.7, 1.6], [0.8, 1.3], [0.88, 1.1]],
-  finVoie: 0.9,
+  voie: [[0, 2.3], [0.08, 2.8], [0.15, 3.1], [0.3, 3.2], [0.4, 3.6], [0.62, 3.6], [0.7, 3.0], [0.8, 2.4], [0.88, 1.8], [0.97, 0.8]],
+  finVoie: 0.97,
   entonnoir: 55, // m avant le museau où la route se resserre (rochers de chaque côté)
-  butte: { longueur: 20, demiHaut: 1.5, joint: 0.9 }, // butte de terre jusque sur le cou
-  teteModele: 1, // la tête est posée du côté +Z du modèle (voir coucher_sauropode.py)
-  devantTete: 18, // m sans rochers devant la tête (on voit son visage)
+  // talus de terre devant le museau : il monte jusqu'à un peu sous le bout du museau ; son
+  // dessus a la largeur de la voie, ses flancs sont raides (on voit la mâchoire et les yeux)
+  butte: { longueur: 12, demiHaut: 2.4, joint: 0.3, marche: 0.8 },
+  // rochers de l'entonnoir : rayon réel au sol (rochers réalistes de vegetation.js, REMPLACEMENTS)
+  // et marge pour qu'aucun ne déborde sur la voie (demi-largeur d'un kart comprise)
+  rochers: { Rock_Medium_1: 1.72, Rock_Medium_2: 1.72, Rock_Medium_3: 2.25 },
+  margeRochers: 0.9 + 0.4,
+  // barrières sur le corps : jusqu'où le dessus peut descendre sous le milieu, marge, minimum
+  bord: { descente: 1.8, marge: 0.3, min: 0.6 },
 };
 const interpole = (table, u) => {
   if (u <= table[0][0]) return table[0][1];
@@ -811,31 +817,38 @@ function diplodocus(piste, groupe) {
   // 1. entonnoir jusqu'à la butte, puis la voie sur le corps (une barrière par échantillon)
   const debutEntonnoir = (iMuseau - Math.round(DIPLO.entonnoir / pas) + N) % N;
   piste.retrecissements.push({ debut: debutEntonnoir, fin: (iMuseau + 2) % N, demiMin: DIPLO.voie[0][1] });
+  // (largeurs prévues ; une fois le modèle chargé, chacune est réglée sur la largeur du dessus)
   const nbVoie = Math.round((DIPLO.finVoie * DIPLO.longueur) / pas);
+  const murs = [];
   for (let k = 0; k <= nbVoie; k++) {
     // { debut: j - 1, fin: j } : étroit exactement à l'échantillon j (voir piste.limiteLaterale)
     const j = (iMuseau + k) % N;
-    piste.retrecissements.push({ debut: (j - 1 + N) % N, fin: j, demiMin: interpole(DIPLO.voie, (k * pas) / DIPLO.longueur) });
+    murs.push({ debut: (j - 1 + N) % N, fin: j, demiMin: interpole(DIPLO.voie, (k * pas) / DIPLO.longueur) });
   }
+  piste.retrecissements.push(...murs);
   piste.diplodocus = { indice: iMuseau, fin: (iMuseau + nbLong) % N, debutEntonnoir };
   // +Z du modèle d'un côté ou de l'autre de la route : sans effet miroir (triangles dans le bon sens)
   const sens = Math.sign(piste.tx[iMuseau] * piste.nz[iMuseau] - piste.tz[iMuseau] * piste.nx[iMuseau]) || 1;
-  const coteTete = sens * DIPLO.teteModele; // côté de la route où la tête est posée (+1 / -1)
-  piste.diplodocus.coteTete = coteTete;
 
-  // rochers le long de l'entonnoir (ce sont eux qui "font" les murs avant le museau)
-  const ROCHERS = ["Rock_Medium_1", "Rock_Medium_2", "Rock_Medium_3"];
+  // rochers le long de l'entonnoir (ce sont eux qui "font" les murs avant le museau) : chacun
+  // entièrement hors de la voie permise par les barrières, rayon réel compris (on ne passe jamais
+  // "à travers" un rocher) ; aucun à côté de la tête ni du talus (on voit le visage)
+  const ROCHERS = Object.keys(DIPLO.rochers);
   const rochers = ROCHERS.map(() => []);
   const nbEntonnoir = (iMuseau - debutEntonnoir + N) % N;
   for (let k = 0; k <= nbEntonnoir; k += 3) {
     const j = (debutEntonnoir + k) % N;
-    const lim = piste.limiteLaterale(j) + 1.6;
-    if (lim > piste.demi + piste.marge) continue;
     const avantMuseau = (nbEntonnoir - k) * pas;
+    if (avantMuseau < B.longueur + 2) continue;
     for (const s of [1, -1]) {
-      // du côté de la tête, aucun rocher juste devant elle (on voit son visage)
-      if (s === coteTete && avantMuseau < DIPLO.devantTete) continue;
-      rochers[(k / 3 + (s > 0 ? 1 : 2)) % 3].push({ x: piste.cx[j] + piste.nx[j] * s * lim, z: piste.cz[j] + piste.nz[j] * s * lim, s: 1 + ((k * 7) % 5) * 0.08, y: -0.2, r: k * 1.3 + s });
+      const n = (k / 3 + (s > 0 ? 1 : 2)) % 3, e = 1 + ((k * 7) % 5) * 0.08;
+      const rayon = DIPLO.rochers[ROCHERS[n]] * e;
+      // la voie la plus large sur toute l'étendue du rocher (l'entonnoir se resserre)
+      let voie = 0;
+      for (let d = -Math.ceil(rayon / pas); d <= Math.ceil(rayon / pas); d++) voie = Math.max(voie, piste.limiteLaterale((j + d + N) % N));
+      const l = voie + DIPLO.margeRochers + rayon;
+      if (l - rayon > piste.demi + piste.marge) continue;
+      rochers[n].push({ x: piste.cx[j] + piste.nx[j] * s * l, z: piste.cz[j] + piste.nz[j] * s * l, s: e, y: -0.2, r: k * 1.3 + s });
     }
   }
   ROCHERS.forEach((nom, n) => planter(groupe, nom, rochers[n]));
@@ -860,9 +873,6 @@ function diplodocus(piste, groupe) {
       Y[k] = pos.getY(k) * E;
       lMin = Math.min(lMin, Lt[k]); lMax = Math.max(lMax, Lt[k]);
     }
-    let lTete = 0;
-    for (let k = 0; k < n; k++) if (u[k] < 0.03) lTete += Lt[k];
-    if (Math.sign(lTete) !== coteTete) console.warn("diplodocus : la tête n'est pas du côté prévu (DIPLO.teteModele)");
 
     // pliage le long de la ligne centrale (interpolée entre deux échantillons)
     const plier = (s, l, y, cible) => {
@@ -905,24 +915,23 @@ function diplodocus(piste, groupe) {
     g.h = new Float32Array(g.nb * g.nbLat);
     dessinerDansGrille(g, S, Lt, Y, geo.index ? geo.index.array : null, n);
 
-    // 2. butte de terre : elle monte de la route jusque sur le cou, là où il revient au milieu de
-    // la route (la tête est posée à côté, au bout du S du cou)
+    // 2. talus de terre devant le museau : il monte jusqu'à un peu sous le bout du museau (au
+    // joint), ensuite on roule sur le museau puis le dessus de la tête
     const jc = Math.round(-latMin / g.pasLat);
     const hc = (s) => g.h[Math.round(s / pas + avant) * g.nbLat + jc];
-    let sCou = 0;
-    while (hc(sCou) < 0.5 && sCou < 40) sCou += 0.25; // le cou arrive au milieu de la route
-    let hCou = 0;
-    for (let s = sCou; s < sCou + 8; s += 0.25) hCou = Math.max(hCou, hc(s));
-    let sJ = sCou;
-    while (hc(sJ) < hCou * B.joint && sJ < sCou + 8) sJ += 0.25;
-    const hJ = hc(sJ) - 0.05;
-    // coupe du cou au joint : le haut de la butte prend exactement sa forme (pas de marche)
+    let hTete = 0;
+    for (let s = 0; s < 8; s += 0.25) hTete = Math.max(hTete, hc(s));
+    let sJ = 0;
+    while (hc(sJ) < hTete * B.joint && sJ < 8) sJ += 0.25;
+    // le talus s'arrête un peu plus bas que le bout du museau (marche douce : on voit la bouche)
+    const hJ = Math.max(0.5, hc(sJ) - B.marche);
+    // coupe du museau au joint : le haut du talus suit sa forme en travers
     const rangJ = Math.round(sJ / pas + avant) * g.nbLat;
     const coupe = (l) => {
       const f = Math.min(g.nbLat - 1, Math.max(0, (l - latMin) / g.pasLat)), j0 = Math.floor(f), j1 = Math.min(g.nbLat - 1, j0 + 1);
       return g.h[rangJ + j0] + (g.h[rangJ + j1] - g.h[rangJ + j0]) * (f - j0) - 0.05;
     };
-    const butte = butteDeTerre(B, sJ, hJ, coupe, coteTete);
+    const butte = butteDeTerre(B, sJ, hJ, coupe);
     dessinerDansGrille(g, butte.S, butte.L, butte.Y, butte.index, butte.S.length);
     const pb = butte.geo.attributes.position;
     for (let k = 0; k < pb.count; k++) {
@@ -966,42 +975,57 @@ function diplodocus(piste, groupe) {
         g.h[k] = Math.max(g.h[k], Math.min(brut[k] + 0.25, g.h[k - g.nbLat] - chuteMax));
       }
     }
+    // 4. barrières réglées sur ce qu'on voit : à chaque échantillon du corps, demi-largeur où le
+    // dessus reste à moins de DIPLO.bord.descente sous le milieu, des deux côtés (au plus la
+    // largeur prévue) ; puis la plus étroite des voisines, pour ne jamais rouler au bord du vide
+    const H = (i, l) => g.h[i * g.nbLat + Math.min(g.nbLat - 1, Math.max(0, Math.round((l - latMin) / g.pasLat)))];
+    const largeurs = murs.map((m, k) => {
+      const i = k + avant, hm = H(i, 0);
+      if (hm < 1) return m.demiMin;
+      let w = 0;
+      while (w < m.demiMin + DIPLO.bord.marge && H(i, -w - g.pasLat) > hm - DIPLO.bord.descente && H(i, w + g.pasLat) > hm - DIPLO.bord.descente) w += g.pasLat;
+      return Math.max(DIPLO.bord.min, Math.min(m.demiMin, w - DIPLO.bord.marge));
+    });
+    murs.forEach((m, k) => {
+      let w = Infinity;
+      for (let d = -1; d <= 1; d++) if (largeurs[k + d] !== undefined) w = Math.min(w, largeurs[k + d]);
+      m.demiMin = w;
+    });
+
     const debut = (iMuseau - avant + N) % N;
     const surface = { debut, nb: g.nb, latMin, pasLat: g.pasLat, nbLat: g.nbLat, h: g.h };
     piste.surfaces.push(surface);
-    Object.assign(piste.diplodocus, { objet: dino, surface, hauteurCou: hJ, joint: sJ });
+    Object.assign(piste.diplodocus, { objet: dino, surface, hauteurTete: hTete, joint: sJ });
   });
 }
 
 /**
- * Butte de terre et de cailloux qui monte doucement de la route jusque sur le cou du diplodocus
- * (s = sJ, hauteur hJ, forme en travers coupe(l)). Du côté où la tête est posée (coteTete), son
- * flanc est raide pour qu'on voie le cou et la tête. Coordonnées (s, latéral, y) ; le pliage le
- * long de la route est fait après.
+ * Talus de terre et de cailloux qui monte doucement de la route jusque sur le museau du
+ * diplodocus (s = sJ, hauteur hJ, forme en travers coupe(l)). Ses flancs sont raides pour qu'on
+ * voie la mâchoire et les yeux. Coordonnées (s, latéral, y) ; le pliage le long de la route est
+ * fait après.
  */
-function butteDeTerre(B, sJ, hJ, coupe, coteTete) {
+function butteDeTerre(B, sJ, hJ, coupe) {
   const nS = 26, nL = 44;
   const s0 = sJ - B.longueur;
   const S = [], L = [], Y = [], col = [];
   const terre = new THREE.Color(0x7a6146), cailloux = new THREE.Color(0x8e8a80), herbe = new THREE.Color(0x6f8a3a);
   const c = new THREE.Color();
-  // 3 rangées de plus sous le cou : elles bouchent le creux entre la butte et le cou
+  // 3 rangées de plus sous le museau : elles bouchent le creux entre le talus et la tête
   for (let a = 0; a <= nS + 3; a++) {
     const t = Math.min(1, a / nS);
     const s = s0 + t * B.longueur + Math.max(0, a - nS) * 0.5;
     const h = hJ * (t * t * (3 - 2 * t) * 0.6 + t * 0.4); // pente douce au début, jamais plate en haut
-    const wHaut = B.demiHaut + 0.6 * (1 - t);
-    const wBas = wHaut + Math.max(1.5, h * 1.25) + 1.5;
-    const wTete = wHaut + 0.6 + h * 0.35; // flanc raide du côté de la tête
+    const wHaut = B.demiHaut;
+    const wBas = wHaut + 0.6 + h * 0.35; // flancs raides
     for (let m = 0; m <= nL; m++) {
       const lr = (m / nL) * 2 - 1; // -1 .. 1
-      const wB = lr * coteTete > 0 ? wTete : wBas;
-      const l = lr * wB;
-      const bord = doux(wHaut, wB, Math.abs(l));
-      // dessus plat (au plus 0,3 m plus bas sur les côtés là où le cou, plus étroit, s'arrondit)
+      const l = lr * wBas;
+      const bord = doux(wHaut, wBas, Math.abs(l));
+      // dessus plat (au plus 0,3 m plus bas sur les côtés là où le museau, plus étroit, s'arrondit)
       const dessus = Math.max(0, Math.min(h, Math.max(h - 0.3, coupe(Math.max(-wHaut, Math.min(wHaut, l))))));
       const bosse = 0.12 * Math.sin(s * 1.7 + l * 2.3) * Math.sin(l * 1.1 - s * 0.6) * (1 - doux(0.75, 0.95, t));
-      const fin = Math.max(0, a - nS) / 3; // sous le cou, les flancs redescendent (pas de bord coupé)
+      const fin = Math.max(0, a - nS) / 3; // sous le museau, les flancs redescendent (pas de bord coupé)
       const y = (dessus * (1 - bord) + (h > 0.2 ? bosse * (1 + 2.5 * bord) : 0)) * (1 - fin * doux(0, 0.15, bord)) - 0.25 * bord;
       S.push(s); L.push(l); Y.push(Math.max(-0.3, y));
       const r = (Math.sin(s * 3.1 + l * 5.7) * Math.sin(l * 2.9 - s * 4.3) + 1) / 2;

@@ -7,8 +7,8 @@
 # On prend la pose de la 1re image de l'animation, puis on oriente les os un par un (direction
 # voulue dans le monde) : ventre au sol, pattes repliées (avant en sphinx, arrière repliées sur
 # le côté), cou tendu vers l'avant qui descend jusqu'à la tête posée au sol (menton par terre,
-# bouche fermée), le bout du cou en S pour que la tête repose à côté de la rampe, tournée vers
-# les karts ; queue droite qui redescend jusqu'au sol. Cou, tête et queue sont un peu épaissis
+# bouche fermée), cou dans l'axe (on roule sur la tête puis sur le cou) ; queue droite qui
+# redescend jusqu'au sol. Cou, tête et queue sont un peu épaissis
 # (on roule dessus). La pose est ensuite "cuite" dans le maillage, le squelette enlevé, le
 # maillage simplifié (8 000 triangles, textures JPEG 512 px) et exporté en glb.
 #
@@ -105,7 +105,7 @@ for cote, s in (("L", -1), ("R", 1)):
 
 # 4. queue : droite, elle descend des hanches jusqu'au sol puis reste posée (courbe en S douce)
 QUEUE = [f"Bip001 Tail{n}" if n else "Bip001 Tail" for n in range(10)]
-PROFIL_QUEUE = [9, 14, 17, 18, 18, 17, 15, 11, 8, 7]
+PROFIL_QUEUE = [9, 14, 17, 18, 18, 17, 15, 13, 14, 16]  # le bout plonge un peu dans le sol (on en descend sans saut)
 for nom, deg in zip(QUEUE, PROFIL_QUEUE):
     orienter(os_(nom), dir_pitch(deg, avant=1.0))
 
@@ -125,8 +125,8 @@ print("  points les plus bas", [(round(p.x, 1), round(p.y, 1), round(p.z - SOL, 
 # 5. cou, tête et queue un peu plus épais (on roule dessus : le vrai cou est très fin à cette
 # échelle). Chaque os grossit seul en travers (pas d'héritage d'échelle), la longueur ne change pas.
 COU = [f"Bip001 Neck{n}" for n in range(1, 10)]
-EPAIS_COU = (1.3, 1.5)  # Neck1 (épaules) -> Neck9 (près de la tête)
-EPAIS_TETE = 1.45
+EPAIS_COU = tuple(float(a) for a in os.environ.get("EPAIS_COU", "1.6,2.1").split(","))  # Neck1 (épaules) -> Neck9 (près de la tête)
+EPAIS_TETE = float(os.environ.get("EPAIS_TETE", "1.8"))
 EPAIS_QUEUE = (1.15, 1.8)  # Tail -> Tail9
 for n, nom in enumerate(COU):
     f = EPAIS_COU[0] + (EPAIS_COU[1] - EPAIS_COU[0]) * n / (len(COU) - 1)
@@ -155,7 +155,7 @@ def tourner(pb, axe_monde, deg):
 
 # 6. cou tendu vers l'avant, qui descend jusqu'à la tête posée au sol (menton par terre)
 COU_FORME = float(os.environ.get("COU_FORME", "1.5"))  # cou qui descend vite près des épaules puis repose au sol
-TETE_PITCH = float(os.environ.get("TETE_PITCH", "-4"))  # direction de l'os de la tête (< 0 : museau relevé)
+TETE_PITCH = float(os.environ.get("TETE_PITCH", "-12"))  # direction de l'os de la tête (< 0 : museau relevé)
 MACHOIRE = float(os.environ.get("MACHOIRE", "25"))  # rotation de la mâchoire (bouche fermée)
 noms_tete = {os_("Bip001 Head").name} | {pb.name for pb in arm.pose.bones if pb.name.startswith("Bone0") and int(pb.name[4:7]) in (1, 18, 19, 20, 21, 22, 23)}
 
@@ -197,11 +197,17 @@ for _ in range(16):
         hi = k
 print("cou : angle", round(k, 2), "bas de la tête à", round(bas_de_la_tete() - SOL, 3), "au-dessus du sol")
 
-# 6b. le bout du cou fait un S sur le côté : la tête se pose à côté de la rampe, tournée vers les
-# karts qui arrivent (on voit bien son visage) ; le reste du cou reste dans l'axe de la route.
+# 6b. cou bien dans l'axe : le cou du modèle dérive un peu sur le côté, on le tourne autour de sa
+# base pour que la tête arrive sur l'axe du corps (on roule sur la tête, puis le cou).
+# Option : VIRAGE_COU (Neck1..Neck9, cumulé) fait un S pour poser la tête à côté de la route.
 # (rotations autour de la verticale : les hauteurs ne changent pas)
-VIRAGE_COU = [float(a) for a in os.environ.get("VIRAGE_COU", "0,0,0,8,12,12,-4,-14,-14").split(",")]  # Neck1..Neck9, cumulé
-VIRAGE_TETE = float(os.environ.get("VIRAGE_TETE", "-6"))
+b1, bt = os_("Bip001 Neck1"), os_("Bip001 Head")
+d = tete(bt) - tete(b1)
+angle = math.degrees(math.asin(max(-1.0, min(1.0, -(YC - tete(bt).y) / math.hypot(d.x, d.y)))))
+tourner(b1, (0, 0, 1), angle)
+print("cou recentré de", round(angle, 2), "degrés")
+VIRAGE_COU = [float(a) for a in os.environ.get("VIRAGE_COU", "0,0,0,0,0,0,0,0,0").split(",")]
+VIRAGE_TETE = float(os.environ.get("VIRAGE_TETE", "0"))
 for nom, deg in zip(COU, VIRAGE_COU):
     if deg:
         tourner(os_(nom), (0, 0, 1), deg)
@@ -275,6 +281,12 @@ for v in me.vertices:
     if v.co.z > haut[i] - 0.25:
         larg[i] = max(larg[i], abs(v.co.y))
 print("DEMI-LARGEUR DU DESSUS", [round(h, 2) for h in larg])
+ymin, ymax = [9.0] * NB, [-9.0] * NB
+for v in me.vertices:
+    i = min(NB - 1, int((v.co.x - x0) / (x1 - x0) * NB))
+    ymin[i] = min(ymin[i], v.co.y)
+    ymax[i] = max(ymax[i], v.co.y)
+print("MILIEU EN TRAVERS", [round((a + b) / 2, 2) for a, b in zip(ymin, ymax)])
 
 # 10. export (textures en JPEG, 512 px comme la source)
 bpy.ops.export_scene.gltf(filepath=OUT, export_format="GLB", use_selection=False, export_image_format="JPEG",
