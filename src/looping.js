@@ -364,12 +364,15 @@ export function looping(piste, groupe) {
   construireStructures(decor, dansBoucle);
   plotsEntonnoir(decor, piste, debutEntonnoir, iPrise);
 
-  // anneaux rayés autour de la vrille (comme si la route tournait dans un tube), avec une
-  // jambe de force jusqu'au dessous du ruban et une étoile en haut
+  // arceaux rayés autour de la vrille (comme si la route tournait dans un tube) : la partie du
+  // cercle au-dessus du sol, posée sur deux socles ; une jambe de force jusqu'au dessous du
+  // ruban quand il est en l'air, et une étoile en haut. Rien ne passe sous le sol.
   {
-    const RA = Math.hypot(AXE, DEMI) + 0.9; // rayon des anneaux (le ruban tourne dedans sans les toucher)
+    const RA = Math.hypot(AXE, DEMI) + 0.9; // rayon des arceaux (le ruban tourne dedans sans les toucher)
+    const TUBE = 0.3, NB_RAYURES = 8;
     const couleurs = [0x51cf66, 0xffffff];
-    const arc = new THREE.TorusGeometry(RA, 0.3, 6, 6, DEUX_PI / 8);
+    const socle = new THREE.CylinderGeometry(0.5, 0.65, 0.7, 10).translate(0, 0.35, 0);
+    const X = new THREE.Vector3(), un = new THREE.Vector3(1, 1, 1);
     const jambe = new THREE.BoxGeometry(0.45, 1, 0.45).translate(0, 0.5, 0);
     const forme = new THREE.Shape();
     for (let n = 0; n < 10; n++) {
@@ -386,24 +389,37 @@ export function looping(piste, groupe) {
       route(iF, voieVrille, axeVrille(rouleVrille(gv)), A);
       normale(iF, vN);
       const angle = Math.atan2(-vN.z, vN.x); // cap de la route (la normale est à gauche du cap)
-      q.setFromAxisAngle(Y, angle); // z local → le long de la route
-      for (let k = 0; k < 8; k++) {
-        m.compose(A, q.clone().multiply(qr.setFromAxisAngle(Z, (k * DEUX_PI) / 8)), new THREE.Vector3(1, 1, 1));
+      q.setFromAxisAngle(Y, angle); // z local → le long de la route, l'arceau dans le plan local xy
+      // angle (autour de l'axe, depuis le x local) où le bas du tube touche le sol
+      const th0 = Math.asin(THREE.MathUtils.clamp((A.y - TUBE) / RA, -1, 1));
+      const ouverture = Math.PI + 2 * th0;
+      const arc = new THREE.TorusGeometry(RA, TUBE, 6, 4, ouverture / NB_RAYURES);
+      for (let k = 0; k < NB_RAYURES; k++) {
+        m.compose(A, q.clone().multiply(qr.setFromAxisAngle(Z, -th0 + (k * ouverture) / NB_RAYURES)), un);
         parties.push({ geo: arc.clone().applyMatrix4(m), couleur: couleurs[k % 2] });
       }
-      // jambe de force : du dessous du ruban jusqu'à l'anneau, dans la direction du "bas" de la route
+      arc.dispose();
+      // socles aux deux pieds
+      X.set(1, 0, 0).applyQuaternion(q);
+      for (const sg of [1, -1]) {
+        m.compose(A.clone().addScaledVector(X, sg * RA * Math.cos(th0)).setY(0), q, un);
+        parties.push({ geo: socle.clone().applyMatrix4(m), couleur: 0x7048e8 });
+      }
+      // jambe de force : du dessous du ruban jusqu'à l'arceau, dans la direction du "bas" de la
+      // route, seulement si ce point de l'arceau est en l'air (sinon les socles suffisent)
       const ph = rouleVrille(gv), c = Math.cos(ph), s = Math.sin(ph);
       const bas = new THREE.Vector3(sensVrille * s * vN.x, -c, sensVrille * s * vN.z); // = -U
-      const pied = A.clone().addScaledVector(bas, AXE + EP);
-      const long = RA - AXE - EP;
-      m.compose(pied, new THREE.Quaternion().setFromUnitVectors(Y, bas), new THREE.Vector3(1, long, 1));
-      parties.push({ geo: jambe.clone().applyMatrix4(m), couleur: 0xffd43b });
+      if (A.y + bas.y * RA > TUBE + 0.3) {
+        const pied = A.clone().addScaledVector(bas, AXE + EP);
+        m.compose(pied, new THREE.Quaternion().setFromUnitVectors(Y, bas), new THREE.Vector3(1, RA - AXE - EP, 1));
+        parties.push({ geo: jambe.clone().applyMatrix4(m), couleur: 0xffd43b });
+      }
       // étoile au sommet de l'anneau, tournée vers les karts qui arrivent
       m.compose(A.clone().add(new THREE.Vector3(0, RA + 1.5, 0)), q, new THREE.Vector3(1, 1, 1));
       parties.push({ geo: etoile.clone().applyMatrix4(m), couleur: 0xffd43b });
     }
     decor.add(new THREE.Mesh(fusion(parties), matCouleurs()));
-    for (const g of [arc, jambe, etoile]) g.dispose();
+    for (const g of [socle, jambe, etoile]) g.dispose();
   }
 
   piste.looping = { indice: bases[0], bases, vrille: iVrille, finVrille: iVrille + nVrille, prise: iPrise, rendu: iRendu, rayon: R, longueur: fin, debutEntonnoir };

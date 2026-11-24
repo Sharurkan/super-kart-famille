@@ -36,6 +36,13 @@ export function construirePiste(def) {
     nz[i] = -tx[i];
   }
 
+  // courbure (rad/m, > 0 = virage à gauche) : sert au dévers (voir deversA)
+  const courbureRoute = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    const a = (i + 1) % N, b = (i - 1 + N) % N;
+    courbureRoute[i] = ((tx[a] - tx[b]) * nx[i] + (tz[a] - tz[b]) * nz[i]) / (2 * pas);
+  }
+
   const demi = def.largeur / 2;
   const marge = def.marge ?? 6;
   const groupe = new THREE.Group();
@@ -364,8 +371,13 @@ export function construirePiste(def) {
   // aplatissant leurs triangles. piste.trous garde la liste (les bonbons l'évitent).
   const trous = [];
   function trouer(debut, fin) {
+    effacer(debut, fin, morceaux);
+    trous.push({ debut, fin });
+  }
+  /** Efface les triangles des morceaux choisis sur les échantillons debut..fin-1. */
+  function effacer(debut, fin, choisis) {
     const n = (fin - debut + N) % N;
-    for (const { g, parEchantillon, cotes } of morceaux) {
+    for (const { g, parEchantillon, cotes } of choisis) {
       const idx = g.index?.array, pos = g.attributes.position.array;
       for (let c = 0; c < cotes; c++)
         for (let m = 0; m < n; m++) {
@@ -378,7 +390,13 @@ export function construirePiste(def) {
       if (idx) g.index.needsUpdate = true;
       else g.attributes.position.needsUpdate = true;
     }
-    trous.push({ debut, fin });
+  }
+  /**
+   * Cache la route et les bordures sur les échantillons debut..fin-1 (pas les barrières, et ce
+   * n'est pas un trou : on roule toujours dessus) ; ex. le virage relevé dessine sa propre route.
+   */
+  function masquerRoute(debut, fin) {
+    effacer(debut, fin, morceaux.slice(0, 2));
   }
 
   // ---------- Relief ----------
@@ -423,7 +441,11 @@ export function construirePiste(def) {
   }
   /** Dévers au point (indice, long, lateral) : { h, along (pente le long, en tangente), gLat } ou null. */
   function deversA(indice, long, lateral) {
-    const u = indice + long / pas;
+    // avance le long de la route, corrigée dans les virages : à l'extérieur, un mètre compte moins
+    // qu'au milieu (et plus à l'intérieur). Sans cela, la hauteur sauterait d'un échantillon au
+    // suivant (~10 cm en haut du dévers) là où le dévers change.
+    const ech = pas * (1 - lateral * courbureRoute[((indice % N) + N) % N]);
+    const u = indice + long / ech;
     const i = Math.floor(u), f = u - i;
     const a0 = devers[((i % N) + N) % N], a1 = devers[(((i + 1) % N) + N) % N];
     if (a0 === 0 && a1 === 0) return null;
@@ -431,7 +453,7 @@ export function construirePiste(def) {
     const d = Math.sign(a) * lateral + demi;
     return {
       h: hDevers(a, lateral),
-      along: (hDevers(a1, lateral) - hDevers(a0, lateral)) / pas,
+      along: (hDevers(a1, lateral) - hDevers(a0, lateral)) / ech,
       gLat: d > 0 && d < LARGE_DEVERS ? Math.sign(a) * Math.tan(Math.abs(a)) : 0,
     };
   }
@@ -480,6 +502,6 @@ export function construirePiste(def) {
   const centre = new THREE.Vector3((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
   const rayon = Math.hypot(maxX - minX, maxZ - minZ) / 2;
 
-  const api = { groupe, N, L, pas, cx, cz, tx, tz, nx, nz, demi, marge, localiser, distanceCentre, angleA, centre, rayon, tremplins, hauteurTremplin, surfaces, zonesIA, ajouterTremplin, retrecissements, limiteLaterale, limiter, passages: [], trous, trouer, profil, abaisser, devers, incliner, hDevers };
+  const api = { groupe, N, L, pas, cx, cz, tx, tz, nx, nz, demi, marge, localiser, distanceCentre, angleA, centre, rayon, tremplins, hauteurTremplin, surfaces, zonesIA, ajouterTremplin, retrecissements, limiteLaterale, limiter, passages: [], trous, trouer, masquerRoute, courbure: courbureRoute, profil, abaisser, devers, incliner, hDevers };
   return api;
 }

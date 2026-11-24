@@ -1,4 +1,6 @@
 import * as THREE from "three";
+import { CIRCUITS } from "./circuits.js";
+import { textureAsphalte } from "./textures.js";
 
 // Virage relevé façon vélodrome, dans le virage entre le ravin du ptérodactyle et la ligne
 // droite du diplodocus. Ce n'est pas un passage scripté : la route est vraiment penchée
@@ -34,32 +36,129 @@ export function virageReleve(piste, groupe) {
   const libre = piste.demi + piste.marge - 1.0;
   for (let m = 0; m <= FIN - DEBUT; m++) piste.limiter(DEBUT + m, demi + 0.5 + (libre - demi - 0.5) * (1 - lisse(force(m) * 3)));
 
+  // la route standard (2 sommets en travers) ne suit pas assez bien le dévers : on la cache ici
+  // et on dessine une route plus fine dont chaque sommet est à la hauteur donnée par la physique
+  piste.masquerRoute(DEBUT, FIN);
+  const S = new Surface(piste);
   const decor = new THREE.Group();
   decor.name = "velodrome";
   groupe.add(decor);
-  decor.add(murExterieur(piste, exterieur, force));
-  decor.add(lignes(piste, interieur, force));
-  piste.velodrome = { debut: DEBUT, fin: FIN, plein: PLEIN, finPlein: FIN_PLEIN, angle: ANGLE, interieur };
+  decor.add(...routeFine(S));
+  decor.add(murExterieur(S, exterieur, force));
+  decor.add(lignes(S, interieur, force));
+  piste.velodrome = { debut: DEBUT, fin: FIN, plein: PLEIN, finPlein: FIN_PLEIN, angle: ANGLE, interieur, surface: S };
 }
 
-/** Point du monde à l'échantillon i, au décalage lat, à la hauteur y. */
-const pt = (P, i, lat, y) => [P.cx[i] + P.nx[i] * lat, y, P.cz[i] + P.nz[i] * lat];
+const SOUS = 4; // sommets par échantillon le long de la route (raccords : le dévers y change vite)
+const COLONNES = 8; // colonnes de la route en travers
+// au-dessus de la surface de la physique, comme partout (piste.js) : route +2 cm, bordures +3 cm
+
+/**
+ * Points de la surface du virage. u = position le long de la route en échantillons (fractionnaire),
+ * lat = décalage latéral. Le point est placé comme le fait la physique (voir deversA dans piste.js :
+ * avance corrigée par la courbure) et sa hauteur EST celle de la physique (piste.hauteurTremplin).
+ */
+class Surface {
+  constructor(P) {
+    this.P = P;
+  }
+  /** Position au sol [x, z] (repère de l'échantillon le plus proche). */
+  xz(u, lat) {
+    const P = this.P, N = P.N;
+    const j = Math.round(u), i = ((j % N) + N) % N;
+    const long = (u - j) * P.pas * (1 - lat * P.courbure[i]);
+    return [P.cx[i] + P.nx[i] * lat + P.tx[i] * long, P.cz[i] + P.nz[i] * lat + P.tz[i] * long, i];
+  }
+  /** Hauteur de la physique au point du monde (x, z). */
+  hauteur(x, z, pres) {
+    const loc = this.P.localiser(x, z, pres);
+    return this.P.hauteurTremplin(loc.indice, loc.lateral, loc.long).h;
+  }
+  /** Point [x, y, z] de la surface, levé de dessus. */
+  point(u, lat, dessus = 0) {
+    const [x, z, i] = this.xz(u, lat);
+    return [x, this.hauteur(x, z, i) + dessus, z];
+  }
+}
+
+/** Grille indexée : rangées le long (u), colonnes en travers ; sommet(u, k) → { p, uv?, c? }. */
+function grille(us, nbCol, sommet) {
+  const pos = [], uv = [], col = [], idx = [];
+  for (const u of us)
+    for (let k = 0; k < nbCol; k++) {
+      const s = sommet(u, k);
+      pos.push(...s.p);
+      if (s.uv) uv.push(...s.uv);
+      if (s.c) col.push(s.c.r, s.c.g, s.c.b);
+    }
+  for (let r = 0; r < us.length - 1; r++)
+    for (let k = 0; k < nbCol - 1; k++) {
+      const a = r * nbCol + k, b = a + 1, c = a + nbCol, d = c + 1;
+      idx.push(a, b, c, b, d, c); // face avant vers le haut (comme la route de piste.js)
+    }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  if (uv.length) g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  if (col.length) g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+/** Abscisses de DEBUT à FIN, SOUS par échantillon. */
+const abscisses = () => Array.from({ length: (FIN - DEBUT) * SOUS + 1 }, (_, n) => DEBUT + n / SOUS);
+
+/** Route (bitume, comme la route standard) et bordures rouges et blanches, posées sur la surface. */
+function routeFine(S) {
+  const P = S.P, { demi, pas } = P, def = CIRCUITS.dino;
+  const us = abscisses();
+  // route : de +demi (gauche, u de texture 0) à -demi (droite, 1), comme dans piste.js
+  const gRoute = grille(us, COLONNES + 1, (u, k) => {
+    const lat = demi - (2 * demi * k) / COLONNES;
+    return { p: S.point(u, lat, 0.02), uv: [k / COLONNES, (u * pas) / 18] };
+  });
+  const route = new THREE.Mesh(gRoute, new THREE.MeshLambertMaterial({ map: textureAsphalte(), color: def.route ?? 0xffffff }));
+  // bordures : couleur par échantillon (rangées doublées aux changements de couleur)
+  const c0 = new THREE.Color(def.bordure[0]), c1 = new THREE.Color(def.bordure[1]);
+  const maillages = [route];
+  for (const cote of [1, -1]) {
+    const pos = [], col = [];
+    for (let n = 0; n < us.length - 1; n++) {
+      const u0 = us[n], u1 = us[n + 1];
+      const c = (Math.floor(u0) >> 1) % 2 ? c1 : c0;
+      const a0 = S.point(u0, cote * demi, 0.03), a1 = S.point(u0, cote * (demi + 1.4), 0.03);
+      const b0 = S.point(u1, cote * demi, 0.03), b1 = S.point(u1, cote * (demi + 1.4), 0.03);
+      pos.push(...a0, ...b0, ...a1, ...a1, ...b0, ...b1);
+      for (let v = 0; v < 6; v++) col.push(c.r, c.g, c.b);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+    g.computeVertexNormals();
+    maillages.push(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+  }
+  return maillages;
+}
 
 /**
  * Mur extérieur : il prolonge la route penchée et se recourbe jusqu'à la verticale (bois clair,
  * bande rouge et blanche en haut, chapeau blanc), puis redescend jusqu'au sol (jupe de béton
  * avec une bande bleue). Un seul maillage à couleurs par sommet.
  */
-function murExterieur(P, ext, force) {
-  const { demi } = P;
+function murExterieur(S, ext, force) {
+  const P = S.P, { demi, N } = P;
   const bord = demi + 1.4; // bout de la bordure haute
   const BOIS = new THREE.Color(0xf1d3a1), BOIS2 = new THREE.Color(0xe2b97c);
   const ROUGE = new THREE.Color(0xe8322f), BLANC = new THREE.Color(0xffffff);
   const BETON = new THREE.Color(0xd5d9de), BLEU = new THREE.Color(0x339af0);
-  // profil en coupe (d vers l'extérieur depuis le bord, y vers le haut) pour un échantillon
-  const profil = (i, f) => {
-    const aRoute = Math.abs(P.devers[i]);
-    const h0 = P.hDevers(P.devers[i], ext * bord) + 0.02;
+  const deversU = (u) => {
+    const i = Math.floor(u), f = u - i;
+    return Math.abs(P.devers[i % N] * (1 - f) + P.devers[(i + 1) % N] * f);
+  };
+  // profil en coupe (d vers l'extérieur depuis le bord, y vers le haut) à l'abscisse u
+  const profil = (u) => {
+    const aRoute = deversU(u), f = force(u - DEBUT);
+    const h0 = S.point(u, ext * bord, 0.03)[1];
     const pts = [{ d: 0, y: h0, c: "bois" }];
     const nb = 6, haut = 0.15 + 2.6 * f; // le mur grandit avec le dévers
     let d = 0, y = h0;
@@ -75,18 +174,24 @@ function murExterieur(P, ext, force) {
     pts.push({ d: d + 0.35, y: 0, c: "beton" }); // jupe jusqu'au sol
     return pts;
   };
+  const ou = (u, d, y) => {
+    const [x, z] = S.xz(u, ext * (bord + d));
+    return [x, y, z];
+  };
   const pos = [], col = [];
-  for (let i = DEBUT; i < FIN; i++) {
-    const j = i + 1;
-    const fi = force(i - DEBUT), fj = force(j - DEBUT);
-    const A = profil(i, fi), B = profil(j, fj);
+  const us = abscisses();
+  let B = profil(us[0]);
+  for (let n = 0; n < us.length - 1; n++) {
+    const u0 = us[n], u1 = us[n + 1], i = Math.floor(u0);
+    const A = B;
+    B = profil(u1);
     for (let k = 0; k < A.length - 1; k++) {
-      const a0 = pt(P, i, ext * (bord + A[k].d), A[k].y), a1 = pt(P, i, ext * (bord + A[k + 1].d), A[k + 1].y);
-      const b0 = pt(P, j, ext * (bord + B[k].d), B[k].y), b1 = pt(P, j, ext * (bord + B[k + 1].d), B[k + 1].y);
+      const a0 = ou(u0, A[k].d, A[k].y), a1 = ou(u0, A[k + 1].d, A[k + 1].y);
+      const b0 = ou(u1, B[k].d, B[k].y), b1 = ou(u1, B[k + 1].d, B[k + 1].y);
       const t = A[k + 1].c;
       const c = t === "bande" ? ((i >> 1) % 2 ? BLANC : ROUGE) : t === "chapeau" ? BLANC : t === "bleu" ? BLEU : t === "beton" ? BETON : (i >> 2) % 2 ? BOIS2 : BOIS;
       pos.push(...a0, ...b0, ...a1, ...a1, ...b0, ...b1);
-      for (let n = 0; n < 6; n++) col.push(c.r, c.g, c.b);
+      for (let v = 0; v < 6; v++) col.push(c.r, c.g, c.b);
     }
   }
   const g = new THREE.BufferGeometry();
@@ -100,8 +205,8 @@ function murExterieur(P, ext, force) {
  * Lignes peintes du vélodrome sur la route penchée (depuis le bord intérieur) : la « côte d'azur »
  * bleue, puis les lignes noire, rouge et bleue. Elles apparaissent avec le dévers.
  */
-function lignes(P, int, force) {
-  const { demi } = P;
+function lignes(S, int, force) {
+  const { demi } = S.P;
   const bandes = [
     { de: 0, a: 1.3, c: 0x4dabf7 }, // côte d'azur
     { de: 2.0, a: 2.3, c: 0x212529 }, // ligne noire
@@ -110,21 +215,16 @@ function lignes(P, int, force) {
   ];
   const pos = [], col = [];
   const cc = new THREE.Color();
-  for (let i = DEBUT; i < FIN; i++) {
-    const j = i + 1;
-    if (force(i - DEBUT) < 0.02 && force(j - DEBUT) < 0.02) continue;
-    // la route n'a que 2 sommets en travers : quand le dévers change d'un échantillon au suivant,
-    // ses deux triangles ne sont plus dans le même plan (écart au plus 1/4 de la différence de
-    // hauteur du bord haut) ; on lève les lignes d'autant pour qu'elles ne passent pas dessous
-    const dHaut = Math.abs(P.hDevers(P.devers[j], -int * demi) - P.hDevers(P.devers[i], -int * demi));
-    const dessus = 0.05 + dHaut * 0.3;
+  const us = abscisses();
+  for (let n = 0; n < us.length - 1; n++) {
+    const u0 = us[n], u1 = us[n + 1];
+    if (force(u0 - DEBUT) < 0.02 && force(u1 - DEBUT) < 0.02) continue;
     for (const B of bandes) {
       cc.set(B.c);
       const l0 = int * (demi - B.de), l1 = int * (demi - B.a);
-      const h = (k, l) => P.hDevers(P.devers[k], l) + dessus;
-      const a0 = pt(P, i, l0, h(i, l0)), a1 = pt(P, i, l1, h(i, l1)), b0 = pt(P, j, l0, h(j, l0)), b1 = pt(P, j, l1, h(j, l1));
+      const a0 = S.point(u0, l0, 0.05), a1 = S.point(u0, l1, 0.05), b0 = S.point(u1, l0, 0.05), b1 = S.point(u1, l1, 0.05);
       pos.push(...a0, ...b0, ...a1, ...a1, ...b0, ...b1);
-      for (let n = 0; n < 6; n++) col.push(cc.r, cc.g, cc.b);
+      for (let v = 0; v < 6; v++) col.push(cc.r, cc.g, cc.b);
     }
   }
   const g = new THREE.BufferGeometry();
