@@ -85,6 +85,11 @@ OpenGameArt — sons du T-rex debout au bord de la route (src/trex-attaque.js ; 
   "80 CC0 creature SFX #2" — rubberduck : sons/trex-clac.ogg (attack_01 un peu plus grave + stomp_01)
     https://opengameart.org/content/80-cc0-creture-sfx-2
 
+ambientCG — https://ambientcg.com (monde en lave après la météorite, src/lave.js)
+  Lava 001 (couleur + émission) -> lave/roche-lave.jpg, lave/roche-lave-braise.jpg   https://ambientcg.com/view?id=Lava001
+  Lava 004 (couleur)            -> lave/lave.jpg                                     https://ambientcg.com/view?id=Lava004
+  (réduites en 1024 / 512 px, JPEG)
+
 Poly Haven — https://polyhaven.com
   Rochers et fougère (nature/realiste.glb, outils/blender/pack_realiste.py) :
     rock_moss_set_01                                  https://polyhaven.com/a/rock_moss_set_01

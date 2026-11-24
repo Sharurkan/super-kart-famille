@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { chargerTexturesSol } from "./decor.js";
 import { audio } from "./audio.js";
+import { LAVE, GLSL_LAVE } from "./lave.js";
 
 // Volcan en éruption (circuit Dinosaures), au fond de la grande plaine.
 //
@@ -266,7 +267,7 @@ function materiauRoche(ancien, uniformes) {
   const m = new THREE.MeshLambertMaterial({ map: ancien.map, normalMap: ancien.normalMap });
   if (ancien.normalMap) m.normalScale.copy(ancien.normalScale).multiplyScalar(1.3);
   m.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniformes);
+    Object.assign(shader.uniforms, uniformes, LAVE.uniforms);
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nvarying vec3 vMonde;")
       .replace("#include <project_vertex>", "#include <project_vertex>\nvMonde = (modelMatrix * vec4(transformed, 1.0)).xyz;");
@@ -276,7 +277,8 @@ varying vec3 vMonde;
 uniform float uTemps, uLueur, uVue;
 uniform vec3 uOrigine;
 uniform vec4 uCratere;
-uniform sampler2D tSol;
+uniform sampler2D tSol, tRocheLave;
+${GLSL_LAVE}
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float bruit(vec2 p) {
   vec2 i = floor(p), f = fract(p);
@@ -302,10 +304,13 @@ float r = length(q);
 float hn = clamp((uCratere.y - local.y) / uCratere.y, -0.2, 1.0);
 // pied : la roche se couvre de terre et d'herbe (même photo que le sol de la forêt), sans bord net
 vec3 sol = texture2D(tSol, vMonde.xz / 7.0).rgb * vec3(0.78, 0.86, 0.6);
+// monde en lave (lave.js) : le pied herbeux devient de la roche volcanique, la mousse disparaît
+float wLave = vagueLave(vMonde.xz);
+if (wLave > 0.002) sol = mix(sol, texture2D(tRocheLave, vMonde.xz / 9.0).rgb * vec3(0.62, 0.56, 0.54), wLave);
 float pied = 1.0 - smoothstep(4.0, 26.0 + 14.0 * bruit(vMonde.xz / 25.0), local.y);
 // un peu de mousse et de buissons sur le bas des pentes
 float mousse = (1.0 - smoothstep(20.0, 55.0, local.y)) * smoothstep(0.45, 0.75, bruit(vMonde.xz / 9.0)) * 0.45;
-diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.7, 1.05, 0.55) + vec3(0.02, 0.04, 0.0), mousse);
+diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.7, 1.05, 0.55) + vec3(0.02, 0.04, 0.0), mousse * (1.0 - wLave));
 diffuseColor.rgb = mix(diffuseColor.rgb, sol, pied);
 // près du cratère : roche à peine roussie par la chaleur (la photo du modèle reste la base)
 diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.2, 0.9, 0.8), smoothstep(0.12, 0.0, hn) * 0.5);
@@ -330,7 +335,7 @@ totalEmissiveRadiance += vec3(0.6, 0.16, 0.03) * uLueur * 0.22 * smoothstep(0.18
   gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, fogFactor);
 #endif`);
   };
-  m.customProgramCacheKey = () => "volcan-roche";
+  m.customProgramCacheKey = () => "volcan-roche-lave";
   return m;
 }
 

@@ -311,7 +311,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   const zV = piste.centre.z + Math.sin(ANGLE_VOLCAN) * (piste.rayon + 260);
   const volcan = creerVolcan(groupe, xV, zV, { versPiste: Math.atan2(piste.centre.z - zV, piste.centre.x - xV) });
   if (import.meta.env.DEV) window.__volcan = volcan;
-  // la météorite qui grossit tour après tour et percute le volcan au 3e tour (meteorite.js)
+  // la météorite qui grossit tour après tour et percute le volcan au 2e tour, puis le monde passe en lave (meteorite.js, lave.js)
   const meteorite = creerMeteorite(groupe, volcan, piste);
   if (import.meta.env.DEV) window.__meteorite = meteorite;
   // collines lointaines : même sol que la forêt (vraies textures), un peu plus sombres

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { brulable } from "./lave.js";
 
 // Végétation en vrais modèles 3D : Stylized Nature MegaKit de Quaternius (CC0), rassemblés et
 // allégés avec Blender dans public/nature/jurassique.glb, et modèles réalistes dans
@@ -178,6 +179,7 @@ function chargerModeles() {
           if (m.normalMap) m.normalScale.copy(ancien.normalScale);
           if (m.map) m.map.anisotropy = 4;
           if (!ancien.map && FILTRES[nomPropre]) adoucir(m.color, FILTRES[nomPropre]);
+          brulable(m); // se calcine dans le monde en lave (lave.js)
           pieces.push({ geometrie: g, materiau: m });
         });
         // rayon au sol (pour une hauteur de 1) : 85 % des sommets sont plus près de l'axe
@@ -419,6 +421,7 @@ function chargerImposteurs() {
           sampledDiffuseColor.a = min(1.0, sampledDiffuseColor.a * (1.0 + max(lod, 0.0) * 0.35));
           diffuseColor *= sampledDiffuseColor;`);
     };
+    brulable(materiau); // les arbres se calcinent dans le monde en lave (lave.js)
     return { info, noms, materiau };
   });
   return chargementImposteurs;

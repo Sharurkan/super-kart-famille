@@ -2,9 +2,10 @@ import * as THREE from "three";
 import { audio } from "./audio.js";
 import { Sprites, CELLULE, CELLULES_FUMEE, textureParticules } from "./volcan.js";
 import { chargerModelesNature } from "./vegetation.js";
+import { LAVE, reinitialiserLave, creerCendres } from "./lave.js";
 
 // La météorite du circuit Dinosaures : dès le départ, elle brille dans le ciel derrière le volcan,
-// grossit tour après tour, puis au dernier tour (le 3e) elle fonce sur le cratère et explose :
+// grossit pendant le 1er tour, puis au 2e tour elle fonce sur le cratère et explose :
 // flash, boule de feu, onde de choc, colonne de cendres, pluie de lave, éruption maximale.
 //
 // Que des vrais assets libres :
@@ -23,6 +24,9 @@ const DUREE_CHUTE = 3.2; // s : la dernière ligne droite de la météorite (ell
 const F_AVANT = 0.6; // part du trajet faite avant le dernier tour
 const F_DERNIER = 0.1; // part du trajet faite pendant le dernier tour, avant la chute
 const GRAVITE = 22;
+const RAYON_LAVE = 1900, DUREE_VAGUE = 32; // m, s : la vague de lave après l'impact
+/** Le tour de l'impact : le 2e (le monde est en lave au 3e) ; le 1er si la course n'a qu'un ou deux tours. */
+const tourImpact = (info) => Math.max(1, Math.min(2, (info.tours ?? 3) - 1));
 const DISTANCES_ARBRES = [10, 20, 32, 45, 60, 80, 105, 135]; // m : où l'on cherche des arbres entre la caméra et le volcan
 const BASE = import.meta.env.BASE_URL + "meteorite/";
 const SONS = { chute: BASE + "thrusterFire_000.ogg", boum: BASE + "explosionCrunch_004.ogg", sourd: BASE + "lowFrequency_explosion_000.ogg" };
@@ -35,6 +39,8 @@ const SONS = { chute: BASE + "thrusterFire_000.ogg", boum: BASE + "explosionCrun
 export function creerMeteorite(groupe, volcan, piste) {
   const support = volcan.support; // tout est placé dans le repère du volcan (origine au pied)
   for (const u of Object.values(SONS)) audio.precharger(u);
+  reinitialiserLave(support.position.x, support.position.z); // nouvelle course : plus de lave
+  const cendres = creerCendres(groupe);
 
   // ---------- la roche ----------
   const uniformes = { uChaleur: { value: 0.6 }, uTemps: { value: 0 } };
@@ -222,7 +228,7 @@ export function creerMeteorite(groupe, volcan, piste) {
 
   // ---------- état de la course ----------
   function avanceeVoulue(info) {
-    const T = Math.max(1, Math.min(3, info.tours ?? 3)); // le 3e tour, ou le dernier si la course est plus courte
+    const T = tourImpact(info);
     const tour = info.tour ?? 0;
     if (tour >= T) {
       if (etat.tDebutDernier < 0) etat.tDebutDernier = etat.t;
@@ -270,7 +276,7 @@ export function creerMeteorite(groupe, volcan, piste) {
   let scene = null, hemi = null;
   const brumeOrig = new THREE.Color(), hemiOrig = new THREE.Color();
   let hemiIntOrig = 1;
-  const BLANC = new THREE.Color(1, 1, 1), CIEL_ROUGE = new THREE.Color(0.95, 0.42, 0.3), BRUME_ROUGE = new THREE.Color(0.78, 0.46, 0.36), HEMI_ROUGE = new THREE.Color(1, 0.62, 0.45);
+  const BLANC = new THREE.Color(1, 1, 1), CIEL_ROUGE = new THREE.Color(0.85, 0.3, 0.22), BRUME_ROUGE = new THREE.Color(0.78, 0.46, 0.36), HEMI_ROUGE = new THREE.Color(1, 0.62, 0.45);
   function trouverScene() {
     let s = support;
     while (s.parent) s = s.parent;
@@ -306,6 +312,8 @@ export function creerMeteorite(groupe, volcan, piste) {
 
   function update(dt, camera) {
     etat.t += dt;
+    LAVE.uniforms.uLaveTemps.value = etat.t;
+    cendres.update(dt, camera);
     uniformes.uTemps.value = etat.t;
     if (!volcan.pret) return;
     if (!etat.pret) preparerTrajet();
@@ -390,6 +398,8 @@ export function creerMeteorite(groupe, volcan, piste) {
     if (etat.phase === "apres") {
       etat.tImpact += dt;
       const ti = etat.tImpact;
+      // la vague de lave part du volcan et couvre tout en ~30 s (le 3e tour est entièrement en lave)
+      LAVE.uniforms.uLaveRayon.value = 30 + RAYON_LAVE * THREE.MathUtils.smoothstep(ti, 1, DUREE_VAGUE);
       if (ti < 9) {
         etat.emisCendres += dt * (ti < 2 ? 10 : 6);
         while (etat.emisCendres >= 1) { etat.emisCendres--; emettreCendres(1.2 - ti / 9); }
@@ -409,10 +419,11 @@ export function creerMeteorite(groupe, volcan, piste) {
     // --- ciel : rougit un peu au 2e tour, davantage pendant la chute, très fort à l'impact puis revient ---
     let cible = 0;
     if (info) {
-      const T = Math.max(1, Math.min(3, info.tours ?? 3));
+      const T = tourImpact(info);
       if (etat.phase === "approche") cible = T > 1 ? 0.3 * THREE.MathUtils.clamp(((info.progression ?? 0) - 1) / (T - 1), 0, 1) + (etat.tDebutDernier >= 0 ? 0.08 : 0) : 0;
       else if (etat.phase === "chute") cible = 0.4 + 0.3 * (etat.tChute / DUREE_CHUTE);
-      else cible = 0.25 + 0.75 * Math.exp(-Math.max(0, etat.tImpact - 2.5) / 9);
+      // après le flash, le ciel reste rouge sombre : le monde est en lave (lave.js)
+      else cible = Math.max(0.25 + 0.75 * Math.exp(-Math.max(0, etat.tImpact - 2.5) / 9), 0.82 * THREE.MathUtils.clamp((etat.tImpact - 3) / 25, 0, 1));
     }
     etat.rougeur += (cible - etat.rougeur) * Math.min(1, dt * (etat.phase === "apres" && etat.tImpact < 1 ? 5 : 0.8));
     teinter(flash);

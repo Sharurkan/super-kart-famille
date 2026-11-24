@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { LAVE, GLSL_SOL_LAVE } from "./lave.js";
 
 /** Boîte aux coins arrondis (les pièces très fines restent des boîtes simples). */
 export function boiteRonde(l, h, p) {
@@ -272,7 +273,29 @@ function imagesSol(piste, photo = false) {
   trace(bord + 1.3, "rgb(104,150,40)", 1.5); // terre au pied des barrières
   trace(bord - 0.8, "rgba(132,30,70,0.8)", 1.5); // herbe usée entre la bordure et la barrière
   trace(piste.demi + 2.2, "rgb(110,95,20)", 1); // terre tassée le long de la bordure
-  return { detail: cd, carte: cc, carteMin: new THREE.Vector2(x0, z0), carteTaille: taille };
+  // masque (pas une image affichée) : proximité de la route, blanc dessus, noir au loin ; sert au
+  // monde en lave (lave.js) pour ne jamais ouvrir de lave sur la route ni ses bas-côtés
+  let proche = null;
+  if (photo) {
+    const P = 512, pp = P / taille;
+    proche = document.createElement("canvas");
+    proche.width = proche.height = P;
+    const gp = proche.getContext("2d");
+    gp.fillStyle = "#000";
+    gp.fillRect(0, 0, P, P);
+    gp.filter = `blur(${Math.max(2, 10 * pp)}px)`;
+    gp.strokeStyle = "#fff";
+    gp.lineWidth = (bord + 14) * 2 * pp;
+    gp.lineJoin = gp.lineCap = "round";
+    gp.beginPath();
+    for (let i = 0; i <= piste.N; i++) {
+      const j = i % piste.N;
+      const X = (piste.cx[j] - x0) * pp, Y = (piste.cz[j] - z0) * pp;
+      i ? gp.lineTo(X, Y) : gp.moveTo(X, Y);
+    }
+    gp.stroke();
+  }
+  return { detail: cd, carte: cc, proche, carteMin: new THREE.Vector2(x0, z0), carteTaille: taille };
 }
 
 /** Matériau du grand sol (carte du circuit + détail dessiné, ou vraies textures pour la forêt jurassique). */
@@ -286,7 +309,12 @@ export function materiauSol(def, piste) {
     const carte = new THREE.CanvasTexture(im.carte);
     carte.anisotropy = 4;
     carte.flipY = false; // ligne 0 du dessin = z minimal
-    cacheSol.set(cle, { detail, carte, carteMin: im.carteMin, carteTaille: im.carteTaille });
+    let proche = null;
+    if (im.proche) {
+      proche = new THREE.CanvasTexture(im.proche);
+      proche.flipY = false;
+    }
+    cacheSol.set(cle, { detail, carte, proche, carteMin: im.carteMin, carteTaille: im.carteTaille });
   }
   const t = cacheSol.get(cle);
   if (def.decor === "dino") return materiauSolPhoto(def, t);
@@ -383,7 +411,7 @@ function materiauSolPhoto(def, t) {
   const f = (x) => x.toFixed(2);
   const m = new THREE.MeshLambertMaterial({ color: 0xffffff });
   m.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms);
+    Object.assign(shader.uniforms, uniforms, LAVE.uniforms, { tProche: { value: t.proche } });
     // coordonnées du monde (aussi pour un InstancedMesh, ex. les collines au loin)
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nvarying vec2 vSolXZ;")
@@ -399,7 +427,8 @@ varying vec2 vSolXZ;
 uniform sampler2D tCarte, tHerbe, tTerre, tSousBois;
 uniform vec2 uCarteMin;
 uniform float uCarteTaille;
-uniform vec3 uTeinteHerbe, uTeinteTerre, uTeinteSousBois, uLum;`)
+uniform vec3 uTeinteHerbe, uTeinteTerre, uTeinteSousBois, uLum;
+${GLSL_SOL_LAVE.declarations}`)
       .replace("#include <map_fragment>", `
 vec4 carte = texture2D(tCarte, clamp((vSolXZ - uCarteMin) / uCarteTaille, 0.0, 1.0));
 vec2 p = vSolXZ + (carte.r - 0.5) * vec2(9.0, -6.0);
@@ -416,8 +445,11 @@ float wT = smoothstep(0.25, 0.75, carte.g * 1.3 + (lT - lH) * 0.3);
 c = mix(c, sb * uTeinteSousBois, wS);
 c = mix(c, terre * uTeinteTerre, wT);
 c *= 0.62 + 0.76 * carte.r;
-diffuseColor.rgb *= c;`);
+// monde en lave (lave.js) : roche volcanique et lave qui gagnent depuis le volcan
+${GLSL_SOL_LAVE.couleur}
+diffuseColor.rgb *= c;`)
+      .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>\n${GLSL_SOL_LAVE.emission}`);
   };
-  m.customProgramCacheKey = () => "sol-photo";
+  m.customProgramCacheKey = () => "sol-photo-lave";
   return m;
 }
