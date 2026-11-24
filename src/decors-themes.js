@@ -313,7 +313,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   const xV = piste.centre.x + Math.cos(placeV.angle) * distV;
   const zV = piste.centre.z + Math.sin(placeV.angle) * distV;
   const ANGLE_VOLCAN = Math.atan2(zV - piste.centre.z, xV - piste.centre.x);
-  const volcan = creerVolcan(groupe, xV, zV, { versPiste: Math.atan2(piste.centre.z - zV, piste.centre.x - xV), echelle: placeV.echelle });
+  const volcan = creerVolcan(groupe, xV, zV, { versPiste: Math.atan2(piste.centre.z - zV, piste.centre.x - xV), versVue: angleVueVolcan(piste, xV, zV), echelle: placeV.echelle });
   if (import.meta.env.DEV) Object.assign(window, { __volcan: volcan, __THREE: THREE });
   // la météorite qui grossit tour après tour et percute le volcan au 2e tour, puis le monde passe en lave (meteorite.js, lave.js)
   const meteorite = creerMeteorite(groupe, volcan, piste);
@@ -357,6 +357,23 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
       D.objet.rotation.y = Math.atan2(-Math.sin(D.a), Math.cos(D.a)); // tangente au cercle (modèles tournés vers +Z)
     }
   };
+}
+
+/** Direction (x, z) du volcan vers la caméra du kart, en moyenne sur le tour, là où on le voit : la face visible. */
+function angleVueVolcan(piste, xV, zV) {
+  let sx = 0, sz = 0;
+  const N = piste.N;
+  for (let i = 0; i < N; i += 4) {
+    const j = (i + 3) % N, k = (i - 3 + N) % N;
+    let dx = piste.cx[j] - piste.cx[k], dz = piste.cz[j] - piste.cz[k];
+    const l = Math.hypot(dx, dz); dx /= l; dz /= l;
+    const cx = piste.cx[i] - dx * 7, cz = piste.cz[i] - dz * 7;
+    let vx = xV - cx, vz = zV - cz;
+    const lv = Math.hypot(vx, vz); vx /= lv; vz /= lv;
+    if (vx * dx + vz * dz < Math.cos(0.8)) continue; // pas dans le champ
+    sx -= vx; sz -= vz;
+  }
+  return Math.atan2(sz, sx);
 }
 
 /**

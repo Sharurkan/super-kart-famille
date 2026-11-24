@@ -43,10 +43,10 @@ function textureVolcan(nom) {
 const NB_LAVE = 72; // projections (les 2 dernières places : lueur du cratère)
 const NB_HALOS = 40; // lueurs le long des coulées
 const GRAVITE = 22; // m/s² (un peu moins que la vraie : les boules restent lisibles plus longtemps)
-const BROUILLARD = 0.55; // le volcan traverse moins de brume que le reste (il doit se voir de loin)
+const BROUILLARD = 0.07; // presque pas de brume sur le volcan : net et contrasté même à 500 m et plus (juste un léger voile)
 
 /** Volcan + éruption. Renvoie { update(dt, camera), eruption(), pret, rayonPied }. */
-export function creerVolcan(groupe, x, z, { versPiste = 0, echelle = 1 } = {}) {
+export function creerVolcan(groupe, x, z, { versPiste = 0, versVue = versPiste, echelle = 1 } = {}) {
   // taille (échelle 1 : 140 m de haut, 380 m de large)
   const DIM = { hauteur: DIMENSIONS.hauteur * echelle, largeur: DIMENSIONS.largeur * echelle };
   const rayonPied = RAYON_PIED * echelle;
@@ -187,10 +187,18 @@ export function creerVolcan(groupe, x, z, { versPiste = 0, echelle = 1 } = {}) {
     // par une brèche du cratère, une moyenne qui se divise en deux bras, une petite langue courte.
     // Départs à des endroits différents du bord, tracés qui suivent les ravines (plus grande pente)
     // avec un peu de méandres, largeur irrégulière (étranglements, élargissements, lobe au front).
+    // graine fixe : les mêmes coulées à chaque course
+    let graine = 20241124;
+    const rnd = () => ((graine = (graine * 16807) % 2147483647) / 2147483647);
     const COULEES = [
-      { da: 0.28 + (Math.random() - 0.5) * 0.25, larg: 27, pasMax: 160, breche: true },
-      { da: -1.0 + (Math.random() - 0.5) * 0.3, larg: 15, pasMax: 105, division: 0.42 },
-      { da: 1.8 + (Math.random() - 0.5) * 0.3, larg: 9, pasMax: 48 },
+      // toutes sur les faces qu'on voit depuis la piste (autour de versVue), tracés fixes, écarts
+      // irréguliers ; r0 : départ en rayons du cratère (1 = bord, plus = bouche plus bas sur le flanc)
+      { da: 0.1, larg: 28, pasMax: 160, breche: true },          // principale, par une brèche
+      { da: -0.78, larg: 19, pasMax: 140, r0: 1.05 },            // seconde principale
+      { da: 0.52, larg: 14, pasMax: 110, division: 0.4 },        // moyenne qui se divise
+      { da: -0.32, larg: 11, pasMax: 85, r0: 2.3 },              // moyenne sortie d'une bouche du flanc
+      { da: 0.97, larg: 8, pasMax: 40, r0: 1.7 },                // petite langue
+      { da: -1.08, larg: 7, pasMax: 34, r0: 2.8 },               // petite langue basse
     ];
     const tracer = (x, z, dx, dz, pasMax, ph) => {
       const chemin = [[x, z]];
@@ -213,14 +221,14 @@ export function creerVolcan(groupe, x, z, { versPiste = 0, echelle = 1 } = {}) {
     };
     const flux = []; // { chemin, larg, ph, depart (m déjà parcourus avant ce bras) }
     for (const C of COULEES) {
-      const a0 = versPiste + C.da, r0 = etat.rayon * (C.breche ? 1.12 : 0.98); // (brèche : la lave sort plus bas, par une entaille du bord)
-      const ph = Math.random() * 6.283;
+      const a0 = versVue + C.da, r0 = etat.rayon * (C.breche ? 1.12 : C.r0 ?? 0.98); // (brèche : la lave sort plus bas, par une entaille du bord)
+      const ph = rnd() * 6.283;
       const ch = tracer(cx + Math.cos(a0) * r0, cz + Math.sin(a0) * r0, Math.cos(a0), Math.sin(a0), C.pasMax, ph);
       flux.push({ chemin: ch, larg: C.larg, ph, depart: 0 });
       if (C.division && ch.length > 20) {
         // un bras se détache et part de son côté
         const k = Math.floor(ch.length * C.division), [x, z] = ch[k], [xp, zp] = ch[k - 2];
-        const sens = Math.random() < 0.5 ? -1 : 1, ang = Math.atan2(z - zp, x - xp) + sens * 0.6;
+        const sens = -1, ang = Math.atan2(z - zp, x - xp) + sens * 0.6;
         const bras = tracer(x, z, Math.cos(ang), Math.sin(ang), Math.floor((ch.length - k) * 0.75), ph + 1.7);
         flux.push({ chemin: bras, larg: C.larg * 0.6, ph: ph + 1.7, depart: k * 2.5 });
       }
@@ -273,7 +281,7 @@ export function creerVolcan(groupe, x, z, { versPiste = 0, echelle = 1 } = {}) {
       // quelques lueurs et départs de vapeur le long de la coulée
       for (let k = 6; k < L; k += 12) {
         const [hx, hz] = chemin[k];
-        halosCoulees.push({ p: new THREE.Vector3(hx, surface(hx, hz) + 5, hz), a: k / L, dist: F.depart + k * 2.5, larg: largAt(k, F.depart + k * 2.5), ph: Math.random() * 6.283 });
+        halosCoulees.push({ p: new THREE.Vector3(hx, surface(hx, hz) + 5, hz), a: k / L, dist: F.depart + k * 2.5, larg: largAt(k, F.depart + k * 2.5), ph: rnd() * 6.283 });
       }
     }    const tex = new THREE.CanvasTexture(cv);
     tex.flipY = false; // ligne 0 du dessin = z minimal
@@ -691,7 +699,7 @@ void main() {
   vec4 mv = modelViewMatrix * vec4(aPos.xyz, 1.0);
   float c = cos(aRot.x), s = sin(aRot.x);
   mv.xy += mat2(c, s, -s, c) * position.xy * aPos.w;
-  vBrume = smoothstep(uBrumeNF.x, uBrumeNF.y, -mv.z) * ${(BROUILLARD * 0.5).toFixed(2)}; // fumée sombre : contraste avec le ciel
+  vBrume = smoothstep(uBrumeNF.x, uBrumeNF.y, -mv.z) * ${BROUILLARD.toFixed(2)}; // panache net, à peine voilé
   gl_Position = projectionMatrix * mv;
 }`,
       fragmentShader: `
