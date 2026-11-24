@@ -16,6 +16,9 @@ import { construireInterieur, AMBIANCE_INTERIEUR } from "./interieur.js";
 export const TOURS = 3;
 const DUREE_DECOMPTE = 3.6; // 3, 2, 1, Partez !
 const RAYON_KART = 1.1;
+/** Ventre du T-rex : adversaires montrés dans le tunnel s'ils sont à moins de tant de secondes de l'enfant. */
+const VENTRE_FENETRE_DEVANT = 8;
+const VENTRE_FENETRE_DERRIERE = 10;
 
 /**
  * Entrée dans la gueule du T-rex (vue de l'enfant) : le noir se referme sur la gueule pendant
@@ -266,6 +269,7 @@ export class Course {
     }
 
     // --- visuels ---
+    this.placerDansVentre(dt);
     for (const k of this.karts) this.majVisuel(k, dt);
     this.particulesJoueur();
     this.particules.update(dt);
@@ -326,7 +330,7 @@ export class Course {
       return;
     }
     // les adversaires ne roulent pas vraiment dans le ventre : ils le traversent en à peu près le
-    // temps que met l'enfant, et n'y sont dessinés que s'il y est aussi (voir physAffichee)
+    // temps que met l'enfant ; on les montre dans le ventre quand l'enfant y est (voir placerDansVentre)
     k.mange = k.ventre.duree = this.interieur ? this.dureeVentreIA() : 1.1;
     if (this.interieur) {
       const lim = this.interieur.piste.demi - 1.5;
@@ -541,50 +545,124 @@ export class Course {
   }
 
   /**
-   * Ce qu'on affiche d'un kart : sa vraie physique, ou, pour un adversaire qui traverse le T-rex
-   * pendant que l'enfant y est aussi, sa place sur le circuit du ventre. L'adversaire n'y roule pas
-   * vraiment : il avance au rythme de sa traversée (k.ventre.f, la même mesure que la mini-carte et
-   * le classement), donc devant ou derrière l'enfant comme au classement. null : caché (dans la gueule).
+   * Ce qu'on affiche d'un kart : sa vraie physique ; ou, pendant que l'enfant est dans le ventre,
+   * sa place dans le tunnel s'il est proche de l'enfant au classement (voir placerDansVentre) ;
+   * null : caché (dans la gueule, loin de l'enfant). Un kart n'a qu'un modèle : il est dessiné
+   * soit sur la route, soit dans le ventre, jamais aux deux endroits.
    */
-  physAffichee(k, dt = 0) {
-    if (!(k.mange > 0)) return k.phys;
-    const v = k.ventre;
-    if (!v || !this.interieur || !this.joueur.dedans) return null;
-    const P = this.interieur.piste, depart = this.departVentre ?? 6;
-    const s = depart + v.f * (P.N - depart); // indice (avec la fraction) sur le tour intérieur
-    const i0 = Math.floor(s) % P.N, i1 = (i0 + 1) % P.N, u = s - Math.floor(s);
-    // pas de collisions dans le ventre, mais on ne passe pas à travers l'enfant :
-    // l'adversaire se décale doucement sur le côté quand il le croise
-    const J = this.joueur.phys, lim = P.demi - 1.5;
-    const ds = ((((s - J.indice) % P.N) + 1.5 * P.N) % P.N - P.N / 2) * P.pas; // devant (+) / derrière (-) l'enfant
-    let cible = v.voie;
-    if (Math.abs(ds) < 4.5 && Math.abs(cible - J.lateral) < 2.6) {
-      const cote = cible >= J.lateral ? 1 : -1;
-      cible = J.lateral + cote * 2.6;
-      if (Math.abs(cible) > lim) cible = J.lateral - cote * 2.6;
-      cible = THREE.MathUtils.clamp(cible, -lim, lim);
+  physAffichee(k) {
+    if (k.joueur) return k.phys;
+    if (this.joueur.dedans && k.vueVentre?.visible) return k.vueVentre;
+    return k.mange > 0 ? null : k.phys;
+  }
+
+  /**
+   * Le ventre vivant. Les adversaires ne roulent pas vraiment dans le T-rex, et avec l'élastique
+   * ils sont presque toujours juste derrière l'enfant : à leur vraie place, ils seraient derrière
+   * la caméra (ou pas encore entrés) et l'enfant ne verrait jamais personne. Alors, tant que
+   * l'enfant est dedans, chaque adversaire proche au classement (quelques secondes devant ou
+   * derrière, sur la route ou dans le T-rex) est montré dans le tunnel, rapproché, mais dans
+   * l'ordre du classement : ceux devant roulent devant l'enfant, ceux derrière arrivent à sa
+   * hauteur sur le côté. Classement et mini-carte restent ceux de la vraie course.
+   */
+  placerDansVentre(dt) {
+    const j = this.joueur;
+    if (!this.interieur) return;
+    if (!j.dedans) {
+      for (const k of this.karts) k.vueVentre = null;
+      return;
     }
-    v.lat ??= v.voie;
-    v.lat += (cible - v.lat) * Math.min(1, dt * 4);
-    const lat = v.lat;
-    const a0 = P.angleA(i0), da = Math.atan2(Math.sin(P.angleA(i1) - a0), Math.cos(P.angleA(i1) - a0));
-    // il tombe dans le ventre comme l'enfant : petite chute juste après la gueule
-    const chute = Math.max(0, 1 - (v.duree - k.mange) / 0.45);
-    const a = (v.affiche ??= { ySol: 0, pente: 0, direction: 0, dansHerbe: false, clignote: 0 });
-    a.x = P.cx[i0] + P.nx[i0] * lat + (P.cx[i1] + P.nx[i1] * lat - P.cx[i0] - P.nx[i0] * lat) * u;
-    a.z = P.cz[i0] + P.nz[i0] * lat + (P.cz[i1] + P.nz[i1] * lat - P.cz[i0] - P.nz[i0] * lat) * u;
-    a.y = 2.2 * chute * chute;
-    a.angle = a0 + da * u;
-    a.vitesse = ((P.N - depart) * P.pas) / v.duree;
-    a.direction = THREE.MathUtils.clamp(-da * 6, -1, 1); // braque un peu dans les virages
-    return a;
+    const P = this.interieur.piste, J = j.phys, lim = P.demi - 1.5;
+    // où est l'enfant sur le tour intérieur (indice avec la fraction)
+    const i = J.indice;
+    const sJ = i + THREE.MathUtils.clamp(((J.x - P.cx[i]) * P.tx[i] + (J.z - P.cz[i]) * P.tz[i]) / P.pas, -0.5, 0.5);
+    const vitesseRef = REGLAGES.vitesseMax * 0.85; // m/s : pour compter l'écart en secondes
+    const progJ = this.progression(j);
+    // écart réel (en mètres de route) de chaque adversaire, puis place visée dans le tunnel
+    const devant = [], derriere = [];
+    for (const k of this.karts) {
+      if (k.joueur) continue;
+      const ecart = (this.progression(k) - progJ) * this.piste.L;
+      const proche = ecart > 0 ? ecart < VENTRE_FENETRE_DEVANT * vitesseRef : -ecart < VENTRE_FENETRE_DERRIERE * vitesseRef;
+      k.vueVentreEcart = ecart;
+      if (proche) (ecart > 0 ? devant : derriere).push(k);
+      else if (k.vueVentre) k.vueVentre.cible = k.vueVentre.decalage > 0 ? 50 : -14; // il s'éloigne hors de vue
+    }
+    devant.sort((a, b) => a.vueVentreEcart - b.vueVentreEcart);
+    derriere.sort((a, b) => b.vueVentreEcart - a.vueVentreEcart);
+    // devant : à 7, 13, 19... m (un peu plus loin s'il a beaucoup d'avance) ;
+    // derrière : les deux plus proches à la hauteur de l'enfant, sur les côtés ; les autres restent
+    // derrière la caméra (7 m en arrière) : plus près d'elle, ils cacheraient tout l'écran.
+    // Petit va-et-vient pour que ça bataille un peu.
+    const balance = (k) => Math.sin(this.t * 0.7 + this.karts.indexOf(k) * 2.1);
+    devant.forEach((k, n) => this.viserDansVentre(k, 7 + n * 6 + Math.min(6, k.vueVentreEcart * 0.04) + balance(k) * 0.8));
+    derriere.forEach((k, n) => this.viserDansVentre(k, n < 2 ? -0.6 - n * 1.6 + balance(k) * 0.7 : -12));
+
+    // on avance chacun vers sa place, puis on choisit sa voie sans toucher les autres, et sans se
+    // mettre entre la caméra et l'enfant (de 9 m derrière lui à 4,5 m devant)
+    const places = [{ d0: -9, d1: 4.5, lat: J.lateral, ecart: 2.9 }];
+    const montres = this.karts.filter((k) => k.vueVentre).sort((a, b) => Math.abs(a.vueVentre.decalage) - Math.abs(b.vueVentre.decalage));
+    for (const k of montres) {
+      const v = k.vueVentre;
+      v.decalage += (v.cible - v.decalage) * Math.min(1, dt * 1.5);
+      if (v.cible <= -14 && v.decalage < -13) { k.vueVentre = null; continue; }
+      if (v.cible >= 50 && v.decalage > 48) { k.vueVentre = null; continue; }
+      let lat = THREE.MathUtils.clamp(v.lat, -lim, lim);
+      for (let essai = 0; essai < 4; essai++) {
+        const gene = places.find((p) => v.decalage > p.d0 && v.decalage < p.d1 && Math.abs(p.lat - lat) < p.ecart);
+        if (!gene) break;
+        const cote = lat >= gene.lat ? 1 : -1;
+        lat = gene.lat + cote * gene.ecart;
+        if (Math.abs(lat) > lim && gene === places[0]) {
+          // l'enfant le serre contre la paroi : plutôt que de passer à travers lui, il se laisse
+          // distancer (et repasse derrière la caméra)
+          lat = cote * lim;
+          v.cible = Math.min(v.cible, -12);
+          break;
+        }
+        if (Math.abs(lat) > lim) lat = gene.lat - cote * gene.ecart;
+        lat = THREE.MathUtils.clamp(lat, -lim, lim);
+      }
+      places.push({ d0: v.decalage - 4.5, d1: v.decalage + 4.5, lat, ecart: 2.6 });
+      v.lat += (lat - v.lat) * Math.min(1, dt * 3);
+      // position sur le circuit intérieur
+      const s = (((sJ + v.decalage / P.pas) % P.N) + P.N) % P.N;
+      const i0 = Math.floor(s) % P.N, i1 = (i0 + 1) % P.N, u = s - Math.floor(s);
+      const a0 = P.angleA(i0), da = Math.atan2(Math.sin(P.angleA(i1) - a0), Math.cos(P.angleA(i1) - a0));
+      const x0 = P.cx[i0] + P.nx[i0] * v.lat, z0 = P.cz[i0] + P.nz[i0] * v.lat;
+      v.x = x0 + (P.cx[i1] + P.nx[i1] * v.lat - x0) * u;
+      v.z = z0 + (P.cz[i1] + P.nz[i1] * v.lat - z0) * u;
+      v.chute = Math.max(0, v.chute - dt);
+      v.y = 2.2 * (v.chute / 0.45) ** 2; // il tombe dans le ventre comme l'enfant
+      v.angle = a0 + da * u;
+      v.vitesse = Math.max(8, J.vitesse + (v.decalage - (v.avant ?? v.decalage)) / Math.max(dt, 1e-3));
+      v.avant = v.decalage;
+      v.direction = THREE.MathUtils.clamp(-da * 6, -1, 1); // braque un peu dans les virages
+      v.visible = true;
+    }
+  }
+
+  /** Place visée dans le tunnel (mètres devant + / derrière - l'enfant) ; il arrive hors de vue. */
+  viserDansVentre(k, decalage) {
+    if (!k.vueVentre) {
+      const lim = this.interieur.piste.demi - 1.5;
+      const voie = THREE.MathUtils.clamp(k.ventre?.voie ?? k.ia.voie ?? 0, -lim, lim);
+      // à l'entrée de l'enfant (pendant le noir), chacun est déjà à sa place ; ensuite, un
+      // nouveau venu arrive de derrière la caméra ou du fond du tunnel
+      const entree = this.noirRestant > 0;
+      k.vueVentre = {
+        decalage: entree ? decalage : decalage > 0 ? 45 : -13, avant: undefined, voie, lat: voie,
+        chute: entree ? 0.45 : 0, ySol: 0, pente: 0, direction: 0, dansHerbe: false, clignote: 0, visible: false,
+      };
+    }
+    k.vueVentre.cible = decalage;
   }
 
   majVisuel(k, dt) {
     const { modele } = k;
-    const phys = this.physAffichee(k, dt);
+    const phys = this.physAffichee(k);
     if (!phys) {
-      modele.groupe.visible = false; // dans la gueule, ou dans le ventre sans l'enfant
+      modele.groupe.visible = false; // dans la gueule, loin de l'enfant
       return;
     }
     const vRel = phys.vitesse / REGLAGES.vitesseMax;
@@ -606,7 +684,9 @@ export class Course {
     }
     for (const r of modele.roues.arriere) r.tourne.rotation.x += (phys.vitesse * dt) / r.rayon;
     modele.groupe.visible = phys.clignote > 0 ? Math.floor(this.t * 12) % 2 === 0 : true;
-    k.scenario?.visuel?.(k);
+    // montré dans le ventre : à plat dans le tunnel, sans le passage scripté qu'il fait sur la route
+    if (phys !== k.phys) modele.groupe.rotation.set(0, phys.angle, 0);
+    else k.scenario?.visuel?.(k);
   }
 
   particulesJoueur() {
