@@ -12,15 +12,20 @@ const TOUCHES = {
 // Attention : Chrome ne fournit "deviceorientation" que dans un contexte sécurisé
 // (HTTPS ou localhost). Ça marche sur la version GitHub Pages, mais PAS sur l'adresse
 // http du réseau local (http://192.168.x.x:5173) utilisée en développement.
-const ZONE_MORTE = 4; // degrés : en dessous, on va tout droit
-const BRAQUAGE_MAX = 22; // degrés : au-delà, on tourne à fond
-const LISSAGE = 0.3; // filtre passe-bas, appliqué à chaque événement du capteur
+// Réglage doux (retour de jeu : 22° pour braquer à fond, c'était beaucoup trop fort) :
+// zone morte plus large, braquage complet seulement vers 40°, et courbe progressive
+// (petite inclinaison = petit virage, on ne tourne fort qu'en penchant franchement).
+const ZONE_MORTE = 6; // degrés : en dessous, on va tout droit
+const BRAQUAGE_MAX = 40; // degrés : au-delà, on tourne à fond
+const COURBE = 1.6; // > 1 : les petites inclinaisons tournent peu
+const LISSAGE = 0.2; // filtre passe-bas, appliqué à chaque événement du capteur
 
 /** Inclinaison (degrés, droite = positif) -> direction entre -1 et 1. */
 export function inclinaisonVersDir(degres) {
   const a = Math.abs(degres);
   if (a <= ZONE_MORTE) return 0;
-  return Math.sign(degres) * Math.min(1, (a - ZONE_MORTE) / (BRAQUAGE_MAX - ZONE_MORTE));
+  const t = Math.min(1, (a - ZONE_MORTE) / (BRAQUAGE_MAX - ZONE_MORTE));
+  return Math.sign(degres) * Math.pow(t, COURBE);
 }
 
 /** Ramène un angle dans [-180, 180[. */
@@ -125,6 +130,8 @@ export class Controles {
   }
 
   angleEcran() {
+    // écran pivoté par le jeu (le système est passé en portrait) : on garde le repère du paysage
+    if (this.angleForce != null) return this.angleForce;
     return screen.orientation?.angle ?? window.orientation ?? 90;
   }
 

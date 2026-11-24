@@ -252,7 +252,24 @@ body.mode-auto #commandes .btn-frein {
   }
 }
 
-/* toute tablette ou téléphone tenu en portrait (le jeu ne se joue qu'en paysage) */
+/* Page pivotée par le jeu quand le système passe en portrait (voir majPivot dans main.js) :
+   le body prend les dimensions du paysage et tourne pour rester à sa place. */
+html.pivote body {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vh;
+  height: 100vw;
+  transform-origin: 0 0;
+  transform: translate(var(--pivot-dx), var(--pivot-dy)) rotate(var(--pivot));
+}
+
+html.pivote #tourner {
+  display: none !important;
+}
+
+/* toute tablette ou téléphone tenu en portrait (le jeu ne se joue qu'en paysage) :
+   seulement si le jeu n'a jamais vu le paysage (sinon il pivote la page) */
 @media (orientation: portrait) and (pointer: coarse), (orientation: portrait) and (max-width: 1100px) {
   #tourner {
     display: flex;

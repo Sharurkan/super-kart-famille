@@ -39,11 +39,42 @@ let minimap = null; // mini-carte du circuit pendant la course
 let vue = vitrine; // ce qui est affiché en 3D : la vitrine ou la course
 let enPause = false;
 
+// Paysage forcé : si le système passe quand même en portrait (navigateur qui refuse le
+// verrouillage, enfant qui penche trop la tablette pour tourner), on fait pivoter toute la page
+// pour que l'image reste à sa place pour l'enfant, au lieu d'afficher l'écran "tourne la tablette".
+let angleTenu = null; // angle d'écran du dernier paysage (90, 270, ou 0/180 pour les tablettes paysage natives)
+let pivot = 0; // rotation CSS appliquée à la page, en degrés
+function majPivot() {
+  const angle = screen.orientation?.angle ?? window.orientation ?? 0;
+  const paysage = innerWidth >= innerHeight;
+  if (paysage) {
+    angleTenu = angle;
+    pivot = 0;
+  } else if (angleTenu !== null) {
+    // rotation physique de la tablette depuis le paysage, compensée par la page
+    pivot = ((((angle - angleTenu) % 360) + 540) % 360) - 180;
+    if (Math.abs(pivot) !== 90) pivot = angle - angleTenu > 0 ? 90 : -90;
+  }
+  const html = document.documentElement;
+  html.classList.toggle("pivote", pivot !== 0);
+  html.style.setProperty("--pivot", `${pivot}deg`);
+  // décalage pour ramener la page tournée dans l'écran (rotation autour du coin haut gauche)
+  html.style.setProperty("--pivot-dx", pivot === 90 ? "100vw" : "0px");
+  html.style.setProperty("--pivot-dy", pivot === -90 ? "100vh" : "0px");
+  controles.angleForce = pivot !== 0 ? angleTenu : null;
+}
+/** Taille de la zone de jeu (inversée quand la page est pivotée). */
+function tailleJeu() {
+  return pivot !== 0 ? [innerHeight, innerWidth] : [innerWidth, innerHeight];
+}
 function redimensionner() {
-  renderer.setSize(innerWidth, innerHeight);
-  vue.redimensionner(innerWidth / innerHeight);
+  majPivot();
+  const [l, h] = tailleJeu();
+  renderer.setSize(l, h);
+  vue.redimensionner(l / h);
 }
 addEventListener("resize", redimensionner);
+screen.orientation?.addEventListener?.("change", redimensionner);
 
 // ---------- Écrans ----------
 const $ = (s) => document.querySelector(s);
