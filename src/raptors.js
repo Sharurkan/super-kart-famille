@@ -855,5 +855,11 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
       },
     };
   }
+  // (développement : temps passé dans update, pour les mesures de performance)
+  if (import.meta.env.DEV) {
+    const u0 = update;
+    stats.ms = 0; stats.images = 0;
+    return (dt, camera) => { const t0 = performance.now(); u0(dt, camera); stats.ms += performance.now() - t0; stats.images++; };
+  }
   return update;
 }
