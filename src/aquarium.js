@@ -447,28 +447,40 @@ export function installerAquarium(groupe, piste) {
   let t = 0, sCamAvant = null, vCam = 20;
 
   // Le mosasaure nage sur un grand circuit ovale fermé dans le bassin (repère de la piste, en
-  // mètres depuis la vitre d'entrée) : deux longueurs le long des vitres où il plonge entre le
-  // tunnel et les vitres, deux demi-tours au-dessus de la voûte, où il passe en travers de la
+  // mètres) : deux longueurs le long des vitres, au-dessus des côtés du tunnel, et deux
+  // demi-tours au-dessus de la voûte, où il passe en travers de la
   // route. Ce circuit est dessiné pour que tout son corps (19 m, raide : il est juste orienté
   // le long du chemin) reste dans l'eau ; contraindre() le vérifie à chaque image et le remet
   // dedans s'il le fallait (filet de sécurité, voir les essais numériques).
   // Le moment "waouh" : quand le kart arrive, il règle sa vitesse sur le chemin pour passer
   // en travers de la route (demi-tour du fond, gueule ouverte) ~22 m devant la caméra.
   const LONG = ((i1 - i0) * pas); // longueur du bassin (m)
-  const CORPS = { demi: LONGUEUR_MOSASAURE / 2, lat: 2.2, vert: 1.9 }; // demi-longueur, demi-largeur (nage comprise), demi-hauteur (m)
-  const RAYON = 19, C1 = 3 + RAYON, C2 = LONG - 3.6 - RAYON; // demi-tours : centres (m) et rayon
-  const DROIT = C2 - C1, PERIM = 2 * DROIT + 2 * Math.PI * RAYON;
-  const Y_HAUT = h + CORPS.vert + 1.4, Y_BAS = 6.3; // au-dessus de la voûte / plongée le long des vitres
+  // enveloppe du corps mesurée sur le cycle de nage (sommets du modèle animé, nageoires comprises) :
+  // ±9,6 m de long, ±4,6 m de large (nageoires), 2,8 m sous l’axe, 1,6 m au-dessus ; + le roulis
+  const CORPS = { demi: 9.65, lat: 4.7, bas: 3.0, haut: 2.0 };
+  // Le bassin suit un virage serré (rayon ~50 m) : le côté intérieur est bien plus court que le côté
+  // extérieur. Le chemin est dessiné en vrais mètres autour du milieu du bassin, puis converti en
+  // abscisse de la piste avec echelle(l) = longueur réelle d’un mètre de piste au latéral l.
+  const RAYON = 20, DROIT = 15, C1 = LONG / 2 - DROIT / 2, C2 = LONG / 2 + DROIT / 2; // demi-tours : centres (m) et rayon (= latéral des longueurs)
+  const PERIM = 2 * DROIT + 2 * Math.PI * RAYON;
+  const sMil = (i0 + i1) / 2, pA = new THREE.Vector3(), pB = new THREE.Vector3();
+  const echelle = (l) => point(sMil + 1, l, 0, pA).distanceTo(point(sMil - 1, l, 0, pB)) / (2 * pas);
+  const ECH = [];
+  for (let l = -W; l <= W; l++) ECH.push(echelle(l));
+  const ech = (l) => { const u = THREE.MathUtils.clamp(l + W, 0, 2 * W - 1e-6), k = Math.floor(u); return ECH[k] + (ECH[k + 1] - ECH[k]) * (u - k); };
+  const versS = (s, l) => sMil + (s - LONG / 2) / pas / ech(l); // mètres du chemin → abscisse de la piste
+  // (corps raide de 19 m : pas de plongée, il sortirait la queue de l’eau ; juste une ondulation lente)
+  const Y_HAUT = h + CORPS.bas + 0.7; // au-dessus de la voûte, sous la surface
   const pApex = DROIT + Math.PI * RAYON / 2; // milieu du demi-tour du fond : en travers de la route
-  const sX = C2 + RAYON; // (m) là où il croise la route
+  const sX = C2 + RAYON; // (m) là où il croise la route (demi-tour du fond)
+  const TRAVERSEES = [{ p: pApex, s: sX }, { p: pApex + PERIM / 2, s: C1 - RAYON }]; // les deux demi-tours
   const AVANCE = 22;
   /** Point du chemin à l'abscisse p (m) : { s (m), l, y } et courbure (pour s'incliner). */
   function chemin(p, r = {}) {
     p = ((p % PERIM) + PERIM) % PERIM;
     if (p < DROIT) {
-      // longueur côté -l, vers le fond, en plongeant
-      const u = p / DROIT;
-      return Object.assign(r, { s: C1 + p, l: -RAYON, y: Y_HAUT - (Y_HAUT - Y_BAS) * 0.5 * (1 - Math.cos(2 * Math.PI * u)), k: 0 });
+      // longueur côté -l, vers le fond
+      return Object.assign(r, { s: C1 + p, l: -RAYON, y: Y_HAUT, k: 0 });
     }
     p -= DROIT;
     if (p < Math.PI * RAYON) {
@@ -477,39 +489,41 @@ export function installerAquarium(groupe, piste) {
     }
     p -= Math.PI * RAYON;
     if (p < DROIT) {
-      const u = p / DROIT;
-      return Object.assign(r, { s: C2 - p, l: RAYON, y: Y_HAUT - (Y_HAUT - Y_BAS) * 0.5 * (1 - Math.cos(2 * Math.PI * u)), k: 0 });
+      return Object.assign(r, { s: C2 - p, l: RAYON, y: Y_HAUT, k: 0 });
     }
     p -= DROIT;
     const th = p / RAYON + Math.PI / 2; // demi-tour de l'entrée, de +l vers -l
     return Object.assign(r, { s: C1 + RAYON * Math.cos(th), l: RAYON * Math.sin(th), y: Y_HAUT, k: 1 / RAYON });
   }
   const M = { p: DROIT * 0.3, v: 6, indice: Math.round((i0 + i1) / 2), pos: new THREE.Vector3(), dir: new THREE.Vector3(), roulis: 0, ouv: 0.1, corrige: 0 };
-  const cA1 = {}, cA2 = {}, dirAvant = new THREE.Vector3(), tete = new THREE.Vector3(), queueP = new THREE.Vector3();
+  const cA1 = {}, cA2 = {}, dirAvant = new THREE.Vector3(), tete = new THREE.Vector3();
   function placerChemin(p, pos, dir) {
     chemin(p, cA1);
     chemin(p + 0.5, cA2);
-    point(i0 + cA1.s / pas, cA1.l, cA1.y, pos);
-    point(i0 + cA2.s / pas, cA2.l, cA2.y, dir).sub(pos).normalize();
+    cA1.y += 0.25 * Math.sin((4 * Math.PI * p) / PERIM);
+    cA2.y += 0.25 * Math.sin((4 * Math.PI * (p + 0.5)) / PERIM);
+    point(versS(cA1.s, cA1.l), cA1.l, cA1.y, pos);
+    point(versS(cA2.s, cA2.l), cA2.l, cA2.y, dir).sub(pos).normalize();
     return cA1.k;
   }
 
-  // --- filet de sécurité : le corps (segment de ±CORPS.demi, section CORPS.lat × CORPS.vert)
+  // --- filet de sécurité : le corps (segment de ±CORPS.demi, section CORPS.lat × (CORPS.bas + CORPS.haut))
   // reste dans le volume d'eau, hors du tunnel. Chaque point du corps est ramené dans l'eau
   // (repère piste), puis le segment est recalé sur ces points (moindres carrés).
   const NB_PTS = 9, ptsT = [], ptsQ = [];
   for (let k = 0; k < NB_PTS; k++) { ptsT.push(-1 + (2 * k) / (NB_PTS - 1)); ptsQ.push(new THREE.Vector3()); }
+  const R = { bout: 0, vitre: 0, haut: 0, tunnel: 0 };
   const mL = 0.35; // marge (m) en plus de la section du corps
   function dansLeau(P, q) {
     const L = local(P, M.indice);
     let s = L.s, l = L.l, y = P.y;
     const sMin = i0 + (CORPS.lat + mL) / pas, sMax = i1 - (CORPS.lat + mL) / pas;
-    s = THREE.MathUtils.clamp(s, sMin, sMax);
-    l = THREE.MathUtils.clamp(l, -W + CORPS.lat + mL, W - CORPS.lat - mL);
-    y = THREE.MathUtils.clamp(y, CORPS.vert + mL, EAU - CORPS.vert - mL);
+    s = THREE.MathUtils.clamp(s, sMin, sMax); if (s !== L.s) R.bout++;
+    l = THREE.MathUtils.clamp(l, -W + CORPS.lat + mL, W - CORPS.lat - mL); if (l !== L.l) R.vitre++;
+    y = THREE.MathUtils.clamp(y, CORPS.bas + mL, EAU - CORPS.haut - mL); if (y !== P.y) R.haut++;
     // hors de la voûte gonflée de la section du corps
-    const ea = a + CORPS.lat + mL, eh = h + CORPS.vert + mL, e = (l / ea) ** 2 + (y / eh) ** 2;
-    if (e < 1) {
+    const ea = a + CORPS.lat + mL, eh = h + CORPS.bas + mL, e = (l / ea) ** 2 + (y / eh) ** 2;
+    if (e < 1) { R.tunnel++;
       const f = 1 / Math.sqrt(Math.max(e, 1e-6));
       l *= f;
       y *= f;
@@ -537,16 +551,21 @@ export function installerAquarium(groupe, piste) {
   }
 
   function nagerMosasaure(dt, sCam, vCam) {
-    if (sCam === null || sCam > i1) M.fait = false;
+    if (sCam === null || sCam > i1) { M.fait = false; M.cible = null; }
     let vDes = 6;
     const sCamM = sCam === null ? null : (sCam - i0) * pas;
-    const tKart = sCamM === null ? Infinity : (sX - AVANCE - sCamM) / Math.max(6, vCam);
-    if (sCamM !== null && !M.fait && tKart > 0) {
-      // le kart arrive : passer au milieu du demi-tour du fond quand il sera à AVANCE m
-      let dP = (((pApex - M.p) % PERIM) + PERIM) % PERIM;
-      if (dP / tKart < 3) dP += PERIM;
-      vDes = THREE.MathUtils.clamp(dP / tKart, 3, 16);
-      if (tKart < 0.25) M.fait = true;
+    if (sCamM !== null && !M.fait) {
+      // Le kart arrive : passer en travers de la route (milieu d'un demi-tour) quand il sera à
+      // AVANCE m. Celui du fond de préférence ; sinon celui de l'entrée (le kart sort du T-rex
+      // ~110 m avant le bassin : il n'y a pas toujours le temps de rejoindre le premier).
+      M.cible = null;
+      for (const c of TRAVERSEES) {
+        const tK = (c.s - AVANCE - sCamM) / Math.max(6, vCam);
+        if (tK <= 0) continue;
+        const v = ((((c.p - M.p) % PERIM) + PERIM) % PERIM) / tK;
+        if (v >= 1.5 && v <= 18) { M.cible = c; vDes = v; break; }
+      }
+      if (M.cible && (M.cible.s - AVANCE - sCamM) / Math.max(6, vCam) < 0.25) M.fait = true;
     }
     M.v += (vDes - M.v) * Math.min(1, dt * 2.5);
     M.p = (M.p + M.v * dt) % PERIM;
@@ -555,14 +574,15 @@ export function installerAquarium(groupe, piste) {
     placerChemin(M.p, M.pos, M.dir);
     if (contraindre(M.pos, M.dir)) M.corrige++;
     // gueule : grande ouverte en passant devant le kart, quelques bâillements sinon
-    const dApex = Math.abs(((M.p - pApex + PERIM * 1.5) % PERIM) - PERIM / 2);
-    const traverse = sCamM !== null && dApex < 14 && sCamM > -40 && sCamM < sX;
+    const c = M.cible, dApex = c ? Math.abs(((M.p - c.p + PERIM * 1.5) % PERIM) - PERIM / 2) : 99;
+    const traverse = sCamM !== null && dApex < 14 && sCamM < c.s;
     moso.ouverture = traverse ? 0.75 : 0.08 + 0.12 * Math.max(0, Math.sin(t * 0.7) * Math.sin(t * 0.23)) ** 2;
     // un peu penché vers l'intérieur des virages (vitesse de rotation autour de la verticale)
     const omega = dt > 0 && dirAvant.lengthSq() > 0 ? (dirAvant.z * M.dir.x - dirAvant.x * M.dir.z) / dt : 0;
-    M.roulis += (THREE.MathUtils.clamp(-omega * M.v * 0.12, -0.22, 0.22) - M.roulis) * Math.min(1, dt * 2);
+    M.roulis += (THREE.MathUtils.clamp(-omega * M.v * 0.12, -0.12, 0.12) - M.roulis) * Math.min(1, dt * 2);
     moso.objet.position.copy(M.pos);
-    moso.objet.lookAt(v3.copy(M.pos).add(M.dir));
+    aq.updateWorldMatrix(true, false);
+    moso.objet.lookAt(v3.copy(M.pos).add(M.dir).applyMatrix4(aq.matrixWorld)); // (lookAt vise un point du monde)
     moso.objet.rotateZ(M.roulis);
     moso.nager(dt, M.v);
   }
@@ -627,7 +647,12 @@ export function installerAquarium(groupe, piste) {
     }
   }
 
-  return { update, objet: aq, mosasaure: moso, nage: M, corps: CORPS, eau: { W, H, EAU, a, h, D, i0, i1 } }; // (nage, corps, eau : pour les essais)
+  const retour = { update, objet: aq, mosasaure: moso, nage: M, corps: CORPS, R, traversees: TRAVERSEES, eau: { W, H, EAU, a, h, D, i0, i1, sA, sB } };
+  if (import.meta.env.DEV) {
+    window.__aquarium = retour; // (nage, corps, eau : pour les essais)
+    retour.diag = (p) => { const pos = new THREE.Vector3(), dir = new THREE.Vector3(); placerChemin(p, pos, dir); return ptsT.map((t) => { const q = pos.clone().addScaledVector(dir, t * CORPS.demi), L = local(q, M.indice); return [+((L.s - i0) * pas).toFixed(2), +L.l.toFixed(2), +q.y.toFixed(2)]; }); };
+  }
+  return retour;
 }
 
 // ---------------------------------------------------------------------------
