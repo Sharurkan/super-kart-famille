@@ -351,6 +351,9 @@ export class Course {
       r.pivot.rotation.y = -phys.direction * 0.45;
     }
     for (const r of modele.roues.arriere) r.tourne.rotation.x += (phys.vitesse * dt) / r.rayon;
+    // le volant tourne un peu avec les roues (les poings dessinés restent dessus)
+    const volant = modele.direction?.userData.volant;
+    if (volant) volant.rotation.z = phys.direction * 0.3;
     modele.groupe.visible = phys.clignote > 0 ? Math.floor(this.t * 12) % 2 === 0 : true;
     k.scenario?.visuel?.(k);
   }

@@ -3,6 +3,7 @@ import { textureRond } from "./textures.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { liberer } from "./liberer.js";
+import { POSITION_POINGS } from "./pilote.js";
 
 // Tous les karts ont exactement les mêmes performances : seul le look change.
 // Repère local : avant du kart = +Z, haut = +Y.
@@ -58,8 +59,8 @@ export const kartPret = chargeur
         o.userData.peinture = o.material.name === "peinture";
         o.material = matKart;
       }
-      // Volant détaché par outils/blender/volant_pilotes.py : caché, car les pilotes (dessins 2D
-      // toujours face à la caméra) ont leur volant dessiné dans les mains, quel que soit l'angle.
+      // Volant d'origine (détaché par outils/blender/volant_pilotes.py) : caché, remplacé par le
+      // volant commun ci-dessous, placé pile dans les poings des pilotes.
       if (o.name === "volant") o.visible = false;
       if (/^roue_/.test(o.name)) rayons.set(o.name, new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3()).y / 2);
     });
@@ -70,6 +71,46 @@ export const kartPret = chargeur
     console.warn("Kart 3D non chargé, on garde les karts dessinés en code :", e);
     return false;
   });
+
+// ---------------------------------------------------------------------------
+// Volant commun à tous les karts (outils/blender/volant_pilotes.py -> public/karts/volant.glb) :
+// anneau de 0,55 m, branches, moyeu (nœud "volant", axe +Z) et colonne de direction ("colonne",
+// le long de +Z) qui plonge sous le capot. Posé dans le repère du siège, à l'endroit exact où
+// les dessins « assis » ont leurs poings (POSITION_POINGS), haut penché vers l'avant.
+const INCLINAISON_VOLANT = THREE.MathUtils.degToRad(32);
+const MATS_VOLANT = {
+  caoutchouc: new THREE.MeshPhongMaterial({ color: 0x1c1c20, shininess: 50, specular: 0x444444 }),
+  metal: new THREE.MeshPhongMaterial({ color: 0xc4c8d0, shininess: 90, specular: 0x888888 }),
+  bouton: new THREE.MeshPhongMaterial({ color: 0xd8261c, shininess: 80, specular: 0x555555 }),
+  colonne: new THREE.MeshPhongMaterial({ color: 0x3a3b40, shininess: 60, specular: 0x444444 }),
+};
+const volantPret = chargeur
+  .loadAsync(import.meta.env.BASE_URL + "karts/volant.glb")
+  .then((gltf) => {
+    gltf.scene.traverse((o) => {
+      if (o.isMesh) o.material = MATS_VOLANT[o.material.name.replace(/\.\d+$/, "")] ?? MATS_VOLANT.metal;
+    });
+    return gltf.scene;
+  })
+  .catch((e) => {
+    console.warn("Volant 3D non chargé :", e);
+    return null;
+  });
+
+/** Groupe du volant (dans le siège) ; userData.volant = partie qui tourne quand on braque. */
+function ajouterVolant(siege) {
+  const direction = new THREE.Group();
+  direction.position.set(0, POSITION_POINGS.y, POSITION_POINGS.z);
+  direction.rotation.x = INCLINAISON_VOLANT;
+  siege.add(direction);
+  volantPret.then((modele) => {
+    if (!modele || !direction.parent) return;
+    const v = modele.clone(true);
+    direction.add(v);
+    direction.userData.volant = v.getObjectByName("volant");
+  });
+  return direction;
+}
 
 const peintures = new Map();
 function matPeinture(couleur) {
@@ -457,6 +498,7 @@ const matOmbre = new THREE.MeshBasicMaterial({ map: texOmbre, transparent: true,
  * Crée un kart.
  * groupe : position + direction ; corps : dérapage / roulis / rebonds ; siege : où poser le pilote.
  * roues.avant / roues.arriere : { pivot (braquage), tourne (roule), rayon }.
+ * direction : groupe du volant 3D ; direction.userData.volant tourne quand on braque.
  */
 export function creerKart(type = "classique") {
   const groupe = new THREE.Group();
@@ -465,6 +507,7 @@ export function creerKart(type = "classique") {
   const roues = { avant: [], arriere: [] };
   const siege = new THREE.Group();
   corps.add(siege);
+  const direction = ajouterVolant(siege);
 
   if (gabarit) {
     habiller(corps, roues, type);
@@ -492,5 +535,5 @@ export function creerKart(type = "classique") {
   ombre.position.y = 0.05;
   groupe.add(ombre);
 
-  return { groupe, corps, siege, roues, ombre };
+  return { groupe, corps, siege, direction, roues, ombre };
 }
