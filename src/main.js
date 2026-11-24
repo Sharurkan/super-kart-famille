@@ -44,28 +44,39 @@ let enPause = false;
 // pour que l'image reste à sa place pour l'enfant, au lieu d'afficher l'écran "tourne la tablette".
 let angleTenu = null; // angle d'écran du dernier paysage (90, 270, ou 0/180 pour les tablettes paysage natives)
 let pivot = 0; // rotation CSS appliquée à la page, en degrés
+// En course, le sens de référence est figé : si l'enfant penche tellement que le système
+// retourne l'écran (paysage inversé, 180°), la page se retourne aussi et l'image ne bouge pas.
+// Dans les menus, on adopte le sens dans lequel la tablette est tenue.
+function enPilotage() {
+  return Boolean(course) && (course.etat === "decompte" || course.etat === "course");
+}
 function majPivot() {
   const angle = screen.orientation?.angle ?? window.orientation ?? 0;
   const paysage = innerWidth >= innerHeight;
-  if (paysage) {
-    angleTenu = angle;
-    pivot = 0;
-  } else if (angleTenu !== null) {
-    // rotation physique de la tablette depuis le paysage, compensée par la page
-    pivot = ((((angle - angleTenu) % 360) + 540) % 360) - 180;
-    if (Math.abs(pivot) !== 90) pivot = angle - angleTenu > 0 ? 90 : -90;
+  if (paysage && (angleTenu === null || !enPilotage())) angleTenu = angle;
+  pivot = 0;
+  if (angleTenu !== null) {
+    // rotation physique de la tablette depuis le sens de référence, compensée par la page
+    let d = ((((angle - angleTenu) % 360) + 540) % 360) - 180;
+    if (paysage) d = Math.abs(d) >= 135 ? 180 : 0;
+    else if (Math.abs(d) !== 90) d = angle - angleTenu > 0 ? 90 : -90;
+    pivot = d;
   }
   const html = document.documentElement;
   html.classList.toggle("pivote", pivot !== 0);
   html.style.setProperty("--pivot", `${pivot}deg`);
-  // décalage pour ramener la page tournée dans l'écran (rotation autour du coin haut gauche)
-  html.style.setProperty("--pivot-dx", pivot === 90 ? "100vw" : "0px");
-  html.style.setProperty("--pivot-dy", pivot === -90 ? "100vh" : "0px");
+  // dimensions de la page tournée, et décalage pour la ramener dans l'écran
+  // (rotation autour du coin haut gauche)
+  const quart = Math.abs(pivot) === 90;
+  html.style.setProperty("--pivot-l", quart ? "100vh" : "100vw");
+  html.style.setProperty("--pivot-h", quart ? "100vw" : "100vh");
+  html.style.setProperty("--pivot-dx", pivot === 90 || pivot === 180 ? "100vw" : "0px");
+  html.style.setProperty("--pivot-dy", pivot === -90 || pivot === 180 ? "100vh" : "0px");
   controles.angleForce = pivot !== 0 ? angleTenu : null;
 }
-/** Taille de la zone de jeu (inversée quand la page est pivotée). */
+/** Taille de la zone de jeu (inversée quand la page est tournée d'un quart de tour). */
 function tailleJeu() {
-  return pivot !== 0 ? [innerHeight, innerWidth] : [innerWidth, innerHeight];
+  return Math.abs(pivot) === 90 ? [innerHeight, innerWidth] : [innerWidth, innerHeight];
 }
 function redimensionner() {
   majPivot();

@@ -258,8 +258,8 @@ html.pivote body {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100vh;
-  height: 100vw;
+  width: var(--pivot-l);
+  height: var(--pivot-h);
   transform-origin: 0 0;
   transform: translate(var(--pivot-dx), var(--pivot-dy)) rotate(var(--pivot));
 }
