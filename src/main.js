@@ -56,10 +56,13 @@ function majPivot() {
   if (paysage && (angleTenu === null || !enPilotage())) angleTenu = angle;
   pivot = 0;
   if (angleTenu !== null) {
-    // rotation physique de la tablette depuis le sens de référence, compensée par la page
-    let d = ((((angle - angleTenu) % 360) + 540) % 360) - 180;
+    // rotation physique de la tablette depuis le sens de référence, compensée par la page.
+    // Sens (corrigé après essai sur la tablette) : quand le système passe de l'angle 90 à 0,
+    // il a redressé l'image d'un quart de tour ; on la remet en la tournant de +90° (CSS,
+    // sens horaire), soit angleTenu - angle.
+    let d = ((((angleTenu - angle) % 360) + 540) % 360) - 180;
     if (paysage) d = Math.abs(d) >= 135 ? 180 : 0;
-    else if (Math.abs(d) !== 90) d = angle - angleTenu > 0 ? 90 : -90;
+    else if (Math.abs(d) !== 90) d = angleTenu - angle > 0 ? 90 : -90;
     pivot = d;
   }
   const html = document.documentElement;
@@ -73,6 +76,9 @@ function majPivot() {
   html.style.setProperty("--pivot-dx", pivot === 90 || pivot === 180 ? "100vw" : "0px");
   html.style.setProperty("--pivot-dy", pivot === -90 || pivot === 180 ? "100vh" : "0px");
   controles.angleForce = pivot !== 0 ? angleTenu : null;
+  // diagnostic pour le parent (écran de pause) : angle du système, référence, rotation appliquée
+  const diag = document.getElementById("diag-ecran");
+  if (diag) diag.textContent = `écran ${angle}° (${screen.orientation?.type ?? "?"}) · référence ${angleTenu}° · pivot ${pivot}° · ${innerWidth}×${innerHeight}`;
 }
 /** Taille de la zone de jeu (inversée quand la page est tournée d'un quart de tour). */
 function tailleJeu() {
@@ -84,8 +90,14 @@ function redimensionner() {
   renderer.setSize(l, h);
   vue.redimensionner(l / h);
 }
-addEventListener("resize", redimensionner);
-screen.orientation?.addEventListener?.("change", redimensionner);
+// certains navigateurs mettent à jour l'angle et la taille de la fenêtre un peu après
+// l'événement : on recalcule aussi une fois les valeurs stabilisées
+const redimensionnerPuisRevoir = () => {
+  redimensionner();
+  setTimeout(redimensionner, 250);
+};
+addEventListener("resize", redimensionnerPuisRevoir);
+screen.orientation?.addEventListener?.("change", redimensionnerPuisRevoir);
 
 // ---------- Écrans ----------
 const $ = (s) => document.querySelector(s);
