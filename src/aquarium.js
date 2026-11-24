@@ -30,10 +30,11 @@ export const AQUARIUM = {
   demiTunnel: 16.5, // demi-largeur du tunnel (les barrières sont à 14,8 m)
   hautTunnel: 8, // hauteur du sommet de la voûte
   // Le bassin n'est pas symétrique : côté intérieur du virage (+l), le rayon de la route n'est que
-  // de ~39 m ; côté extérieur (−l), il y a toute la place pour les boucles du mosasaure géant.
-  demi: 28, // demi-largeur du bassin côté intérieur du virage (+l)
-  demiExt: 48, // demi-largeur du bassin côté extérieur du virage (−l)
-  haut: 24, // hauteur des vitres (depuis la route du fond) ; l'eau s'arrête un peu en dessous
+  // de ~39 m (au-delà, les murs construits dans le repère de la piste se replieraient sur eux-mêmes) ;
+  // côté extérieur (−l), il y a toute la place pour le grand cercle du mosasaure géant.
+  demi: 34, // demi-largeur du bassin côté intérieur du virage (+l)
+  demiExt: 89, // demi-largeur du bassin côté extérieur du virage (−l)
+  haut: 39, // hauteur des vitres (depuis la route du fond) ; l'eau s'arrête un peu en dessous
   profondeur: 10, // la route du fond est 10 m sous le sol : le bassin dépasse de 6 m
   rampeAvant: 86, // longueur de la descente (m) : pente max ~15 %
   rampeApres: 100, // longueur de la remontée (m) : pente max ~13 %
@@ -50,7 +51,7 @@ function rampe(u, q = 0.25) {
 
 /** Ambiance sous l'eau (mêmes clés que AMBIANCE_VENTRE de ventre.js). */
 const AMBIANCE_EAU = {
-  brouillard: [0x1d7fae, 5, 80],
+  brouillard: [0x1d7fae, 5, 115], // (loin : le bassin du mosasaure de 114 m est immense)
   ciel: [0xa6ecff, 0x1a5a7a, 2.0],
   soleil: 0.7,
 };
@@ -154,43 +155,39 @@ export function installerAquarium(groupe, piste) {
   const caustique = textureCaustique();
   const caustique2 = caustique.clone();
   caustique2.repeat.set(0.7, 0.7);
-  const metal = new THREE.MeshLambertMaterial({ color: 0x2f4650 });
   const beton = new THREE.MeshLambertMaterial({ color: 0x9aa3a6, side: THREE.DoubleSide });
 
-  // --- tunnel de verre ---
-  const tunnel = new THREE.Mesh(grille(14, (s, b, v) => point(s, a * Math.cos(Math.PI * b), h * Math.sin(Math.PI * b), v)), verre(0x9fe3ff, 0.12, 0.6));
+  // --- tunnel de verre pur (aucun arceau : rien ne cache le mosasaure) ---
+  const tunnel = new THREE.Mesh(grille(14, (s, b, v) => point(s, a * Math.cos(Math.PI * b), h * Math.sin(Math.PI * b), v)), verre(0x9fe3ff, 0.1, 0.55, 0.1));
   tunnel.renderOrder = 4;
   aq.add(tunnel);
-  // arceaux tous les ~5 m et bordures en béton au pied de la voûte
-  const arceau = (rayon) => {
-    const pts = [];
-    for (let k = 0; k <= 18; k++) pts.push(new THREE.Vector3(a * Math.cos((Math.PI * k) / 18), h * Math.sin((Math.PI * k) / 18), 0));
-    return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 12, rayon, 4, false);
+  // petite bordure en béton au pied de la voûte (là où le verre se pose sur le fond)
+  for (const c of [-1, 1]) aq.add(new THREE.Mesh(grille(1, (s, b, v) => point(s, c * (a + 0.25), b * 0.35, v)), beton));
+  // liserés clairs très fins (de simples lignes) : on comprend que c'est du verre, sans montants
+  const liseres = [];
+  /** Ajoute la polyligne fn(u) (u de 0 à 1, n segments) aux liserés. */
+  const lisere = (n, fn) => {
+    for (let k = 0; k < n; k++) liseres.push(fn(k / n).clone(), fn((k + 1) / n).clone());
   };
-  const arceaux = [];
-  const nbArceaux = Math.round(((i1 - i0) * pas) / 5.5);
-  for (let k = 1; k < nbArceaux; k++) arceaux.push(arceau(0.16).applyMatrix4(repere(i0 + ((i1 - i0) * k) / nbArceaux)));
-  aq.add(new THREE.Mesh(mergeGeometries(arceaux), metal));
-  for (const c of [-1, 1]) aq.add(new THREE.Mesh(grille(1, (s, b, v) => point(s, c * (a + 0.25), b * 0.7, v)), beton));
+  const vL = new THREE.Vector3();
+  for (const s of [i0, i1]) lisere(20, (u) => point(s, a * Math.cos(Math.PI * u), h * Math.sin(Math.PI * u), vL)); // bords de la voûte
 
-  // --- bassin : murs enterrés (sous le sol), vitres au-dessus, poteaux, rebord ---
+  // --- bassin : murs enterrés (sous le sol), grandes vitres au-dessus (sans poteaux ni cadre) ---
   // (D = niveau du sol dans le repère du bassin)
   const murBassin = new THREE.MeshLambertMaterial({ color: 0x6f8f99, emissive: 0x3fa0c0, emissiveMap: caustique, emissiveIntensity: 0.35, side: THREE.DoubleSide });
   const margelles = [];
   for (const c of [-1, 1]) {
     const W = Wc(c);
-    const vitre = new THREE.Mesh(grille(1, (s, b, v) => point(s, c * W, D + b * (H - D), v)), verre(0x177fbd, 0.58, 0.9));
+    const vitre = new THREE.Mesh(grille(1, (s, b, v) => point(s, c * W, D + b * (H - D), v)), verre(0x177fbd, 0.5, 0.88, 0.06));
     vitre.renderOrder = 2;
     aq.add(vitre);
     aq.add(new THREE.Mesh(grille(2, (s, b, v) => point(s, c * W, b * D, v)), murBassin));
-    aq.add(new THREE.Mesh(grille(1, (s, b, v) => point(s, c * (W + 0.05), H - 0.7 + b * 0.9, v)), new THREE.MeshLambertMaterial({ color: 0x2f4650, side: THREE.DoubleSide })));
     // margelle au ras du sol, le long des vitres (cache le bord du trou dans le sol)
     margelles.push(grille(1, (s, b, v) => point(s, c * (W - 0.2 + b * 1.6), D + 0.06, v)));
+    // liserés : haut de la vitre et arêtes verticales des coins
+    lisere(Math.ceil((i1 - i0) / 3), (u) => point(i0 + (i1 - i0) * u, c * W, H, vL));
+    for (const s of [i0, i1]) lisere(1, (u) => point(s, c * W, D + u * (H - D), vL));
   }
-  const poteaux = [];
-  const nbPoteaux = Math.round(((i1 - i0) * pas) / 9);
-  for (let k = 0; k <= nbPoteaux; k++)
-    for (const c of [-1, 1]) poteaux.push(new THREE.BoxGeometry(0.7, H - D, 0.7).translate(c * Wc(c), (H + D) / 2, 0).applyMatrix4(repere(i0 + ((i1 - i0) * k) / nbPoteaux)));
 
   // --- les deux bouts : façade en béton percée par le tunnel (sous le sol), vitre au-dessus ---
   // (repère d'un bout : x = latéral +l, y = haut, z = le long de la route)
@@ -215,15 +212,19 @@ export function installerAquarium(groupe, piste) {
     const pts = [];
     for (let k = 0; k <= 20; k++) pts.push(new THREE.Vector3((a + 0.5) * Math.cos((Math.PI * k) / 20), (h + 0.5) * Math.sin((Math.PI * k) / 20), 0));
     portiques.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.6, 6, false).applyMatrix4(m));
-    poteaux.push(new THREE.BoxGeometry(largeur + 0.7, 0.9, 0.7).translate(milieu, H - 0.25, 0).applyMatrix4(m));
-    // corniche au-dessus de l'entrée, au niveau du sol
+    // liseré du haut de la vitre du bout
+    lisere(1, (u) => point(s, -Wm + largeur * u, H, vL));
+    // margelle de pierre au-dessus de l'entrée, au niveau du sol (le pied de la vitre du bout)
     margelles.push(new THREE.BoxGeometry(largeur + 1.4, 0.6, 1.4).translate(milieu, D + 0.25, 0).applyMatrix4(m));
   }
-  aq.add(new THREE.Mesh(mergeGeometries(poteaux), metal));
+  // (portique : arche de pierre peinte dans la façade enterrée, autour de l'entrée du tunnel)
   aq.add(new THREE.Mesh(mergeGeometries(portiques), new THREE.MeshLambertMaterial({ color: 0xffb627 })));
-  const finVitres = new THREE.Mesh(mergeGeometries(bouts), verre(0x177fbd, 0.6, 0.9));
+  const finVitres = new THREE.Mesh(mergeGeometries(bouts), verre(0x177fbd, 0.52, 0.88, 0.06));
   finVitres.renderOrder = 6;
   aq.add(finVitres);
+  const lignes = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(liseres), new THREE.LineBasicMaterial({ color: 0xe6fbff, transparent: true, opacity: 0.6, depthWrite: false }));
+  lignes.renderOrder = 7;
+  aq.add(lignes);
   const texPierre = texturePierre();
   const pierre = new THREE.MeshLambertMaterial({ map: texPierre, side: THREE.DoubleSide });
   aq.add(new THREE.Mesh(mergeGeometries(facades), pierre));
@@ -329,7 +330,7 @@ export function installerAquarium(groupe, piste) {
   };
   const algues = [];
   const verts = [0x2b8a3e, 0x5c940d, 0x2f9e44, 0x66a80f, 0x087f5b];
-  while (algues.length < Math.round(48 * DENS * AIRE)) {
+  while (algues.length < Math.round(48 * DENS * AIRE ** 0.75)) {
     const s = i0 + 2 + rnd() * (i1 - i0 - 4), c = rnd() < 0.5 ? -1 : 1, l = c * (a + 1.5 + rnd() * (Wc(c) - a - 3));
     const p = point(s, l, 0);
     algues.push({ x: p.x, z: p.z, s: 0.8 + rnd() * 0.8, sy: 3 + rnd() * 8, r: rnd() * 6, couleur: verts[Math.floor(rnd() * verts.length)] });
@@ -345,9 +346,11 @@ export function installerAquarium(groupe, piste) {
     }
     planter(aq, nom, liste);
   };
-  rochers("Gros_Rocher", Math.round(2 * DENS * AIRE), 1.1);
-  rochers("Rocher_07", Math.round(3 * DENS * AIRE), 1.4);
-  rochers("Rocher_Mousse_B", Math.round(3 * DENS * AIRE), 1.5);
+  // (le bassin est immense : un peu plus de rochers, surtout plus gros, pour garder peu de triangles)
+  const RA = Math.sqrt(AIRE), GR = Math.sqrt(RA);
+  rochers("Gros_Rocher", Math.round(2 * DENS * RA), 1.1 * GR);
+  rochers("Rocher_07", Math.round(3 * DENS * RA), 1.4 * GR);
+  rochers("Rocher_Mousse_B", Math.round(3 * DENS * RA), 1.5 * GR);
 
   // --- bulles : colonnes qui montent du fond et du pied de la voûte ---
   const NB_COL = Math.round(14 * DENS), PAR_COL = 9;
@@ -370,12 +373,13 @@ export function installerAquarium(groupe, piste) {
     { geo: queue(), couleur: 0xffffff },
   ]);
   const bancs = COULEURS_POISSONS.map((couleur, b) => {
-    const n = 22;
+    const n = 30;
     const im = new THREE.InstancedMesh(poisson, new THREE.MeshLambertMaterial({ color: couleur, side: THREE.DoubleSide }), n);
     im.frustumCulled = false;
     aq.add(im);
     const membres = [];
-    for (let k = 0; k < n; k++) membres.push({ x: (rnd() - 0.5) * 7, y: (rnd() - 0.5) * 3, z: (rnd() - 0.5) * 6, e: 0.7 + rnd() * 0.5, ph: rnd() * 6 });
+    // (le banc du milieu, entre la voûte et le ventre du mosasaure, reste plat)
+    for (let k = 0; k < n; k++) membres.push({ x: (rnd() - 0.5) * 9, y: (rnd() - 0.5) * (b === 2 ? 1.6 : 3.5), z: (rnd() - 0.5) * 8, e: 0.7 + rnd() * 0.5, ph: rnd() * 6 });
     return { im, membres, ph: b * 2.1, cote: b === 2 ? 0 : b === 0 ? 1 : -1, pos: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, 1) };
   });
 
@@ -456,49 +460,37 @@ export function installerAquarium(groupe, piste) {
   const v3 = new THREE.Vector3(), cible = new THREE.Vector3(), o = new THREE.Object3D();
   let t = 0, sCamAvant = null, vCam = 20;
 
-  // Le mosasaure géant (57 m) nage sur un grand 8 au-dessus de la voûte : deux boucles rondes
-  // (rayon 26 m, mesuré dans le monde) près des bouts du bassin (à ~16 m des vitres des bouts),
-  // reliées par deux lignes droites qui se croisent au milieu, en travers de la route (~50°). Les
-  // boucles passent aussi en travers de la route : au fond (presque à angle droit) et à l'entrée.
-  // Elles sont décalées vers l'extérieur du virage, où le bassin est plus large (AQUARIUM.demiExt).
+  // Le mosasaure géant (114 m) nage en rond au-dessus de la voûte, sur un grand cercle (rayon 36,5 m,
+  // mesuré dans le monde) décalé vers l'extérieur du virage, où le bassin est le plus large
+  // (AQUARIUM.demiExt) : son corps en couvre presque la moitié, comme un serpent de mer qui tourne
+  // autour du tunnel. (Un 8 ne tient plus : avec ses nageoires de ±20 m, il faudrait un bassin deux
+  // fois plus long.) Le cercle passe deux fois en travers de la route (~45 et ~92 m après l'entrée).
   // Il ne glisse pas sur le chemin comme un bâton : sa colonne vertébrale se plie pour le suivre
   // (creerMosasaure : nager(dt, vitesse, cap)), la tête devant, la queue dans ses traces.
   // M.p = abscisse (m, mesurée dans le monde) de la racine du cou sur le chemin.
   // Le moment "waouh" : quand le kart arrive, il règle sa vitesse pour passer en travers de la
-  // route (gueule ouverte) ~55 m devant la caméra (assez loin pour le voir en entier : la caméra
-  // regarde un peu vers le bas, champ de 66°), puis vise le passage suivant s'il a le temps.
+  // route (gueule ouverte) ~85 m devant la caméra (le kart vient d'entrer dans le tunnel) : on le voit en entier, de la gueule à la queue,
+  // à travers la voûte (la caméra regarde un peu vers le bas, champ de 66°) ; puis le kart passe
+  // sous son long corps qui défile au-dessus de la voûte.
   // contraindre() vérifie à chaque image que tout son corps (os réels, avec leur rayon) reste
   // dans l'eau et le remet dedans s'il le fallait (filet de sécurité).
   const LONG = (i1 - i0) * pas; // longueur du bassin (m, sur la ligne du milieu)
   const ECH = LONGUEUR_MOSASAURE / 19; // (mesures faites sur le modèle de 19 m, voir POINTS_CORPS)
   // hauteur du repère du mosasaure : le dessous des nageoires avant (2,82 m sous l'axe à 19 m,
-  // gueule ouverte comprise) passe au-dessus de la voûte ; le haut de la queue (1,58 m) sous la surface
+  // gueule ouverte comprise) passe ~2 m au-dessus de la voûte (place pour le banc de poissons du
+  // milieu) ; le haut de la queue (1,58 m) sous la surface
   const ONDULE = 0.25; // (m) petite ondulation verticale du chemin
-  const Y_HAUT = h + 2.82 * ECH + 0.9 + ONDULE; // (+ le roulis dans les virages, qui baisse une nageoire)
-  const BOUCLE = { sN: 40, sF: LONG - 40, l: -10, r: 26 }; // centres des boucles (m le long de la route, latéral), rayon
+  const Y_HAUT = h + 2.82 * ECH + 2.2 + ONDULE; // (+ le roulis dans les virages, qui baisse une nageoire)
+  const BOUCLE = { s: 70, l: -26.5, r: 36.5 }; // centre du cercle (m le long de la route, latéral), rayon
   const NB_CH = 1400;
   const CH = (() => {
-    const centre = (sm) => point(i0 + sm / pas, BOUCLE.l, 0);
-    const CN = centre(BOUCLE.sN), CF = centre(BOUCLE.sF), r = BOUCLE.r;
-    const d = new THREE.Vector3().subVectors(CF, CN), dist = d.length();
-    const base = Math.atan2(d.z, d.x), ang = Math.acos((2 * r) / dist); // tangentes intérieures (elles se croisent)
-    const sur = (C, A) => new THREE.Vector3(C.x + r * Math.cos(A), 0, C.z + r * Math.sin(A));
+    const C = point(i0 + BOUCLE.s / pas, BOUCLE.l, 0), r = BOUCLE.r;
     const brut = [];
-    const arc = (C, a0, a1, sens) => {
-      let da = a1 - a0;
-      while (sens * da <= 0) da += sens * 2 * Math.PI;
-      const n = Math.ceil((Math.abs(da) * r) / 0.4);
-      for (let k = 0; k < n; k++) brut.push(sur(C, a0 + (da * k) / n));
-    };
-    const ligne = (P, Q) => {
-      const n = Math.ceil(P.distanceTo(Q) / 0.4);
-      for (let k = 0; k < n; k++) brut.push(P.clone().lerp(Q, k / n));
-    };
-    const tN1 = base + ang, tN2 = base - ang, tF1 = base + Math.PI + ang, tF2 = base + Math.PI - ang;
-    arc(CN, tN1, tN2, 1); // boucle de l'entrée (par le côté loin du milieu)
-    ligne(sur(CN, tN2), sur(CF, tF2));
-    arc(CF, tF2, tF1, -1); // boucle du fond, dans l'autre sens (c'est un 8)
-    ligne(sur(CF, tF1), sur(CN, tN1));
+    const n = Math.ceil((2 * Math.PI * r) / 0.4);
+    for (let k = 0; k < n; k++) {
+      const A = (2 * Math.PI * k) / n;
+      brut.push(new THREE.Vector3(C.x + r * Math.cos(A), 0, C.z + r * Math.sin(A)));
+    }
     // table à pas constant (m du monde) : position, direction, et repère de la piste (sm, l)
     const cum = [0];
     for (let k = 1; k <= brut.length; k++) cum.push(cum[k - 1] + brut[k - 1].distanceTo(brut[k % brut.length]));
@@ -530,7 +522,10 @@ export function installerAquarium(groupe, piste) {
     const f = A1.l / (A1.l - A2.l || 1);
     TRAVERSEES.push({ p: ((k + f) / NB_CH) * PERIM, s: A1.s + (A2.s - A1.s) * f });
   }
-  const AVANCE = 55; // (m) il traverse la route à cette distance devant la caméra (plus près, il sortirait du haut de l'écran)
+  const AVANCE = 90; // (m) il traverse la route à cette distance devant la caméra (plus près, il sortirait du haut de l'écran)
+  // pour un passage proche de l'entrée, on accepte qu'il passe plus près (le kart doit déjà être
+  // dans le tunnel : depuis la tranchée, la façade le cacherait) : il passe alors au-dessus du kart
+  for (const c of TRAVERSEES) c.avance = THREE.MathUtils.clamp(c.s - 8, 40, AVANCE);
   /** Point du chemin à l'abscisse p (m) : { x, z, tx, tz } (repère du bassin). */
   function chemin(p, r = {}) {
     const u = ((((p % PERIM) + PERIM) % PERIM) / PERIM) * NB_CH, k = Math.min(NB_CH - 1, Math.floor(u)), f = u - k;
@@ -544,7 +539,7 @@ export function installerAquarium(groupe, piste) {
     r.tz /= n;
     return r;
   }
-  const M = { p: TRAVERSEES[0].p + 60, v: 9, indice: Math.round((i0 + i1) / 2), pos: new THREE.Vector3(), dir: new THREE.Vector3(), roulis: 0, corrige: 0, filet: new THREE.Vector3(), decal: new THREE.Vector3(), cible: null, derniere: null, faites: new Set() };
+  const M = { p: TRAVERSEES[0].p + 60, v: VITESSE_CROISIERE, indice: Math.round((i0 + i1) / 2), pos: new THREE.Vector3(), dir: new THREE.Vector3(), roulis: 0, corrige: 0, filet: new THREE.Vector3(), decal: new THREE.Vector3(), cible: null, derniere: null, faites: new Set() };
   const c0 = {}, c1 = {}, dirAvant = new THREE.Vector3(), decale = new THREE.Vector3();
   /** Angle (rad, autour de la verticale) de la direction du chemin à d mètres de la racine du cou (d < 0 : derrière). */
   function cap(d) {
@@ -613,17 +608,16 @@ export function installerAquarium(groupe, piste) {
 
   /** Distance (m, en avant sur le chemin) du mosasaure au passage c. */
   const jusqua = (c) => (((c.p - M.p) % PERIM) + PERIM) % PERIM;
-  // passages visés de préférence : ceux du milieu et du fond (celui de l'entrée est en partie
-  // caché par la façade quand le kart est encore dans la tranchée)
-  const ORDRE = [...TRAVERSEES].sort((x, y) => (x.s < 25) - (y.s < 25) || x.s - y.s);
+  // passages visés de préférence : ceux qu'on peut voir de loin, en entier (AVANCE m devant)
+  const ORDRE = [...TRAVERSEES].sort((x, y) => y.avance - x.avance || x.s - y.s);
   const journal = []; // (essais) passages faits : écart devant la caméra au moment du passage
 
   function nagerMosasaure(dt, sCam, vCam) {
     if (sCam === null || sCam > i1) { M.faites.clear(); M.cible = M.derniere = null; }
-    let vDes = 9; // croisière : un géant de 57 m avance vite (en m/s) même tranquille
+    let vDes = VITESSE_CROISIERE;
     const sCamM = sCam === null ? null : (sCam - i0) * pas;
     if (sCamM !== null) {
-      const temps = (c) => (c.s - AVANCE - sCamM) / Math.max(6, vCam); // dans combien de temps le kart sera à AVANCE m du passage
+      const temps = (c) => (c.s - c.avance - sCamM) / Math.max(6, vCam); // dans combien de temps le kart sera à c.avance m du passage
       // Le kart arrive : passer en travers de la route quand il sera à AVANCE m du passage. On
       // garde la cible tant qu'elle reste jouable (la vitesse se recale à chaque image), puis on
       // vise le passage suivant devant le kart s'il y en a un qu'on peut encore rejoindre.
@@ -651,11 +645,11 @@ export function installerAquarium(groupe, piste) {
     M.p = (M.p + M.v * dt) % PERIM;
     if (import.meta.env.DEV && sCamM !== null)
       for (const c of TRAVERSEES)
-        if ((((c.p - pAvant) % PERIM) + PERIM) % PERIM <= M.v * dt) journal.push({ s: +c.s.toFixed(1), devant: +(c.s - sCamM).toFixed(1), vise: c === M.cible || c === M.derniere, t: +t.toFixed(1) });
+        if ((((c.p - pAvant) % PERIM) + PERIM) % PERIM <= M.v * dt) journal.push({ s: +c.s.toFixed(1), devant: +(c.s - sCamM).toFixed(1), avance: c.avance, vise: c === M.cible || c === M.derniere, t: +t.toFixed(1) });
     // gueule : grande ouverte en passant devant le kart, quelques bâillements sinon
     let dApex = 99;
     for (const c of [M.cible, M.derniere]) if (c) dApex = Math.min(dApex, Math.abs(((M.p - c.p + PERIM * 1.5) % PERIM) - PERIM / 2));
-    const traverse = sCamM !== null && dApex < 30 && sCamM < LONG;
+    const traverse = sCamM !== null && dApex < 45 && sCamM < LONG;
     moso.ouverture = traverse ? 0.75 : 0.08 + 0.12 * Math.max(0, Math.sin(t * 0.5) * Math.sin(t * 0.17)) ** 2;
     // position : la racine du cou sur le chemin, le corps orienté selon le chemin à cet endroit
     chemin(M.p, c0);
@@ -723,8 +717,9 @@ export function installerAquarium(groupe, piste) {
     for (const b of bancs) {
       const ph = t * 0.16 + b.ph;
       const u = 0.5 + 0.38 * Math.sin(ph);
-      const l = b.cote ? b.cote * (a + 5.5 + 2.5 * Math.sin(ph * 2.3)) : 6 * Math.sin(ph * 1.7);
-      const y = b.cote ? 4 + 2.5 * Math.sin(ph * 1.3) : h + 2.8 + 0.6 * Math.sin(ph * 2); // (sous le ventre du mosasaure)
+      // côté intérieur : près de la voûte ; côté extérieur : tout le grand bassin, de haut en bas
+      const l = b.cote > 0 ? a + 7 + 4 * Math.sin(ph * 2.3) : b.cote < 0 ? -(a + 22 + 16 * Math.sin(ph * 2.3)) : 6 * Math.sin(ph * 1.7);
+      const y = b.cote > 0 ? 4 + 2.5 * Math.sin(ph * 1.3) : b.cote < 0 ? 9 + 6 * Math.sin(ph * 1.3) : h + 1.4 + 0.3 * Math.sin(ph * 2); // (sous le ventre du mosasaure)
       point(i0 + marge + u * (i1 - i0 - 2 * marge), l, y, cible);
       if (cible.distanceToSquared(b.pos) > 1e-6) b.dir.subVectors(cible, b.pos).normalize();
       b.pos.copy(cible);
@@ -749,7 +744,7 @@ export function installerAquarium(groupe, piste) {
 
 // ---------------------------------------------------------------------------
 // Mosasaure : creerMosasaure() renvoie { objet, ouverture, racine, nager(dt, vitesse, cap), corps(liste) }
-// avec la tête vers +z (57 m de long, échelle comprise) : l'aquarium le déplace, l'oriente et lui
+// avec la tête vers +z (114 m de long, échelle comprise) : l'aquarium le déplace, l'oriente et lui
 // donne le chemin à suivre (cap), sa colonne vertébrale se plie pour le suivre.
 //
 // Vrai modèle : public/aquarium/mosasaure.glb, d'après « Mosasaurus » d'Alexey Zaika
@@ -757,7 +752,8 @@ export function installerAquarium(groupe, piste) {
 // préparé par outils/blender/preparer_mosasaure.sh (≈5 600 triangles, un cycle de nage « Nager »
 // qui boucle, mâchoire = os Bone.026). En attendant le chargement (ou s'il échoue), c'est le
 // mosasaure en formes simples ci-dessous qui nage.
-const LONGUEUR_MOSASAURE = 57; // m (×3 : un vrai monstre vu du tunnel)
+const LONGUEUR_MOSASAURE = 114; // m (×6 : un vrai monstre vu du tunnel)
+const VITESSE_CROISIERE = 11; // m/s : un géant de 114 m avance vite même tranquille
 // Points du filet de sécurité (aquarium : contraindre) : [os, latéral, dessous, dessus] = rayons
 // autour de l'os (en m sur le modèle de 19 m), mesurés sur les sommets du modèle animé (nage, gueule
 // ouverte) autour de la colonne, avec un peu de marge ; le latéral sert dans toutes les directions
@@ -885,8 +881,8 @@ export function creerMosasaure() {
       }
       // on défait la pliure de l'image précédente (le mixer n'écrit pas les pistes qui ne bougent pas)
       if (colonne) for (const e of colonne) e.os.quaternion.premultiply(e.qInv);
-      // un géant bat lentement de la queue : cycle de 1,33 s à vitesse 1 → ~4 s à 9 m/s, ~2,3 s à 25 m/s
-      mixer.update((dt * (0.9 + vitesse * 0.075)) / 4.71);
+      // un géant bat lentement de la queue : cycle de 1,33 s à vitesse 1 → ~5,4 s à 11 m/s, ~3,6 s à 25 m/s
+      mixer.update((dt * (0.9 + vitesse * 0.06)) / 6.3);
       if (colonne && cap) {
         // rotation autour de la verticale du mosasaure, exprimée dans le repère du parent de chaque os
         // (l'axe ne change pas quand les os d'avant ont déjà été tournés autour de cette même verticale)
@@ -1070,19 +1066,24 @@ function creerMosasaureFormes() {
 }
 
 // ---------------------------------------------------------------------------
-/** Verre : très transparent de face, plus visible de biais (bord des vitres lisible). */
-function verre(couleur, base, bord) {
+/**
+ * Verre : très transparent de face, plus visible de biais (bord des vitres lisible), avec de
+ * larges reflets clairs en biais (intensité reflet) : sans montants, on comprend que c'est du verre.
+ */
+function verre(couleur, base, bord, reflet = 0) {
   return new THREE.ShaderMaterial({
-    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { couleur: { value: new THREE.Color(couleur) }, base: { value: base }, bord: { value: bord } }]),
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { couleur: { value: new THREE.Color(couleur) }, base: { value: base }, bord: { value: bord }, reflet: { value: reflet } }]),
     vertexShader: `
       #include <common>
       #include <fog_pars_vertex>
       varying vec3 vN;
       varying vec3 vV;
+      varying vec3 vP;
       void main() {
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
         vN = normalize(normalMatrix * normal);
         vV = -mvPosition.xyz;
+        vP = (modelMatrix * vec4(position, 1.0)).xyz;
         gl_Position = projectionMatrix * mvPosition;
         #include <fog_vertex>
       }`,
@@ -1092,12 +1093,17 @@ function verre(couleur, base, bord) {
       uniform vec3 couleur;
       uniform float base;
       uniform float bord;
+      uniform float reflet;
       varying vec3 vN;
       varying vec3 vV;
+      varying vec3 vP;
       void main() {
         float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));
         float f3 = f * f * f;
-        gl_FragColor = vec4(couleur + vec3(0.35) * f3 * f, base + (bord - base) * f3);
+        // bandes de reflet en biais (fixes dans le monde : elles glissent quand on passe)
+        float b = sin((vP.x + vP.z) * 0.21 + vP.y * 0.35);
+        float r = reflet * (smoothstep(0.82, 0.97, b) + 0.5 * smoothstep(0.9, 0.99, -b));
+        gl_FragColor = vec4(couleur + vec3(0.35) * f3 * f + vec3(r * 2.5), base + (bord - base) * f3 + r);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
         #include <fog_fragment>
