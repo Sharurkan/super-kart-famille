@@ -28,7 +28,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   // debut/fin : fractions du tour ; cote : "ext" (côté extérieur du circuit) ou "int" ;
   // largeur : profondeur de la plaine (m) avant la lisière de la forêt.
   // (rien entre 0,70 et 0,92 : l'aquarium y sort de la jungle)
-  const mixers = [], marcheurs = [];
+  const mixers = [], marcheurs = [], poses = []; // poses : dinos installés (outil de test, en dev)
   // tout ce qui est posé autour de la route passe par la garde : rien sur la route ni devant la caméra
   const garde = gardeRoute(piste);
   const { N } = piste;
@@ -36,33 +36,37 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   // Troupeaux : espece, n (nombre), t (position le long de la plaine, 0 à 1), lat (distance au milieu
   // de la route, m ; bord de la route à 8 m, barrières à ~15 m).
   // S : taille par rapport à la taille réelle (HAUTEUR plus bas). À taille réelle, vus du kart, ils
-  // étaient trop petits pour les enfants : tous sont agrandis (×1,7 à ×1,9) en gardant l'ordre des
-  // tailles (sauropode > T-rex > stégosaure, tricératops > parasaurolophus > raptors).
+  // étaient trop petits pour les enfants : tous sont très agrandis (×2,5 à ×3) en gardant l'ordre des
+  // tailles (sauropode > T-rex > stégosaure, tricératops > parasaurolophus > raptors ; les raptors,
+  // tout petits à l'écran, un peu plus que les autres). Moins d'individus qu'avant : ils prennent
+  // plus de place et le budget de triangles (tablette) ne doit pas augmenter.
   // marche : ils tournent lentement en rond (seulement les espèces qui ont une vraie marche :
   // Stégosaure et Tricératops ; le T-rex n'a qu'une course, le Parasaurolophus et le sauropode rien).
+  // file : en file indienne le long de la route, de profil (les sauropodes, très longs) ; sinon en rond.
   // heros : version détaillée du modèle (proche de la route) ; sinon la version « loin », ~3 fois
   // plus légère (budget de triangles ; raptor et tricératops n'existent qu'en une version).
   // Le T-rex n'est pas dans ce tableau : il attend tout près de la route, avant sa tête géante (TREX plus bas).
   const PLAINES = [
     // ligne droite du haut (le ravin du ptérodactyle) : le volcan au fond de la plaine
     { debut: 0.155, fin: 0.3, cote: "ext", largeur: 230, troupeaux: [
-      { espece: "Apatosaurus", n: 3, t: 0.12, lat: 66, S: 1.7 }, // avant le ravin (rien au-dessus du vide)
-      { espece: "Parasaurolophus", n: 4, t: 0.78, lat: 30, S: 1.8, heros: true },
+      // derrière le ravin (rien au-dessus du vide : le bout arrondi du ravin s'arrête à ~65 m de la route)
+      { espece: "Apatosaurus", n: 2, t: 0.3, lat: 80, S: 2.8, file: true },
+      { espece: "Parasaurolophus", n: 3, t: 0.8, lat: 36, S: 2.8, heros: true },
     ] },
     // ligne droite du diplodocus
     { debut: 0.37, fin: 0.47, cote: "ext", largeur: 200, troupeaux: [
-      { espece: "Triceratops", n: 4, t: 0.3, lat: 30, S: 1.9 },
-      { espece: "Stegosaurus", n: 3, t: 0.75, lat: 44, S: 1.9, marche: true, heros: true },
+      { espece: "Triceratops", n: 3, t: 0.3, lat: 44, S: 2.9 },
+      { espece: "Stegosaurus", n: 2, t: 0.75, lat: 58, S: 2.9, marche: true, heros: true },
     ] },
-    // ligne droite du T-rex (sa tête géante au bout, le T-rex à 50 m avant elle : voir TREX)
+    // ligne droite du T-rex (sa tête géante au bout, le T-rex à 60 m avant elle : voir TREX)
     { debut: 0.525, fin: 0.64, cote: "ext", largeur: 200, troupeaux: [
-      { espece: "Velociraptor", n: 3, t: 0.05, lat: 24, S: 1.8 },
-      { espece: "Stegosaurus", n: 2, t: 0.22, lat: 34, S: 1.9, heros: true },
+      { espece: "Velociraptor", n: 3, t: 0.04, lat: 33, S: 3.0 },
+      { espece: "Stegosaurus", n: 2, t: 0.13, lat: 58, S: 2.9, heros: true },
     ] },
     // ligne droite du départ (le looping), côté intérieur du circuit
     { debut: 0.975, fin: 0.085, cote: "int", largeur: 120, troupeaux: [
-      { espece: "Parasaurolophus", n: 3, t: 0.62, lat: 34, S: 1.8, heros: true },
-      { espece: "Triceratops", n: 2, t: 0.2, lat: 38, S: 1.9, marche: true }, // loin du troupeau voisin (cercle de marche ~20 m)
+      { espece: "Parasaurolophus", n: 3, t: 0.62, lat: 44, S: 2.8, heros: true },
+      { espece: "Triceratops", n: 2, t: 0.2, lat: 48, S: 2.9, marche: true }, // loin du troupeau voisin
     ] },
   ].map((P) => {
     const debut = Math.round(P.debut * N) % N, fin = Math.round(P.fin * N) % N;
@@ -82,11 +86,50 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   // vitesse (m/s, à la taille normale et à vitesse d'animation 1) à laquelle les pieds ne glissent
   // pas : mesurée sur le pied d'appui pendant le clip « Walk »
   const MARCHE = { Stegosaurus: 2, Triceratops: 1.75 };
-  // taille normale : hauteur (m) donnée au modèle, et longueur (m) qui en découle (écart entre les membres
-  // d'un troupeau) ; sauropode ~24 m de long, T-rex 7 m de haut, Parasaurolophus à quatre pattes
+  // taille normale : hauteur (m) donnée au modèle, et longueur (m) mesurée sur le modèle à cette hauteur
+  // (museau-queue ; le sauropode du troupeau, cou et queue tendus, fait ~42 m pour 8,8 m de haut)
   const HAUTEUR = { Apatosaurus: 8.8, Trex: 7, Stegosaurus: 4.2, Triceratops: 3.6, Parasaurolophus: 3.6, Velociraptor: 2.2 };
-  const LONGUEUR = { Apatosaurus: 23.8, Trex: 17.7, Stegosaurus: 7.9, Triceratops: 8.3, Parasaurolophus: 8.5, Velociraptor: 4.3 };
-  const clairieres = []; // pas d'arbres ni de plantes sur les troupeaux
+  const LONGUEUR = { Apatosaurus: 42, Trex: 17.7, Stegosaurus: 7.9, Triceratops: 8.3, Parasaurolophus: 8.5, Velociraptor: 4.4 };
+  const clairieres = []; // pas d'arbres ni de plantes sur les troupeaux : cercles { x, z, r (arbres), occupe (plantes) }
+  /** Clairière le long d'un dinosaure (long et étroit) : quelques cercles sur son axe. */
+  const clairiereDino = (x, z, angle, L, espece, i) => {
+    const ux = Math.sin(angle), uz = Math.cos(angle), rho = 0.2 * L + 2;
+    for (let f = -0.4; f <= 0.41; f += 0.2) clairieres.push({ x: x + ux * f * L, z: z + uz * f * L, r: rho + 6, occupe: rho, espece, i });
+  };
+  // Emprise au sol d'un dinosaure : contour de la boîte de son modèle (dans son repère, + marge),
+  // tourné et posé en (x, z). Aucun point ne doit toucher la route, les barrières, le ravin ou les
+  // grands décors ; au centre, la garde vérifie aussi qu'il ne cache pas la route à la caméra.
+  const MARGE_DINO = 1.5;
+  const contour = (b, x, z, angle) => {
+    const c = Math.cos(angle), s = Math.sin(angle), pts = [];
+    const x0 = b.min.x - MARGE_DINO, x1 = b.max.x + MARGE_DINO, z0 = b.min.z - MARGE_DINO, z1 = b.max.z + MARGE_DINO;
+    for (let k = 0; k <= 8; k++) {
+      const f = k / 8, lx = x0 + (x1 - x0) * f, lz = z0 + (z1 - z0) * f;
+      for (const [u, w] of [[lx, z0], [lx, z1], [x0, lz], [x1, lz]]) pts.push([x + u * c + w * s, z - u * s + w * c]);
+    }
+    return pts;
+  };
+  /** Ce qui gêne le dinosaure à cet endroit, ou "" si la place est bonne. */
+  const gene = (b, x, z, angle) => {
+    for (const [px, pz] of contour(b, x, z, angle)) {
+      const raison = garde.probleme(px, pz, 0.5, 1.1);
+      if (raison) return raison;
+    }
+    const largeur = Math.min(b.max.x - b.min.x, b.max.z - b.min.z);
+    return garde.probleme(x, z, largeur / 2, b.max.y - b.min.y);
+  };
+  // dinosaures immobiles déjà posés : deux voisins ne doivent pas se traverser
+  const emprises = [];
+  const dansEmprise = (E, px, pz) => {
+    const dx = px - E.x, dz = pz - E.z, c = Math.cos(E.angle), s = Math.sin(E.angle);
+    const lx = dx * c - dz * s, lz = dx * s + dz * c;
+    return lx > E.b.min.x && lx < E.b.max.x && lz > E.b.min.z && lz < E.b.max.z;
+  };
+  const chevauche = (b, x, z, angle) => emprises.some((E) => {
+    if (Math.hypot(E.x - x, E.z - z) > 150) return false;
+    const moi = { b, x, z, angle };
+    return contour(b, x, z, angle).some(([px, pz]) => dansEmprise(E, px, pz)) || contour(E.b, E.x, E.z, E.angle).some(([px, pz]) => dansEmprise(moi, px, pz));
+  });
   for (const P of PLAINES) for (const T of P.troupeaux) {
     const long = (P.fin - P.debut + N) % N;
     const i = (P.debut + Math.round(T.t * long)) % N;
@@ -95,66 +138,99 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
     const S = T.S ?? 1;
     const L = LONGUEUR[T.espece] * S; // écarts, cercle de marche et clairière suivent la taille
     // cercle de marche : assez grand pour la file de marcheurs (n × (longueur + 5 m))
-    const rayonMarche = T.marche ? Math.max((8 + rnd() * 4) * S, (T.n * (L + 5)) / 6.283) : 0;
-    // en rond (troupeau sur place) : rayon tel que deux voisins soient à ~0,9 longueur l'un de l'autre
-    const anneau = T.n > 1 && !T.marche ? (0.9 * L) / (2 * Math.sin(Math.PI / T.n)) : 0;
-    const occupe = (T.marche ? rayonMarche : anneau) + L * 0.6 + 2;
-    clairieres.push({ x: cx, z: cz, r: occupe + 6, occupe, espece: T.espece, i });
-    const travers = T.espece === "Apatosaurus" ? Math.PI / 2 : 0; // les sauropodes se montrent de profil
+    const rayonMarche = T.marche ? Math.max((6 + rnd() * 3) * S, (T.n * (L + 5)) / 6.283) : 0;
+    // en rond (troupeau sur place) : rayon tel que deux voisins soient à ~1,15 longueur l'un de l'autre
+    // (ils sont tournés au hasard : moins serrés, ils ne se traversent pas)
+    const anneau = T.n > 1 && !T.marche && !T.file ? (1.15 * L) / (2 * Math.sin(Math.PI / T.n)) : 0;
+    // les marcheurs d'un troupeau avancent tous à la même vitesse (sinon ils se rattrapent et se traversent)
+    const vMarche = 0.85 + rnd() * 0.3;
+    // clairière : tout le cercle du troupeau (ils peuvent tourner sur place pour ne pas se traverser) ;
+    // le long de chaque sauropode (file), creusée plus bas
+    const occupe = (T.marche ? rayonMarche : anneau * 1.1) + L * 0.6 + 2;
+    if (!T.file) clairieres.push({ x: cx, z: cz, r: occupe + 6, occupe, espece: T.espece, i });
+    const travers = T.file ? Math.PI / 2 : 0; // les sauropodes se montrent de profil
     const a0 = rnd() * 6.283;
     for (let k = 0; k < T.n; k++) {
       // tirages faits tout de suite (les modèles arrivent plus tard, dans le désordre)
-      const a = a0 + (k / T.n) * 6.283 + (rnd() - 0.5) * 0.5, d = anneau * (0.9 + rnd() * 0.2);
-      const x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
+      let x, z;
+      if (T.file) {
+        // en file le long de la route, un sur deux un peu plus loin (ils se chevauchent en profondeur)
+        const s = (k - (T.n - 1) / 2) * 0.45 * L, l = lat + P.cote * (k % 2) * 0.25 * L;
+        x = cx + piste.tx[i] * s + piste.nx[i] * (l - lat);
+        z = cz + piste.tz[i] * s + piste.nz[i] * (l - lat);
+      } else {
+        const a = a0 + (k / T.n) * 6.283 + (rnd() - 0.5) * 0.5, d = anneau * (0.9 + rnd() * 0.2);
+        x = cx + Math.cos(a) * d;
+        z = cz + Math.sin(a) * d;
+      }
       const clips = CLIPS[T.espece].filter((c) => c !== "Attack" || T.heros || T.espece === "Triceratops" || T.espece === "Velociraptor");
       const anim = T.marche ? "Walk" : clips[Math.floor(rnd() * clips.length)];
-      const tourne = (rnd() - 0.5) * (travers ? 0.8 : 2.4), vitesse = 0.85 + rnd() * 0.3, echelle = 0.9 + rnd() * 0.2;
-      const angle0 = k * (L * echelle + 5) / Math.max(1, rayonMarche) + rnd() * 0.1; // en file sur le cercle de marche
-      creerDino(T.espece, { animation: anim, vitesse, hauteur: HAUTEUR[T.espece] * S * echelle, detail: T.heros ? undefined : "loin" }).then(({ objet, mixer }) => {
-        // sa vraie taille (un apatosaure est très long) : il ne doit pas déborder sur la route
+      const tourne = (rnd() - 0.5) * (travers ? 0.2 : 2.4), vitesse = 0.85 + rnd() * 0.3, echelle = 0.9 + rnd() * 0.2;
+      const angle0 = a0 + (k / T.n) * 6.283; // répartis sur le cercle de marche
+      const angle = versPiste(piste, { x, z }) + travers + tourne;
+      if (T.file) clairiereDino(x, z, angle, L * echelle, T.espece, i);
+      // marcheur : animation accordée à sa taille pour que les pieds ne glissent pas (vitesse commune)
+      creerDino(T.espece, { animation: anim, vitesse: T.marche ? vMarche / echelle : vitesse, hauteur: HAUTEUR[T.espece] * S * echelle, detail: T.heros ? undefined : "loin" }).then(({ objet, mixer }) => {
+        // sa vraie taille (boîte du modèle) : rien ne doit déborder sur la route, ni pendant la marche
         const boite = new THREE.Box3().setFromObject(objet);
-        const r = 0.6 * Math.hypot(boite.max.x - boite.min.x, boite.max.z - boite.min.z) / 2, h = boite.max.y - boite.min.y;
         if (T.marche) {
           // marche lente en rond autour du troupeau : tout le cercle doit rester loin de la route
-          for (let m = 0; m < 12; m++) if (!garde.verifier(cx + Math.cos(m * 0.52) * rayonMarche, cz + Math.sin(m * 0.52) * rayonMarche, r, h, "dino " + T.espece, false)) return;
+          for (let m = 0; m < 24; m++) {
+            const a = (m / 24) * 6.283;
+            const raison = gene(boite, cx + Math.cos(a) * rayonMarche, cz + Math.sin(a) * rayonMarche, Math.atan2(-Math.sin(a), Math.cos(a)));
+            if (raison) {
+              if (import.meta.env.DEV) console.warn(`dino ${T.espece} : cercle de marche gêné (${raison}), retiré`);
+              return;
+            }
+          }
           // la foulée grandit avec la taille : vitesse ∝ taille × vitesse d'animation (pas de glissade)
-          marcheurs.push({ objet, cx, cz, R: rayonMarche, a: angle0, w: (MARCHE[T.espece] * S * echelle * vitesse) / rayonMarche });
+          marcheurs.push({ objet, cx, cz, R: rayonMarche, a: angle0, w: (MARCHE[T.espece] * S * vMarche) / rayonMarche });
+          poses.push({ objet, espece: T.espece, marche: marcheurs[marcheurs.length - 1] });
         } else {
-          const ok = garde.verifier(x, z, r, h, "dino " + T.espece);
-          if (!ok) return;
-          objet.position.set(ok.x, 0, ok.z);
-          objet.rotation.y = versPiste(piste, ok) + travers + tourne;
+          // (pas déplacé : sa clairière dans la forêt et entre les rochers est déjà creusée ici) ;
+          // s'il gêne ou traverse un voisin, il essaie de se tourner un peu (de profil : à peine)
+          let raison = "";
+          const essais = (T.file ? [0, 0.15, -0.15] : [0, 0.6, -0.6, 1.2, -1.2, Math.PI]).map((da) => angle + da);
+          const bon = essais.find((a) => !(raison = gene(boite, x, z, a)) && !(raison = chevauche(boite, x, z, a) ? "voisin" : ""));
+          if (bon === undefined) {
+            if (import.meta.env.DEV) console.warn(`dino ${T.espece} (${Math.round(x)}, ${Math.round(z)}) : gêné (${raison}), retiré`);
+            return;
+          }
+          objet.position.set(x, 0, z);
+          objet.rotation.y = bon;
+          emprises.push({ b: boite, x, z, angle: bon });
+          poses.push({ objet, espece: T.espece });
         }
         groupe.add(objet);
         mixers.push(mixer);
       });
     }
   }
-  // Le T-rex : debout tout près de la route (16 m du bord, derrière les rochers de l'entonnoir), 50 m avant
+  // Le T-rex : debout tout près de la route (derrière les rochers de l'entonnoir, sans toucher les barrières), 60 m avant
   // sa tête géante, côté plaine. Il regarde les karts arriver et rugit (clip Attack) quand le joueur passe.
   // La tête n'est installée que plus bas (teteTrex) : même calcul que teteTrex() pour son indice ; à
   // l'arrivée du modèle, on se recale sur piste.teteTrex (la vraie place).
-  const TREX = { avant: 50, lat: 24, S: 1.5, rugir: 45 }; // avant la gueule (m), du milieu de la route (m), taille, distance du rugissement (m)
+  const TREX = { avant: 60, lat: 38, S: 2.4, rugir: 60 }; // avant la gueule (m), du milieu de la route (m), taille, distance du rugissement (m)
   const P3 = PLAINES[2];
   const placeTrex = (iTete) => {
     const i = (iTete - Math.round(TREX.avant / piste.pas) + N) % N;
     const l = TREX.lat * P3.cote;
-    const iVise = (i - Math.round(25 / piste.pas) + N) % N; // il regarde la route 25 m avant lui
+    const iVise = (i - Math.round(35 / piste.pas) + N) % N; // il regarde la route 35 m avant lui
     const x = piste.cx[i] + piste.nx[i] * l, z = piste.cz[i] + piste.nz[i] * l;
     return { i, x, z, angle: Math.atan2(piste.cx[iVise] - x, piste.cz[iVise] - z) };
   };
   const trex = { place: placeTrex(ligneDroiteLongue(piste, 0.63, GUEULE_AVANT + ELAN_GUEULE + 4.5 + 70, 30, 0.06)), pret: false, arme: true };
-  {
-    const L = LONGUEUR.Trex * TREX.S;
-    clairieres.push({ x: trex.place.x, z: trex.place.z, r: L * 0.6 + 6, occupe: L * 0.6 + 2, espece: "Trex", i: trex.place.i });
-  }
+  clairiereDino(trex.place.x, trex.place.z, trex.place.angle, LONGUEUR.Trex * TREX.S, "Trex", trex.place.i);
   creerDino("Trex", { animation: "Idle", hauteur: HAUTEUR.Trex * TREX.S }).then(({ objet, mixer, clips }) => {
     if (piste.teteTrex && piste.teteTrex.indice !== undefined) trex.place = placeTrex(piste.teteTrex.indice);
-    // la garde vérifie quand même (route, vue de la caméra, tête géante) ; au besoin il recule un peu
+    // toute son emprise est vérifiée (route, barrières, vue de la caméra, tête géante)
     const boite = new THREE.Box3().setFromObject(objet);
-    const ok = garde.verifier(trex.place.x, trex.place.z, 0.6 * Math.hypot(boite.max.x - boite.min.x, boite.max.z - boite.min.z) / 2, boite.max.y - boite.min.y, "dino Trex");
-    if (!ok) return;
-    Object.assign(trex.place, ok);
+    const raison = gene(boite, trex.place.x, trex.place.z, trex.place.angle);
+    if (raison) {
+      if (import.meta.env.DEV) console.warn(`dino Trex : gêné (${raison}), retiré`);
+      return;
+    }
+    emprises.push({ b: boite, x: trex.place.x, z: trex.place.z, angle: trex.place.angle });
     const { x, z, angle } = trex.place;
     objet.position.set(x, 0, z);
     objet.rotation.y = angle;
@@ -175,13 +251,14 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
       });
     }
     trex.objet = objet;
+    poses.push({ objet, espece: "Trex" });
     trex.pret = true;
   });
   const rugir = (camera) => {
     if (!trex.pret || !trex.cri || !camera) return;
     const { x, z, i } = trex.place;
     const d = Math.hypot(camera.position.x - x, camera.position.z - z);
-    if (d > 90) { trex.arme = true; return; }
+    if (d > 120) { trex.arme = true; return; }
     // le joueur arrive (le T-rex est encore devant lui sur la route) et passe tout près : il rugit, une fois par passage
     const devant = (x - camera.position.x) * piste.tx[i] + (z - camera.position.z) * piste.tz[i] > 0;
     if (trex.arme && devant && d < TREX.rugir) {
@@ -263,7 +340,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   mixers.push(aquariumGeant(groupe, piste)); // virages du bas : tunnel sous un aquarium géant (son update(dt) suit les mixers)
   // la jungle (imposteurs réalistes), une fois le ravin, le diplodocus, le T-rex et l'aquarium installés ;
   // rien sur le pied du volcan ni sur les troupeaux des plaines (ni dans piste.zonesDecor)
-  if (import.meta.env.DEV) window.__troupeaux = Object.assign(clairieres, { plaines: PLAINES, trex });
+  if (import.meta.env.DEV) window.__troupeaux = Object.assign(clairieres, { plaines: PLAINES, trex, dinos: poses });
   planterJungle(groupe, piste, rnd, garde, { plaines: PLAINES, exclusions: [{ x: xV, z: zV, r: 150 }, ...clairieres] });
   // les nids passent par la garde une fois le ravin, le diplodocus et le T-rex installés
   groupe.add(instances(nid, matCouleurs(), nids.flatMap((p) => {

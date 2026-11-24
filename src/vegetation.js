@@ -235,6 +235,7 @@ const CAM_RECUL = 7.2, CAM_HAUT = 3.1; // comme CameraPoursuite
 /**
  * gardeRoute(piste).verifier(x, z, rayon, hauteur, nom, deplacer = true) -> { x, z } (éventuellement
  * repoussé loin de la route) ou null (retiré). gardeRoute(piste).bilan : compte par modèle.
+ * gardeRoute(piste).probleme(x, z, rayon, hauteur) -> raison du refus ou "" (sans rien compter).
  */
 export function gardeRoute(piste) {
   const { N, pas, cx, cz, nx, nz, tx, tz, demi, marge } = piste;
@@ -320,7 +321,7 @@ export function gardeRoute(piste) {
     return null;
   }
 
-  const garde = { verifier, bilan };
+  const garde = { verifier, probleme, bilan };
   if (import.meta.env.DEV) window.__auditVegetation = bilan;
   return garde;
 }
