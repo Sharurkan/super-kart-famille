@@ -477,7 +477,12 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
       for (let s = SAUT.S_ATT - 17; s <= SAUT.SZ + 17; s += 3) for (const l of [voie]) { const p = positionVoie(g0, s, l * cote); reserver(p.x, p.z, DW * h + 2.5); }
       for (let s = SAUT.SZ - 10; s <= SAUT.SZ + 27; s += 3) for (const l of [voie]) { const p = positionVoie(g0, s, -l * cote); reserver(p.x, p.z, DW * h + 2.5); }
       groupes.push(g);
-      piste.sautRaptors = { debut: c.r0, fin: iFin }; // (outil de test)
+      // pour la course (plan de cinéma au ralenti, course.js) : le haut du tremplin, le côté de départ
+      // de la meute, et si elle traverse en ce moment sous le kart du joueur (traversée synchronisée)
+      piste.sautRaptors = {
+        debut: c.r0, fin: iFin, cote, sZ: SAUT.SZ,
+        sousLeKart: () => g.etat === "traverse" && !!g.avecKart && groupes.includes(g),
+      };
       return;
     }
   }
@@ -1154,7 +1159,7 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
           if (e.g.type === "sauteurs" && e.g.etat === "traverse") {
             // sur la route exprès : aucun kart au-dessus d'eux trop bas (ou au sol à côté)
             for (const k of suivis.values()) {
-              if (Math.hypot(k.x - e.x, k.z - e.z) < 3.5 + e.h * 0.6 && k.y < e.y + hautSauteur() + 0.1) hors.push({ type: "sauteurs", k: e.m.k, pb: "kart-bas", y: +k.y.toFixed(2) });
+              if (Math.hypot(k.x - e.x, k.z - e.z) < 1.2 + e.h * 0.7 && k.y < e.y + hautSauteur() + 0.1) hors.push({ type: "sauteurs", k: e.m.k, pb: "kart-bas", y: +k.y.toFixed(2) });
             }
             continue;
           }

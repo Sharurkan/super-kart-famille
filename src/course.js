@@ -43,8 +43,14 @@ function melanger(liste) {
  * options : { circuit, perso, kart, modeAuto, difficulte }
  * quand : { decompte(n), tour(n), classement(liste), arrivee(place), podium(classement) }
  */
-export class Course {
-  constructor(options, controles, quand = {}) {
+// Plan de cinéma au-dessus des raptors (temps de jeu depuis l'envol ; le saut dure ~0,9 s de jeu) :
+// ralenti à 30 % (entrée et sortie douces, ~0,2 s réelles chacune), caméra de face pendant le ralenti,
+// revenue derrière le kart avant l'atterrissage. Durée réelle : ~2 s.
+const CINEMA = { ralenti: 0.3, entree: 0.06, tient: 0.5, sortie: 0.66, entreeCam: 0.04, tientCam: 0.46, sortieCam: 0.62, fin: 0.9 };
+const SON_RAPTOR = import.meta.env.BASE_URL + "sons/trex-rugissement.ogg";
+const lisse = (a, b, x) => { const t = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+export class Course {  constructor(options, controles, quand = {}) {
     this.options = options;
     this.controles = controles;
     this.quand = quand;
@@ -70,6 +76,7 @@ export class Course {
     this.piste = construirePiste(def);
     scene.add(this.piste.groupe);
     this.decor = construireDecor(def, this.piste);
+    audio.precharger(SON_RAPTOR); // (cri des raptors du plan de cinéma)
     scene.add(this.decor.groupe);
 
     // --- les 5 pilotes : le joueur part 3e, au milieu de la grille ---
@@ -140,6 +147,10 @@ export class Course {
   }
 
   etape(dt, entreeForcee) {
+    // ralenti (plan de cinéma au-dessus des raptors) : tout le jeu avance moins vite ; les commandes
+    // restent lues à chaque image (aucune entrée perdue)
+    const dtReel = dt;
+    dt *= this.echelleRalenti();
     this.t += dt;
     const joueur = this.joueur;
 
@@ -185,6 +196,7 @@ export class Course {
       if (joueur.phys.sauts !== this.sautsVus) {
         this.sautsVus = joueur.phys.sauts;
         audio.saut();
+        this.debutCinema(joueur);
       }
       if (joueur.phys.atterrissages !== this.atterrissagesVus) {
         this.atterrissagesVus = joueur.phys.atterrissages;
@@ -239,6 +251,7 @@ export class Course {
 
     const vRel = joueur.phys.vitesse / REGLAGES.vitesseMax;
     if (!joueur.scenario?.camera?.(this.cam, dt)) this.cam.update(dt, joueur.phys.x, joueur.phys.z, joueur.phys.angle, vRel, joueur.phys.y, joueur.roulisVu ?? 0);
+    this.cameraCinema(joueur, dt, dtReel);
     this.decor.ciel.position.set(this.camera.position.x, 0, this.camera.position.z);
     const info = this.piste.infoCourse;
     info.etat = this.etat;
@@ -255,6 +268,60 @@ export class Course {
       const angle = k.phys.angle;
       k.pilote.orienter(this.camera, angle + k.modele.corps.rotation.y, angle);
     }
+  }
+
+  // ---------- Plan de cinéma : le kart du joueur saute au-dessus de la meute de raptors ----------
+  // (piste.sautRaptors, raptors.js : la meute traverse la route juste sous le saut, synchronisée sur
+  // le kart du joueur). Au décollage : ralenti, et une caméra posée devant, basse, au bord de la route,
+  // qui regarde le kart arriver en l'air de face avec les raptors qui traversent dessous ; puis retour
+  // en douceur à la caméra de poursuite avant l'atterrissage. Rien si le saut est raté (pas de traversée).
+  debutCinema(k) {
+    const S = this.piste.sautRaptors;
+    if (!S || !k.joueur || this.cinema || !S.sousLeKart()) return;
+    const N = this.piste.N;
+    // ne vaut que pour l'envol de CE tremplin
+    const d = ((k.phys.indice - S.fin + N + N / 2) % N) - N / 2;
+    if (Math.abs(d) > 6) return;
+    this.cinema = { t: 0, S };
+    audio.jouer(SON_RAPTOR, 0.9, 1.5); // les raptors crient en voyant passer le kart au-dessus d'eux
+  }
+
+  /** Échelle de temps du jeu (1 : normal) : entrée et sortie douces, en temps de jeu depuis l'envol. */
+  echelleRalenti() {
+    const C = this.cinema;
+    if (!C) return 1;
+    const R = CINEMA.ralenti;
+    return 1 - (1 - R) * lisse(0, CINEMA.entree, C.t) * (1 - lisse(CINEMA.tient, CINEMA.sortie, C.t));
+  }
+
+  cameraCinema(k, dt) {
+    const C = this.cinema;
+    if (!C) return;
+    C.t += dt;
+    // fin : sortie terminée, ou le kart a déjà atterri
+    if (C.t > CINEMA.fin || (!k.phys.enLair && C.t > 0.15)) { this.cinema = null; return; }
+    // poids du plan de cinéma (1) par rapport à la caméra de poursuite (0)
+    const w = lisse(0, CINEMA.entreeCam, C.t) * (1 - lisse(CINEMA.tientCam, CINEMA.sortieCam, C.t));
+    if (w <= 0) return;
+    const p = this.piste, N = p.N, S = C.S, cam = this.camera;
+    const u = THREE.MathUtils.clamp(C.t / CINEMA.tientCam, 0, 1); // avancée du travelling
+    // devant le kart, côté où arrive la meute, à hauteur de raptor ; léger travelling (recule, se décale, monte)
+    const s = S.sZ + 10 + 3 * u, lat = -S.cote * (8.5 - 2 * u), haut = 1.5 + 0.6 * u;
+    const i = (S.fin + Math.round(s / p.pas)) % N;
+    const pos = (this.cinemaPos ??= new THREE.Vector3());
+    pos.set(p.cx[i] + p.nx[i] * lat, haut, p.cz[i] + p.nz[i] * lat);
+    // elle regarde le kart en l'air, un peu vers la meute qui passe dessous
+    const iz = (S.fin + Math.round(S.sZ / p.pas)) % N;
+    const cible = (this.cinemaCible ??= new THREE.Vector3());
+    cible.set(p.cx[iz] * 0.3 + k.phys.x * 0.7, 1.2 * 0.3 + (k.phys.y + 0.6) * 0.7, p.cz[iz] * 0.3 + k.phys.z * 0.7);
+    const o = (this.cinemaObj ??= new THREE.Camera()); // (une caméra : lookAt la tourne vers -z, comme la vraie)
+    o.position.copy(pos);
+    o.lookAt(cible);
+    o.rotateZ(0.03 * Math.sin(C.t * 6)); // à peine penchée : caméra tenue à la main
+    // mélange avec la caméra de poursuite (déjà placée) : position et orientation
+    cam.position.lerp(pos, w);
+    cam.quaternion.slerp(o.quaternion, w);
+    cam.updateMatrixWorld();
   }
 
   /**
