@@ -1150,10 +1150,13 @@ function ligneDroiteLongue(piste, fraction, avant, apres, fenetre) {
 }
 
 // ---------------------------------------------------------------------------
-// Looping dans la ligne droite du départ (tout est dans looping.js)
+// Looping + vrille dans la ligne droite du départ (looping.js) et virage relevé façon
+// vélodrome après le ravin du ptérodactyle (velodrome.js)
 import { looping } from "./looping.js";
+import { virageReleve } from "./velodrome.js";
 function decorLooping(piste, groupe) {
   looping(piste, groupe);
+  virageReleve(piste, groupe);
 }
 
 /**

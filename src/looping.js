@@ -5,30 +5,34 @@ import { fusion, matCouleurs } from "./decors-circuits.js";
 import { instances } from "./decor.js";
 import { audio } from "./audio.js";
 
-// Série de 3 loopings verticaux enchaînés (comme sur un circuit de petites voitures) dans la
-// ligne droite du départ. La route est resserrée par un entonnoir de plots, puis chaque kart
-// (enfant et adversaires) est pris "sur des rails" : boucle 1, un petit bout de route, boucle 2,
-// etc., sans jamais être lâché entre deux boucles. Il repart un peu plus vite à la fin.
+// Looping vertical (comme sur un circuit de petites voitures) puis vrille, dans la ligne droite
+// du départ. La route est resserrée par un entonnoir de plots, puis chaque kart (enfant et
+// adversaires) est pris "sur des rails" : le looping, un petit bout de route, la vrille (la route
+// fait un tour complet sur elle-même, le kart passe la tête en bas), sans jamais être lâché entre
+// les deux. Il repart un peu plus vite à la fin.
 //
 // Entrée et sortie d'un looping se superposeraient : comme un vrai looping, le ruban se décale
-// sur le côté pendant le tour. Les boucles alternent : gauche → droite, droite → gauche...
-// (deux voies à ±VOIE du milieu de la route), donc la série reste dans la largeur de la route.
-// Les boucles sont espacées d'un peu plus que leur diamètre : la descente d'une boucle ne
-// touche pas la montée de la suivante.
+// sur le côté pendant le tour (deux voies à ±VOIE du milieu de la route). On peut en mettre
+// plusieurs (NB) : elles alternent gauche → droite, droite → gauche, espacées d'un peu plus que
+// leur diamètre. La vrille tourne autour d'un axe à AXE mètres au-dessus de la voie de sortie,
+// en penchant vers le milieu de la route.
 //
 // Repère local à la base de chaque boucle : s le long de la route, l en travers (> 0 = gauche),
 // y vers le haut. Le ruban suit s = R sin θ, y = R (1 - cos θ), θ de 0 à 2π.
-// Entre les boucles, le chemin suit la vraie route (elle tourne un tout petit peu ici).
+// Entre les boucles et dans la vrille, le chemin suit la vraie route (elle tourne un peu ici).
 
 const R = 8; // rayon (16 m de diamètre)
-const NB = 3; // nombre de boucles
+const NB = 1; // nombre de boucles
 const ESPACE = 19.5; // mètres entre les bases de deux boucles (> 2R : elles ne se touchent pas)
-const BASE1 = 60; // échantillon de la base de la 1re boucle (~69 m après la ligne ; la série finit vers 119 m)
+const BASE1 = 58; // échantillon de la base du looping (~67 m après la ligne)
+const AVANT_VRILLE = 12; // mètres de route entre la base du (dernier) looping et la vrille
+const LONG_VRILLE = 48; // longueur de la vrille (le long de la route)
+const AXE = 3.5; // hauteur de l'axe de la vrille (la route y passe à 2 × AXE, tête en bas)
 const DEMI = 3.2; // demi-largeur du ruban
 const BANDE = 0.7; // largeur des bandes de bordure
 const VOIE = 3.6; // décalage des deux voies (entrée de la 1re boucle à gauche, sortie à droite...)
 const ELAN = 14; // mètres avant la 1re base où le kart prend les rails
-const SORTIE = 12; // mètres après la dernière base où on lui rend la main
+const SORTIE = 10; // mètres après la vrille où on lui rend la main
 const DECALAGE_MAX = 2; // écart du kart au milieu du ruban (deux karts côte à côte restent côte à côte)
 const V_MIN = 16; // jamais trop lent la tête en bas
 const V_MIN_SUIVEUR = 7; // un kart qui en suit un autre sur les rails ralentit, mais pas plus que ça
@@ -66,13 +70,18 @@ function thetaDe(g) {
   return ((a + f) / K) * DEUX_PI;
 }
 
-/** Construit la série de loopings (décor + passage scripté) ; à appeler depuis decorDino. */
+/** Construit le(s) looping(s) et la vrille (décor + passage scripté) ; à appeler depuis decorDino. */
 export function looping(piste, groupe) {
   const N = piste.N, pas = piste.pas;
   const ecart = Math.round(ESPACE / pas);
   const bases = Array.from({ length: NB }, (_, n) => (BASE1 + n * ecart) % N);
   const iPrise = (bases[0] - Math.round(ELAN / pas) + N) % N; // premier échantillon où l'on prend les rails
-  const iRendu = (bases[NB - 1] + Math.round(SORTIE / pas)) % N;
+  const iVrille = bases[NB - 1] + Math.round(AVANT_VRILLE / pas); // début de la vrille
+  const nVrille = Math.round(LONG_VRILLE / pas);
+  const LV = nVrille * pas;
+  const iRendu = (iVrille + nVrille + Math.round(SORTIE / pas)) % N;
+  const voieVrille = -voieEntree(NB - 1); // voie de sortie du dernier looping
+  const sensVrille = -Math.sign(voieVrille); // la route penche vers le milieu de la route
 
   // repère local de chaque boucle (origine au milieu de la route, à la base)
   const boucles = bases.map((i) => ({
@@ -84,7 +93,8 @@ export function looping(piste, groupe) {
   // abscisse (le long du chemin, g = 0 à la base de la 1re boucle) du début de chaque boucle
   const G = [0];
   for (let n = 1; n < NB; n++) G.push(G[n - 1] + LB + ((bases[n] - bases[n - 1] + N) % N) * pas);
-  const fin = G[NB - 1] + LB + SORTIE; // on rend la main ici
+  const GV = G[NB - 1] + LB + (iVrille - bases[NB - 1]) * pas; // début de la vrille sur le chemin
+  const fin = GV + LV + SORTIE; // on rend la main ici
 
   // entonnoir : la route se resserre jusqu'à la prise des rails (pas sur la grille de départ)
   const debutEntonnoir = Math.max(25, iPrise - Math.round(40 / pas));
@@ -103,12 +113,46 @@ export function looping(piste, groupe) {
     return cible.set(B.O.x + B.T.x * s + B.Nl.x * l, y, B.O.z + B.T.z * s + B.Nl.z * l);
   }
 
+  const vN = new THREE.Vector3(), vX = new THREE.Vector3();
+  /** Normale (gauche) de la route à l'échantillon fractionnaire iF. */
+  function normale(iF, cible) {
+    const i0 = Math.floor(iF), f = iF - i0;
+    const a = ((i0 % N) + N) % N, b = (a + 1) % N;
+    return cible.set(piste.nx[a] + (piste.nx[b] - piste.nx[a]) * f, 0, piste.nz[a] + (piste.nz[b] - piste.nz[a]) * f).normalize();
+  }
+  /** Angle de roulis de la vrille à la distance gv depuis son début (0 → 2π, en douceur). */
+  const rouleVrille = (gv) => DEUX_PI * lisse(gv / LV);
+  /**
+   * Hauteur de l'axe pour un roulis ph : quand la route commence (ou finit) de pencher, son bord
+   * bas passerait sous le sol ; on soulève alors un peu toute la vrille (raccord sans à-coup).
+   */
+  const axeVrille = (ph) => {
+    const f = Math.max(0, (DEMI + 0.4) * Math.abs(Math.sin(ph)) - AXE * (1 - Math.cos(ph)));
+    return AXE + (f * f) / (f + 0.15);
+  };
+
   /**
    * Point du chemin à la distance g, décalé de dec en travers ; ch = { g0, l0 } pour l'arrivée
    * en douceur sur les rails (null pour le ruban du décor). Remplit out : P, U (haut du kart),
-   * plus iF (échantillon de route le plus proche), n (boucle, ou -1 sur la route), th, l.
+   * plus iF (échantillon de route le plus proche), n (boucle, NB = vrille, -1 sur la route),
+   * th (angle dans la boucle ou la vrille), l.
    */
   function point(g, dec, ch, out) {
+    if (g >= GV) {
+      const gv = Math.min(g - GV, LV);
+      out.iF = iVrille + (g - GV) / pas;
+      // vrille : le haut de la route tourne autour de l'axe (au-dessus de la voie de sortie)
+      const ph = rouleVrille(gv), c = Math.cos(ph), s = Math.sin(ph);
+      normale(out.iF, vN);
+      route(out.iF, voieVrille, axeVrille(ph), out.P); // l'axe
+      out.U.set(-sensVrille * s * vN.x, c, -sensVrille * s * vN.z);
+      vX.set(c * vN.x, sensVrille * s, c * vN.z); // le travers de la route, penché avec elle
+      out.P.addScaledVector(out.U, -AXE).addScaledVector(vX, dec);
+      out.n = g - GV < LV ? NB : -1;
+      out.th = ph;
+      out.l = voieVrille + sensVrille * AXE * s + dec * c;
+      return out;
+    }
     if (g < 0) {
       // approche : on glisse doucement de là où l'on était vers la voie d'entrée
       const t = ch && ch.g0 < 0 ? lisse((g - ch.g0) / -ch.g0) : 1;
@@ -315,18 +359,60 @@ export function looping(piste, groupe) {
   const decor = new THREE.Group();
   decor.name = "looping";
   groupe.add(decor);
-  construireRuban(decor, point, G, fin);
+  construireRuban(decor, point, G, GV, LV, fin);
   construireStructures(decor, dansBoucle);
   plotsEntonnoir(decor, piste, debutEntonnoir, iPrise);
 
-  piste.looping = { indice: bases[0], bases, prise: iPrise, rendu: iRendu, rayon: R, longueur: fin, debutEntonnoir };
+  // anneaux rayés autour de la vrille (comme si la route tournait dans un tube), avec une
+  // jambe de force jusqu'au dessous du ruban et une étoile en haut
+  {
+    const RA = Math.hypot(AXE, DEMI) + 0.9; // rayon des anneaux (le ruban tourne dedans sans les toucher)
+    const couleurs = [0x51cf66, 0xffffff];
+    const arc = new THREE.TorusGeometry(RA, 0.3, 6, 6, DEUX_PI / 8);
+    const jambe = new THREE.BoxGeometry(0.45, 1, 0.45).translate(0, 0.5, 0);
+    const forme = new THREE.Shape();
+    for (let n = 0; n < 10; n++) {
+      const a = (n / 10) * DEUX_PI, r = n % 2 ? 0.7 : 1.6;
+      if (n) forme.lineTo(Math.sin(a) * r, Math.cos(a) * r);
+      else forme.moveTo(Math.sin(a) * r, Math.cos(a) * r);
+    }
+    const etoile = new THREE.ExtrudeGeometry(forme, { depth: 0.4, bevelEnabled: false }).translate(0, 0, -0.2);
+    const parties = [], A = new THREE.Vector3(), m = new THREE.Matrix4(), q = new THREE.Quaternion(), qr = new THREE.Quaternion();
+    const Z = new THREE.Vector3(0, 0, 1), Y = new THREE.Vector3(0, 1, 0);
+    const EP = 0.35;
+    for (const f of [0.1, 0.36, 0.64, 0.9]) {
+      const gv = f * LV, iF = iVrille + gv / pas;
+      route(iF, voieVrille, axeVrille(rouleVrille(gv)), A);
+      normale(iF, vN);
+      const angle = Math.atan2(-vN.z, vN.x); // cap de la route (la normale est à gauche du cap)
+      q.setFromAxisAngle(Y, angle); // z local → le long de la route
+      for (let k = 0; k < 8; k++) {
+        m.compose(A, q.clone().multiply(qr.setFromAxisAngle(Z, (k * DEUX_PI) / 8)), new THREE.Vector3(1, 1, 1));
+        parties.push({ geo: arc.clone().applyMatrix4(m), couleur: couleurs[k % 2] });
+      }
+      // jambe de force : du dessous du ruban jusqu'à l'anneau, dans la direction du "bas" de la route
+      const ph = rouleVrille(gv), c = Math.cos(ph), s = Math.sin(ph);
+      const bas = new THREE.Vector3(sensVrille * s * vN.x, -c, sensVrille * s * vN.z); // = -U
+      const pied = A.clone().addScaledVector(bas, AXE + EP);
+      const long = RA - AXE - EP;
+      m.compose(pied, new THREE.Quaternion().setFromUnitVectors(Y, bas), new THREE.Vector3(1, long, 1));
+      parties.push({ geo: jambe.clone().applyMatrix4(m), couleur: 0xffd43b });
+      // étoile au sommet de l'anneau, tournée vers les karts qui arrivent
+      m.compose(A.clone().add(new THREE.Vector3(0, RA + 1.5, 0)), q, new THREE.Vector3(1, 1, 1));
+      parties.push({ geo: etoile.clone().applyMatrix4(m), couleur: 0xffd43b });
+    }
+    decor.add(new THREE.Mesh(fusion(parties), matCouleurs()));
+    for (const g of [arc, jambe, etoile]) g.dispose();
+  }
+
+  piste.looping = { indice: bases[0], bases, vrille: iVrille, finVrille: iVrille + nVrille, prise: iPrise, rendu: iRendu, rayon: R, longueur: fin, debutEntonnoir };
 }
 
 /**
  * Le ruban de route de toute la série (un seul maillage bitume + un seul maillage de couleurs) :
  * bitume au milieu, bandes orange et crème, dessous et rebords colorés.
  */
-function construireRuban(groupe, point, G, fin) {
+function construireRuban(groupe, point, G, GV, LV, fin) {
   const def = CIRCUITS.dino;
   const cB0 = new THREE.Color(def.bordure[0]), cB1 = new THREE.Color(def.bordure[1]);
   const cMur0 = new THREE.Color(0xe8322f), cMur1 = new THREE.Color(0xffd43b);
@@ -356,8 +442,10 @@ function construireRuban(groupe, point, G, fin) {
   troncon(-ELAN, 0, pasRoute);
   for (let n = 0; n < NB; n++) {
     troncon(G[n], G[n] + LB, LB / nBoucle); // la boucle : sections serrées
-    troncon(G[n] + LB, n + 1 < NB ? G[n + 1] : fin, pasRoute); // route jusqu'à la suivante
+    troncon(G[n] + LB, n + 1 < NB ? G[n + 1] : GV, pasRoute); // route jusqu'à la suivante (ou la vrille)
   }
+  troncon(GV, GV + LV, LV / 72); // la vrille
+  troncon(GV + LV, fin, pasRoute);
   ajouter(fin);
 
   const pt = (sec, a, b) => [
@@ -464,6 +552,7 @@ function construireStructures(groupe, dansBoucle) {
   }
   groupe.add(new THREE.Mesh(fusion(parties), matCouleurs()));
   for (const g of [troncon, socle, boule, jambe, poutre, attache, etoile]) g.dispose();
+  if (NB < 2) return; // un seul looping : pas besoin de numéro
 
   // numéros : une seule texture (1 2 3 côte à côte), un seul maillage
   const toile = document.createElement("canvas");

@@ -43,6 +43,7 @@ export class KartPhysique {
     this.zAvant = 0;
     this.enLair = false;
     this.pente = 0; // inclinaison avant/arrière (visuel)
+    this.roulis = 0; // inclinaison gauche/droite (visuel, virage relevé) : > 0 = côté gauche plus haut
     this.sauts = 0; // compteurs pour les sons
     this.atterrissages = 0;
     this.boost = 0; // > 0 : petit coup d'accélérateur (bonbon)
@@ -63,6 +64,7 @@ export class KartPhysique {
     this.poussee.x = this.poussee.z = 0;
     this.tempsCoince = this.tempsContresens = this.clignote = 0;
     this.y = this.vy = 0;
+    this.roulis = 0;
     this.enLair = false;
   }
 
@@ -78,7 +80,9 @@ export class KartPhysique {
     this.vitesse = 0;
     this.poussee.x = this.poussee.z = 0;
     this.tempsCoince = this.tempsContresens = 0;
-    this.y = this.vy = 0;
+    this.vy = 0;
+    this.y = p.hauteurTremplin(i, 0).h; // (virage relevé, route abaissée : posé sur la route)
+    this.roulis = 0;
     this.enLair = false;
     this.clignote = 1.2;
   }
@@ -141,6 +145,7 @@ export class KartPhysique {
       this.vy -= 28 * dt;
       this.y += this.vy * dt;
       this.pente = Math.max(-0.35, Math.min(0.25, -this.vy * 0.03));
+      this.roulis *= Math.exp(-dt * 4);
       if (this.y <= sol.h) {
         this.y = sol.h;
         this.vy = 0;
@@ -160,8 +165,18 @@ export class KartPhysique {
         this.lateral = loc2.lateral;
       } else {
         this.y = sol.h;
-        this.pente = -sol.pente;
-        if (avant > 0.35 && sol.h < avant - 0.3 && this.vitesse > 4) {
+        if (sol.gLat) {
+          // virage relevé : la route penche en travers ; pente et roulis selon le cap du kart
+          const d = enveloppe(this.angle - p.angleA(i)), pl = Math.tan(sol.pente);
+          this.pente = -Math.atan(pl * Math.cos(d) + sol.gLat * Math.sin(d));
+          this.roulis = Math.atan(sol.gLat * Math.cos(d) - pl * Math.sin(d));
+        } else {
+          this.pente = -sol.pente;
+          this.roulis = 0;
+        }
+        // sur le dévers, la route descend quand on va vers l'intérieur : on reste collé, pas d'envol
+        const devers = sol.type === "devers" || this.solAvant === "devers";
+        if (!devers && avant > 0.35 && sol.h < avant - 0.3 && this.vitesse > 4) {
           // en haut d'un tremplin : on s'envole ; au bord d'une surface : on tombe simplement
           this.enLair = true;
           this.y = avant;

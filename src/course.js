@@ -238,7 +238,7 @@ export class Course {
     this.particules.update(dt);
 
     const vRel = joueur.phys.vitesse / REGLAGES.vitesseMax;
-    if (!joueur.scenario?.camera?.(this.cam, dt)) this.cam.update(dt, joueur.phys.x, joueur.phys.z, joueur.phys.angle, vRel, joueur.phys.y);
+    if (!joueur.scenario?.camera?.(this.cam, dt)) this.cam.update(dt, joueur.phys.x, joueur.phys.z, joueur.phys.angle, vRel, joueur.phys.y, joueur.roulisVu ?? 0);
     this.decor.ciel.position.set(this.camera.position.x, 0, this.camera.position.z);
     const info = this.piste.infoCourse;
     info.etat = this.etat;
@@ -340,7 +340,10 @@ export class Course {
     const hauteurVol = phys.y - phys.ySol;
     modele.ombre.position.y = 0.05 - hauteurVol;
     modele.ombre.scale.set(2.4, 1, 3.4).multiplyScalar(1 / (1 + hauteurVol * 0.3));
-    modele.groupe.rotation.y = phys.angle;
+    // cap puis roulis autour de l'axe avant du kart (virage relevé : il penche avec la route)
+    if (modele.groupe.rotation.order !== "YXZ") modele.groupe.rotation.order = "YXZ";
+    k.roulisVu = (k.roulisVu ?? 0) + (phys.roulis - (k.roulisVu ?? 0)) * Math.min(1, dt * 12);
+    modele.groupe.rotation.set(0, phys.angle, k.roulisVu);
     const derapage = -phys.direction * 0.32 * THREE.MathUtils.clamp(vRel, 0, 1);
     modele.corps.rotation.y += (derapage - modele.corps.rotation.y) * Math.min(1, dt * 6);
     modele.corps.rotation.z = phys.direction * 0.07 * Math.max(0, vRel);

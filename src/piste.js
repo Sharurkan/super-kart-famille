@@ -282,6 +282,14 @@ export function construirePiste(def) {
 
   /** Hauteur du sol à cet endroit, sa pente (pour incliner le kart) et son type. */
   function hauteurTremplin(indice, lateral, long = 0) {
+    // virage relevé (voir incliner) : la hauteur dépend du décalage latéral
+    if (devers) {
+      const d = deversA(indice, long, lateral);
+      if (d) {
+        const t = hauteurTremplinPlat(indice, lateral, long);
+        return { h: d.h + t.h, pente: t.type === "sol" ? Math.atan(d.along) : t.pente, type: t.type === "sol" ? "devers" : t.type, gLat: d.gLat };
+      }
+    }
     // relief de la route (voir abaisser) : tout ce qui est posé dessus suit sa hauteur
     if (profil) {
       const r = baseRelief(indice, long);
@@ -392,13 +400,56 @@ export function construirePiste(def) {
     profil ??= new Float32Array(N);
     const n = (fin - debut + N) % N;
     for (let m = 0; m <= n; m++) profil[(debut + m) % N] = hauteur(m);
+    majSommets();
+    api.profil = profil;
+  }
+
+  // ---------- Dévers (virage relevé) ----------
+  // incliner(debut, fin, angle) penche la route sur les échantillons debut..fin : angle(m) en radians
+  // pour m = 0..fin-debut, > 0 = le côté gauche (lateral > 0) monte, < 0 = le côté droit monte.
+  // Le bord bas reste au sol, la route monte en ligne droite vers le bord haut (bordure comprise) :
+  // h = tan|a| × (distance au bord bas). hauteurTremplin en tient compte (physique, bonbons) et
+  // renvoie aussi gLat = dh/dlateral pour incliner le kart. piste.devers = angle par échantillon.
+  let devers = null;
+  const LARGE_DEVERS = 2 * demi + 1.4; // du bord bas jusqu'au bout de la bordure haute
+  /** Hauteur due au dévers d'angle a, au décalage lat. */
+  const hDevers = (a, lat) => (a === 0 ? 0 : Math.tan(Math.abs(a)) * Math.min(LARGE_DEVERS, Math.max(0, Math.sign(a) * lat + demi)));
+  function incliner(debut, fin, angle) {
+    devers ??= new Float32Array(N);
+    const n = (fin - debut + N) % N;
+    for (let m = 0; m <= n; m++) devers[(debut + m) % N] = angle(m);
+    majSommets();
+    api.devers = devers;
+  }
+  /** Dévers au point (indice, long, lateral) : { h, along (pente le long, en tangente), gLat } ou null. */
+  function deversA(indice, long, lateral) {
+    const u = indice + long / pas;
+    const i = Math.floor(u), f = u - i;
+    const a0 = devers[((i % N) + N) % N], a1 = devers[(((i + 1) % N) + N) % N];
+    if (a0 === 0 && a1 === 0) return null;
+    const a = a0 + (a1 - a0) * f;
+    const d = Math.sign(a) * lateral + demi;
+    return {
+      h: hDevers(a, lateral),
+      along: (hDevers(a1, lateral) - hDevers(a0, lateral)) / pas,
+      gLat: d > 0 && d < LARGE_DEVERS ? Math.sign(a) * Math.tan(Math.abs(a)) : 0,
+    };
+  }
+
+  /** Recalcule la hauteur des sommets de la route, des bordures et des barrières (relief + dévers). */
+  function majSommets() {
     // sommets : hauteur d'origine + relief de leur échantillon (retrouvé par l'ordre de construction)
     yBase ??= morceaux.map(({ g }) => Float32Array.from(g.attributes.position.array.filter((_, k) => k % 3 === 1)));
+    const rel = (i) => (profil ? profil[i] : 0);
+    const dev = (i, lat) => (devers && Math.abs(lat) < demi + 1.5 ? hDevers(devers[i], lat) : 0); // (pas les barrières)
     morceaux.forEach(({ g, parEchantillon, cotes }, n) => {
       const pos = g.attributes.position.array, y0 = yBase[n];
       if (g.index) {
-        // route : 2 sommets par échantillon (k = 0..N, le dernier = le premier)
-        for (let v = 0; v < pos.length / 3; v++) pos[v * 3 + 1] = y0[v] + profil[(v >> 1) % N];
+        // route : 2 sommets par échantillon (k = 0..N, le dernier = le premier), bord gauche puis droit
+        for (let v = 0; v < pos.length / 3; v++) {
+          const i = (v >> 1) % N;
+          pos[v * 3 + 1] = y0[v] + rel(i) + dev(i, v % 2 ? -demi : demi);
+        }
       } else {
         // bordures, barrières : morceaux de parEchantillon sommets par segment k → k+1 ;
         // chaque sommet est sur l'échantillon k ou k+1 (on regarde s'il est devant ou derrière)
@@ -407,15 +458,17 @@ export function construirePiste(def) {
             const base = (c * N + k) * parEchantillon;
             for (let v = base; v < base + parEchantillon; v++) {
               const lg = (pos[v * 3] - cx[k]) * tx[k] + (pos[v * 3 + 2] - cz[k]) * tz[k];
-              pos[v * 3 + 1] = y0[v] + profil[lg > pas / 2 ? (k + 1) % N : k];
+              const i = lg > pas / 2 ? (k + 1) % N : k;
+              const lat = (pos[v * 3] - cx[i]) * nx[i] + (pos[v * 3 + 2] - cz[i]) * nz[i];
+              pos[v * 3 + 1] = y0[v] + rel(i) + dev(i, lat);
             }
           }
       }
       g.attributes.position.needsUpdate = true;
+      if (g.index && devers) g.computeVertexNormals(); // route penchée : la lumière suit la pente
       g.computeBoundingSphere();
       g.computeBoundingBox();
     });
-    api.profil = profil;
   }
 
   // centre et rayon du circuit (pour le décor lointain)
@@ -427,6 +480,6 @@ export function construirePiste(def) {
   const centre = new THREE.Vector3((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
   const rayon = Math.hypot(maxX - minX, maxZ - minZ) / 2;
 
-  const api = { groupe, N, L, pas, cx, cz, tx, tz, nx, nz, demi, marge, localiser, distanceCentre, angleA, centre, rayon, tremplins, hauteurTremplin, surfaces, zonesIA, ajouterTremplin, retrecissements, limiteLaterale, limiter, passages: [], trous, trouer, profil, abaisser };
+  const api = { groupe, N, L, pas, cx, cz, tx, tz, nx, nz, demi, marge, localiser, distanceCentre, angleA, centre, rayon, tremplins, hauteurTremplin, surfaces, zonesIA, ajouterTremplin, retrecissements, limiteLaterale, limiter, passages: [], trous, trouer, profil, abaisser, devers, incliner, hDevers };
   return api;
 }
