@@ -70,10 +70,17 @@ function pleinEcran() {
   const el = document.documentElement;
   // bloque en paysage (Android : seulement en plein écran ou en appli installée)
   const bloquer = () => screen.orientation?.lock?.("landscape").catch(() => {});
-  if (!document.fullscreenElement && el.requestFullscreen) {
-    el.requestFullscreen({ navigationUI: "hide" }).then(bloquer).catch(() => {});
-  } else bloquer();
+  // appli installée (icône) : elle est déjà plein écran sans l'API, et requestFullscreen
+  // peut échouer ; on tente le blocage dans tous les cas
+  const pleinPuisBloquer = () => el.requestFullscreen?.({ navigationUI: "hide" }).then(bloquer, bloquer);
+  if (document.fullscreenElement) bloquer();
+  else if (enAppli()) screen.orientation?.lock?.("landscape").catch(pleinPuisBloquer);
+  else pleinPuisBloquer() ?? bloquer();
 }
+function enAppli() {
+  return matchMedia("(display-mode: fullscreen), (display-mode: standalone)").matches;
+}
+if (enAppli()) screen.orientation?.lock?.("landscape").catch(() => {});
 // revenu en plein écran (ou appli installée) : on rebloque le paysage
 document.addEventListener("fullscreenchange", () => {
   if (document.fullscreenElement) screen.orientation?.lock?.("landscape").catch(() => {});
@@ -156,22 +163,34 @@ $("#btn-inclinaison").addEventListener("click", async () => {
   const bouton = $("#btn-inclinaison");
   const secouer = () => bouton.animate([{ translate: "0" }, { translate: "-12px" }, { translate: "12px" }, { translate: "0" }], { duration: 300 });
   const actif = !reglages.inclinaison;
-  if (actif && typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
-    // iOS : autorisation à demander pendant le toucher (Android Chrome n'en a pas besoin)
-    try {
-      if ((await DeviceOrientationEvent.requestPermission()) !== "granted") return secouer();
-    } catch {
-      return secouer();
-    }
+  // Autorisation des capteurs, à demander pendant le toucher (iOS, et Chrome/Samsung récents
+  // qui ont aussi requestPermission). On ne s'arrête PAS sur un refus : certains navigateurs
+  // répondent "denied" mais envoient quand même les mesures. C'est l'arrivée des mesures
+  // (vérifiée 1,5 s plus tard) qui décide.
+  let autorisation = "";
+  if (actif) {
+    const demander = async (E, nom) => {
+      if (typeof E === "undefined" || typeof E.requestPermission !== "function") return;
+      try {
+        autorisation += `${nom}:${await E.requestPermission()} `;
+      } catch (e) {
+        autorisation += `${nom}:erreur `;
+      }
+    };
+    await demander(typeof DeviceOrientationEvent !== "undefined" ? DeviceOrientationEvent : undefined, "o");
+    await demander(typeof DeviceMotionEvent !== "undefined" ? DeviceMotionEvent : undefined, "m");
   }
   reglages.inclinaison = actif;
   sauver();
   controles.activerInclinaison(actif); // calibre aussi le "tout droit"
   majOptions();
+  $("#diag-capteur").textContent = "";
   if (!actif) return;
   // Aucun capteur (ordinateur, ou page en http) : on revient aux boutons seuls et on secoue.
   setTimeout(() => {
     if (!reglages.inclinaison || controles.dernierCapteur) return;
+    // diagnostic pour le parent : ce que le navigateur a envoyé (petit texte sous les options)
+    $("#diag-capteur").textContent = `${autorisation}· ${controles.diagnostic()}`;
     reglages.inclinaison = false;
     sauver();
     controles.activerInclinaison(false);

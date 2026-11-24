@@ -104,6 +104,7 @@ export class Controles {
     this.surOrientation = (e) => this.lireOrientation(e);
     this.surMouvement = (e) => this.lireMouvement(e);
     this.orientationOk = false; // le gyroscope donne de vraies valeurs : on ignore l'accéléromètre
+    this.diag = { o: 0, oVide: 0, m: 0, mVide: 0 }; // événements reçus (diagnostic)
   }
 
   /** Active / coupe la direction par inclinaison. */
@@ -114,6 +115,7 @@ export class Controles {
     if (actif) {
       this.dernierCapteur = 0;
       this.orientationOk = false;
+      this.diag = { o: 0, oVide: 0, m: 0, mVide: 0 };
       addEventListener("deviceorientation", this.surOrientation);
       addEventListener("devicemotion", this.surMouvement);
     } else {
@@ -132,15 +134,25 @@ export class Controles {
     this.dirInclinaison = 0;
   }
 
+  /** Résumé lisible par un parent de ce que le navigateur envoie (diagnostic). */
+  diagnostic() {
+    const d = this.diag;
+    return `orientation ${d.o} (vides ${d.oVide}) · mouvement ${d.m} (vides ${d.mVide}) · écran ${this.angleEcran()}° · ${isSecureContext ? "https" : "http"}`;
+  }
+
   lireOrientation(e) {
+    this.diag.o++;
+    if (e.beta == null) this.diag.oVide++;
     if (e.beta == null) return; // pas de gyroscope : l'accéléromètre prend le relais
     this.orientationOk = true;
     this.appliquer(inclinaisonPaysage(e.beta, this.angleEcran(), e.gamma));
   }
 
   lireMouvement(e) {
-    if (this.orientationOk) return;
+    this.diag.m++;
     const g = e.accelerationIncludingGravity;
+    if (!g || g.x == null) this.diag.mVide++;
+    if (this.orientationOk) return;
     if (!g || g.x == null || g.y == null) return;
     this.appliquer(inclinaisonPesanteur(g.x, g.y, this.angleEcran()));
   }
