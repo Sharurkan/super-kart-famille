@@ -312,7 +312,8 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
   function raisonDisque(x, z, R, h, ouvMin = 0.9) {
     const pb = garde.probleme(x, z, R, h);
     if (pb) return pb;
-    for (const c of clairieres) if ((x - c.x) ** 2 + (z - c.z) ** 2 < (c.occupe + R) ** 2) return "troupeau";
+    // (occupe : cercle sans plantes du troupeau, large ; 85 % suffit pour ne pas toucher les animaux)
+    for (const c of clairieres) if ((x - c.x) ** 2 + (z - c.z) ** 2 < (0.85 * c.occupe + R) ** 2) return "troupeau";
     for (const c of evite) if ((x - c.x) ** 2 + (z - c.z) ** 2 < (c.r + R) ** 2) return "volcan";
     for (const c of reserves) if ((x - c.x) ** 2 + (z - c.z) ** 2 < (c.r + R + 2) ** 2) return "raptors";
     const L = piste.localiser(x, z), i = L.indice;
@@ -454,7 +455,7 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
         for (let b = 0; b < nl; b++) {
           const p = point(i, (l0 + b * PAS_G) * P.cote);
           // (hauteur 1 m : la vue de la caméra est vérifiée plus tard, sur la boucle choisie)
-          libre[a * nl + b] = raisonDisque(p.x, p.z, R - 1.5, 1.0) ? 0 : 1; // (un peu permissive : la boucle choisie est vérifiée exactement)
+          libre[a * nl + b] = raisonDisque(p.x, p.z, R - 1.5, 1.0, OUV_MEUTE) ? 0 : 1; // (un peu permissive : la boucle choisie est vérifiée exactement)
         }
       }
       return { P, long, kPas, k0, nk, l0, nl, libre };
@@ -483,6 +484,13 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
   const FORMES = [];
   for (const travers of [false, true]) for (const c of [4, 10, 18, 26]) for (const b of [9.5, 12]) FORMES.push({ travers, c, b });
   const refusees = new Set(); // boucles refusées à la vérification exacte
+  const OUV_MEUTE = 0.8; // au bord des plaines, quelques arbres autour d'eux (la jungle y est clairsemée)
+  /** Distance à la route là où on voit autour (pas dans le ventre du T-rex, la tranchée, l'aquarium). */
+  function distanceVue(p) {
+    let d = Infinity;
+    for (let i = 0; i < N; i += 4) if (!enTunnel(i)) d = Math.min(d, (p.x - cx[i]) ** 2 + (p.z - cz[i]) ** 2);
+    return Math.sqrt(d);
+  }
   function planMeute(n, S) {
     const h = HAUTEUR * S, R = rayonMeute(h);
     if (!grilles || R > RM) construireGrilles(R);
@@ -496,7 +504,7 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
         for (let lat = G.l0 + demiLarge; lat <= G.P.largeur - 30 - demiLarge; lat += 6) {
           const cle = `${ic},${lat},${F.travers},${F.c}`;
           if (refusees.has(cle) || !caseLibre(G, ic, lat, 0, 0)) continue;
-          if (pts.every(([u, v]) => caseLibre(G, ic, lat, u, v))) cands.push({ G, F, ic, lat, cle, bord: lat - demiLarge });
+          if (pts.every(([u, v]) => caseLibre(G, ic, lat, u, v))) cands.push({ G, F, ic, lat, cle, bord: distanceVue(point(ic, lat * G.P.cote)) - demiLarge });
         }
       }
     }
@@ -519,7 +527,7 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
       const ordre = [];
       for (let q = 0; q < 8; q++) { const k = Math.floor((q * nS) / 8); ordre.push(k - (k % 2)); }
       for (let k = 0; k < nS; k += 2) ordre.push(k);
-      if (!ordre.every((k) => disqueLibre(ech[k].x, ech[k].z, R, h))) { refusees.add(choix.cle); continue; }
+      if (!ordre.every((k) => disqueLibre(ech[k].x, ech[k].z, R, h, OUV_MEUTE))) { refusees.add(choix.cle); continue; }
       for (let k = 0; k < nS; k += 2) reserver(ech[k].x, ech[k].z, R);
       // la grille ne voit plus ces places
       for (const H of grilles) for (let a = 0; a < H.nk; a++) {
@@ -544,8 +552,9 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
   // (autant que la place le permet : certains groupes ne trouvent pas de place, voir bilan())
   // (meutes avant les chasseurs : elles ont besoin de grandes places, les chasseurs se glissent entre)
   planCoureurs(2.0, 3);
-  for (const [n, S] of [[10, 2.1], [9, 2.0], [8, 2.1], [8, 2.0], [7, 2.1], [6, 2.0], [6, 2.0]]) planMeute(n, S);
-  for (const n of [4, 4, 4, 3, 3, 3]) planChasseurs(n, 2.4);
+  // (trois meutes, les plus visibles depuis la route : au-delà, elles seraient loin, cachées par le décor)
+  for (const [n, S] of [[10, 2.4], [9, 2.3], [8, 2.4]]) planMeute(n, S);
+  for (const n of [4, 4, 4, 3, 3, 3]) planChasseurs(n, 2.6);
   const tempsPlacement = performance.now() - debutPlacement;
 
   // ---------------------------------------------------------------------------
@@ -772,7 +781,10 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
     if (Math.abs(Lc.lateral) > 40) Lc = piste.localiser(camera.position.x, camera.position.z); // perdue : tout le tour
     iCam = Lc.indice;
     const sK = Lc.indice * pas + Lc.long + 7.2;
-    kart = { s: sK, v: kart && dt > 0 ? Math.min(40, Math.abs(ecart(Math.round(sK / pas), Math.round(kart.s / pas)) * pas) / dt) * 0.3 + kart.v * 0.7 : 0 };
+    // vitesse du kart : déplacement de la caméra (qui le suit), lissé
+    const px = camera.position.x, pz = camera.position.z;
+    const vInst = kart && dt > 0 ? Math.min(40, Math.hypot(px - kart.x, pz - kart.z) / dt) : 0;
+    kart = { s: sK, x: px, z: pz, v: kart ? vInst * 0.15 + kart.v * 0.85 : 0 };
     for (const g of groupes) if (g.type === "coureurs") majCoureurs(g, dt);
     camera.updateMatrixWorld();
     pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
