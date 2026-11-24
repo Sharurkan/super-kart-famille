@@ -177,6 +177,13 @@ body.mode-auto #commandes .btn-frein {
   display: none;
 }
 
+/* mode « ça avance tout seul » : une flèche à chaque bord de l'écran, une par pouce */
+body.mode-auto .zone-gauche {
+  right: max(18px, env(safe-area-inset-right));
+  justify-content: space-between;
+  pointer-events: none;
+}
+
 /* ---------- Écrans ---------- */
 .ecran {
   position: fixed;
