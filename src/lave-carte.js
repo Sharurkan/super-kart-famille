@@ -17,7 +17,7 @@ function lire(x, z, echelle, ox, oz) {
  * marge. d : distance à l'axe de la route (m) ; bord : de l'axe aux barrières (uBordLave, lave.js).
  */
 export function laveProbable(x, z, d, bord) {
-  if (d < bord + 5) return false; // jamais sur l'herbe roulable ni juste derrière les barrières
+  if (d < bord + 5.8) return false; // jamais sur l'herbe roulable ni juste derrière les barrières (lave.js : à partir de bord + 6)
   const g = lire(x, z, 650, 0.13, 0.71), g2 = lire(x, z, 380, 0.57, 0.21);
   if (g >= 0.52) return true; // mares (lave.js : à partir de 0,545)
   return d < bord + 24 && g2 >= 0.41; // rivières de 7 à 20 m derrière les barrières (lave.js : 0,43)
