@@ -28,10 +28,23 @@ const URL_KART = "karts/kart.glb";
 const SIEGE_GLB = [0, 0.48, -0.25]; // creux du baquet
 let gabarit = null; // { scene, map, rayons: Map(nom de roue -> rayon) }
 
+// Carrosseries à thème (fusée, pompiers, licorne, dino, baignoire, classique) posées sur le
+// châssis commun : outils/blender/kart_themes.py -> public/karts/themes.glb, un nœud
+// "theme_<type>" par kart. Si le fichier manque, le kart reste simplement « nu ».
+const URL_THEMES = "karts/themes.glb";
+const chargeur = new GLTFLoader();
+const themesPrets = chargeur
+  .loadAsync(import.meta.env.BASE_URL + URL_THEMES)
+  .then((gltf) => preparerThemes(gltf.scene))
+  .catch((e) => {
+    console.warn("Carrosseries à thème non chargées :", e);
+    return new Map();
+  });
+
 /** Promesse résolue quand le modèle 3D est prêt (vrai) ou a échoué (faux). */
-export const kartPret = new GLTFLoader()
+export const kartPret = chargeur
   .loadAsync(import.meta.env.BASE_URL + URL_KART)
-  .then((gltf) => {
+  .then(async (gltf) => {
     const scene = gltf.scene;
     let map = null;
     scene.traverse((o) => {
@@ -47,7 +60,7 @@ export const kartPret = new GLTFLoader()
       }
       if (/^roue_/.test(o.name)) rayons.set(o.name, new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3()).y / 2);
     });
-    gabarit = { scene, map, rayons };
+    gabarit = { scene, map, rayons, themes: await themesPrets };
     return true;
   })
   .catch((e) => {
@@ -64,38 +77,94 @@ function matPeinture(couleur) {
   return peintures.get(couleur);
 }
 
-/** Petits accessoires pour reconnaître chaque kart (en plus de la couleur). */
-const ACCESSOIRES = {
-  pompier(g) {
-    boite(g, 0.26, 0.14, 0.2, 0x339af0, -0.17, 0.98, 0.78); // gyrophares
-    boite(g, 0.26, 0.14, 0.2, 0xff4d4d, 0.17, 0.98, 0.78);
-  },
-  licorne(g) {
-    const corne = cone(g, 0.08, 0.5, 8, 0xffc933, 0, 1.08, 1.05);
-    corne.rotation.x = 0.7;
-  },
-  dino(g) {
-    for (let k = 0; k < 4; k++) {
-      const pic = cone(g, 0.11 - k * 0.015, 0.26 - k * 0.03, 4, 0xff922b, 0, 1.0 - k * 0.04, 1.15 - k * 0.22);
-      pic.rotation.x = -0.25;
-    }
-  },
-  fusee(g) {
-    // flammes au bout des pots d'échappement
-    for (const s of [1, -1]) {
-      const flamme = cone(g, 0.13, 0.5, 10, 0xffa94d, s * 0.44, 1.08, -1.72);
-      flamme.material = matFlamme;
-      flamme.rotation.x = -Math.PI / 2 + 0.45; // vers l'arrière, un peu vers le haut comme les pots
-    }
-  },
-  baignoire(g) {
-    // canard en plastique sur le ponton
-    sphere(g, 0.15, 0xffd43b, 0.72, 0.72, -0.15, 1);
-    sphere(g, 0.1, 0xffd43b, 0.72, 0.9, -0.05, 1);
-    cone(g, 0.05, 0.12, 4, 0xff922b, 0.72, 0.88, 0.07).rotation.x = Math.PI / 2;
-  },
+// ---------------------------------------------------------------------------
+// Carrosseries à thème : matériaux remplacés par du plastique brillant (même couleur),
+// et petites animations (flammes, gyrophares, queues, bulles) calculées à partir de l'heure
+// dans onBeforeRender : rien à appeler depuis la course ou les menus.
+const matsTheme = new Map();
+function matTheme(cle, creer) {
+  if (!matsTheme.has(cle)) {
+    const m = creer();
+    m.side = THREE.DoubleSide; // plaques fines (ailerons, drapeau) visibles des deux côtés
+    m.userData.partage = true;
+    matsTheme.set(cle, m);
+  }
+  return matsTheme.get(cle);
+}
+const GYROS = {
+  gyro_bleu: { allume: new THREE.Color(0x4dabff), eteint: new THREE.Color(0x1c3d66), phase: 0 },
+  gyro_rouge: { allume: new THREE.Color(0xff4040), eteint: new THREE.Color(0x661c1c), phase: 1 },
 };
-const matFlamme = new THREE.MeshBasicMaterial({ color: 0xffa94d });
+
+/** Prépare les gabarits de carrosserie : Map(type -> nœud à cloner). */
+function preparerThemes(racine) {
+  const themes = new Map();
+  for (const type of KARTS) {
+    const t = racine.getObjectByName("theme_" + type);
+    if (!t) continue;
+    t.traverse((o) => {
+      if (!o.isMesh) return;
+      const nom = o.material.name;
+      const hex = o.material.color.getHex();
+      if (nom.startsWith("peinture")) {
+        const c = COULEURS_KARTS[type];
+        o.material = matTheme("peinture" + c, () => new THREE.MeshPhongMaterial({ color: c, shininess: 60, specular: 0x2a2a2a }));
+      } else if (nom.startsWith("flamme") || nom === "phare") {
+        o.material = matTheme("basic" + hex, () => new THREE.MeshBasicMaterial({ color: hex }));
+      } else if (GYROS[nom]) {
+        o.material = matTheme(nom, () => new THREE.MeshBasicMaterial({ color: GYROS[nom].allume }));
+        o.userData.gyro = nom;
+      } else {
+        o.material = matTheme("phong" + hex, () => new THREE.MeshPhongMaterial({ color: hex, shininess: 70, specular: 0x333333 }));
+      }
+    });
+    themes.set(type, t);
+  }
+  return themes;
+}
+
+const horloge = () => performance.now() / 1000;
+/** Branche une animation sur les maillages d'un nœud (c'est le nœud qui bouge). */
+function animer(noeud, f) {
+  noeud.traverse((o) => {
+    if (o.isMesh) o.onBeforeRender = () => f(horloge());
+  });
+}
+
+/** Ajoute la carrosserie du type au kart (clone : géométries et matériaux partagés). */
+function ajouterTheme(m, type) {
+  const modele = gabarit.themes?.get(type);
+  if (!modele) return;
+  const t = modele.clone(true);
+  const phase = Math.random() * 10;
+  t.traverse((o) => {
+    if (!o.userData.gyro) return;
+    const g = GYROS[o.userData.gyro];
+    o.onBeforeRender = () => {
+      const allume = Math.floor(horloge() * 4 + g.phase) % 2 === 0;
+      o.material.color.copy(allume ? g.allume : g.eteint);
+    };
+  });
+  for (const o of t.children) {
+    const k = Math.random() * 10;
+    if (o.name.startsWith("anim_flamme")) {
+      const s0 = o.scale.y; // la flamme s'étire le long de son axe Y local
+      animer(o, (h) => {
+        o.scale.y = s0 * (0.85 + 0.2 * Math.sin(h * 31 + k) + 0.1 * Math.sin(h * 53 + k * 2));
+      });
+    } else if (o.name.startsWith("anim_queue")) {
+      animer(o, (h) => {
+        o.rotation.y = Math.sin(h * 4 + phase) * 0.22;
+      });
+    } else if (o.name.startsWith("anim_bulle")) {
+      const y0 = o.position.y;
+      animer(o, (h) => {
+        o.position.y = y0 + Math.sin(h * 2.2 + k) * 0.07;
+      });
+    }
+  }
+  m.add(t);
+}
 
 /** Habille un kart avec le modèle 3D (clone : géométries et texture partagées). */
 function habiller(corps, roues, type) {
@@ -108,7 +177,7 @@ function habiller(corps, roues, type) {
     const roue = { pivot: o, tourne: o, rayon: gabarit.rayons.get(o.name) };
     (o.name.startsWith("roue_av") ? roues.avant : roues.arriere).push(roue);
   });
-  ACCESSOIRES[type]?.(m);
+  ajouterTheme(m, type);
   corps.add(m);
 }
 
