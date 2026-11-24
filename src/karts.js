@@ -58,6 +58,9 @@ export const kartPret = chargeur
         o.userData.peinture = o.material.name === "peinture";
         o.material = matKart;
       }
+      // Volant détaché par outils/blender/volant_pilotes.py : caché, car les pilotes (dessins 2D
+      // toujours face à la caméra) ont leur volant dessiné dans les mains, quel que soit l'angle.
+      if (o.name === "volant") o.visible = false;
       if (/^roue_/.test(o.name)) rayons.set(o.name, new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3()).y / 2);
     });
     gabarit = { scene, map, rayons, themes: await themesPrets };

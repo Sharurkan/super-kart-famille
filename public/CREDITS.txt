@@ -10,7 +10,7 @@ Chaque œuvre : « This work is based on "<titre>" by <auteur> licensed under CC
 
 "Cartoonish Go-Kart" — CaptCaviness
   https://sketchfab.com/3d-models/cartoonish-go-kart-cb5b6546a26d48cd8c80320c11d24737
-  Fichier : karts/kart.glb (roues séparées, simplifié, carrosserie recolorable)
+  Fichier : karts/kart.glb (roues et volant séparés, simplifié, carrosserie recolorable)
 
 "Pteranodon (Animated)" — DogexorRexUwU (oscar.lopez.riviello)
   https://sketchfab.com/3d-models/pteranodon-animated-7d7683df41d1405283f160e81a5dff1b

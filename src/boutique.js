@@ -42,7 +42,7 @@ function dessinerBoutique() {
   // les 5 tirelires
   $("#tirelires").innerHTML = PERSONNAGES.map(
     (p) => `<button class="tirelire ${p === persoChoisi ? "choisie" : ""}" data-tirelire="${p}" aria-label="${p}">
-      <img src="${urlSprite(p, "face")}" alt=""><span>🍬 ${nombre(solde(p))}</span></button>`
+      <img src="${urlSprite(p, "face_volant")}" alt=""><span>🍬 ${nombre(solde(p))}</span></button>`
   ).join("");
 
   // les récompenses, avec une jauge qui se remplit
@@ -63,7 +63,7 @@ function dessinerBoutique() {
   $("#liste-bons").innerHTML = bons
     .map((b) => {
       const r = RECOMPENSES.find((x) => x.id === b.recompense);
-      return `<div class="bon"><img src="${urlSprite(b.perso, "face")}" alt=""><div class="dessin">${dessin(r?.icone ?? "🎁")}</div>
+      return `<div class="bon"><img src="${urlSprite(b.perso, "face_volant")}" alt=""><div class="dessin">${dessin(r?.icone ?? "🎁")}</div>
         <button class="btn-donne" data-bon="${b.id}" aria-label="Donné (maintenir 3 secondes)"><svg viewBox="0 0 100 100"><circle class="anneau" cx="50" cy="50" r="44"/><path d="M28 52 L44 68 L74 36" fill="none" stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>`;
     })
     .join("");
@@ -80,7 +80,7 @@ function demanderAchat(r) {
   }
   achatEnCours = r;
   $("#confirmer-dessin").innerHTML = dessin(r.icone);
-  $("#confirmer-perso").src = urlSprite(persoChoisi, "face");
+  $("#confirmer-perso").src = urlSprite(persoChoisi, "face_volant");
   $("#confirmer-achat").classList.remove("cache");
 }
 
@@ -94,7 +94,7 @@ function validerAchat() {
   audio.fanfare();
   // le bon à montrer aux parents
   $("#bon-dessin").innerHTML = dessin(r.icone);
-  $("#bon-perso").src = urlSprite(persoChoisi, "face");
+  $("#bon-perso").src = urlSprite(persoChoisi, "face_volant");
   $("#bon-nom").textContent = r.nom;
   $("#nouveau-bon").classList.remove("cache");
   dessinerBoutique();

@@ -1,12 +1,22 @@
 import * as THREE from "three";
 
-// Sprites 2D des personnages (générés par scripts/decoupe_sprites.py)
-const urls = import.meta.glob("../assets/personnages/*.png", { eager: true, query: "?url", import: "default" });
+// Sprites 2D des personnages (générés par scripts/decoupe_sprites.py) :
+// - <nom>_face.png : dessin d'origine, pour les têtes (classement, mini-carte) ;
+// - <nom>_face_volant.png / <nom>_dos_volant.png : le même dessin avec un volant 3D rendu dans
+//   Blender (outils/blender/volant_pilotes.py) dans les mains, pour le pilote assis dans son kart
+//   et les portraits des menus. Les <nom>_dos.png d'origine ne servent qu'à refaire ces images
+//   (après scripts/decoupe_sprites.py, relancer outils/blender/volant_pilotes.py).
+const urls = import.meta.glob(["../assets/personnages/*_face.png", "../assets/personnages/*_volant.png"], {
+  eager: true,
+  query: "?url",
+  import: "default",
+});
 const chargeur = new THREE.TextureLoader();
 const cache = new Map();
 
 export const PERSONNAGES = ["viggo", "harry", "maman", "bryan", "mamy"];
 
+/** cote : "face" (dessin d'origine), "face_volant" ou "dos_volant". */
 export function urlSprite(nom, cote) {
   return urls[`../assets/personnages/${nom}_${cote}.png`];
 }
@@ -36,8 +46,9 @@ const v = new THREE.Vector3();
  * toujours faire face à la caméra, avec la vue de face ou de dos selon l'angle.
  */
 export function creerPilote(nom) {
-  const face = materiau(nom, "face");
-  const dos = materiau(nom, "dos");
+  // le volant 3D du kart est caché (karts.js) : c'est celui du dessin, toujours dans les mains
+  const face = materiau(nom, "face_volant");
+  const dos = materiau(nom, "dos_volant");
   const mesh = new THREE.Mesh(geo, dos);
   mesh.position.y = -0.15; // le bas du sprite (jambes coupées) s'enfonce dans le siège
 

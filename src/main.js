@@ -82,7 +82,7 @@ for (const p of PERSONNAGES) {
   b.className = "carte-perso";
   b.style.background = `radial-gradient(circle at 50% 35%, #fff8, ${COULEURS_PERSOS[p]} 70%)`;
   b.setAttribute("aria-label", p);
-  b.innerHTML = `<img src="${urlSprite(p, "face")}" alt="">`;
+  b.innerHTML = `<img src="${urlSprite(p, "face_volant")}" alt="">`; // le pilote tient son volant
   b.addEventListener("click", () => {
     reglages.perso = p;
     sauver();
@@ -285,7 +285,7 @@ function montrerPodium(liste) {
   audio.musique("menu");
   const maPlace = $("#ma-place");
   maPlace.classList.toggle("cache", place <= 3);
-  maPlace.innerHTML = `<img src="${urlSprite(joueur.perso, "face")}" alt=""><span>${place}<small>${suffixe(place)}</small></span>`;
+  maPlace.innerHTML = `<img src="${urlSprite(joueur.perso, "face_volant")}" alt=""><span>${place}<small>${suffixe(place)}</small></span>`;
   montrer("fin");
 }
 
