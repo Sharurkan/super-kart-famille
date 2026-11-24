@@ -15,9 +15,9 @@ const TOUCHES = {
 // Réglage doux (retour de jeu : 22° pour braquer à fond, c'était beaucoup trop fort) :
 // zone morte plus large, braquage complet seulement vers 40°, et courbe progressive
 // (petite inclinaison = petit virage, on ne tourne fort qu'en penchant franchement).
-// 2e retour : toujours trop fort à 40°, il faut pencher de 90° pour braquer à fond.
+// 2e retour : trop fort à 40° ; 3e retour : 90° trop loin, 60° pour braquer à fond.
 const ZONE_MORTE = 6; // degrés : en dessous, on va tout droit
-const BRAQUAGE_MAX = 90; // degrés : braquage complet quand la tablette est à la verticale
+const BRAQUAGE_MAX = 60; // degrés : braquage complet
 const COURBE = 1.3; // > 1 : les petites inclinaisons tournent peu
 const LISSAGE = 0.2; // filtre passe-bas, appliqué à chaque événement du capteur
 
