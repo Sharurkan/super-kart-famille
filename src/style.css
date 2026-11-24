@@ -1050,6 +1050,19 @@ button:active {
 }
 
 /* petit lien discret vers les crédits des modèles 3D (écran des options) */
+/* numéro de version (accueil, coin bas droit) */
+.version {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.25);
+  color: #fff;
+  font: 600 14px/1.3 system-ui, sans-serif;
+  pointer-events: none;
+}
+
 .lien-credits {
   position: absolute;
   right: 14px;

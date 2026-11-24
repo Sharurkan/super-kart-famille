@@ -79,6 +79,9 @@ document.addEventListener("fullscreenchange", () => {
   if (document.fullscreenElement) screen.orientation?.lock?.("landscape").catch(() => {});
 });
 
+// numéro de version sur l'accueil (date de construction · commit), voir vite.config.js
+$("#version").textContent = __VERSION__;
+
 // --- Personnages ---
 const listePersos = $("#liste-persos");
 for (const p of PERSONNAGES) {
