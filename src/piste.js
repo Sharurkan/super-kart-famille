@@ -10,7 +10,7 @@ import { textureAsphalte, textureDamier, textureChevrons } from "./textures.js";
  */
 export function construirePiste(def) {
   const e = def.echelle ?? 1;
-  const [dx0, dz0] = def.decalage ?? [0, 0]; // pour placer un circuit ailleurs (ex. le ventre du T-rex)
+  const [dx0, dz0] = def.decalage ?? [0, 0]; // pour placer un circuit ailleurs (circuit déplacé)
   const pts = def.points.map(([x, z]) => new THREE.Vector3(x * e + dx0, 0, z * e + dz0));
   const courbe = new THREE.CatmullRomCurve3(pts, true, "centripetal");
   const N = def.echantillons ?? 600;
@@ -253,10 +253,17 @@ export function construirePiste(def) {
   const zonesIA = [];
   // Rétrécissements (entonnoir) : { debut, fin, demiMin } en échantillons
   const retrecissements = [];
+  // Murs posés échantillon par échantillon (ex. les parois du ventre du T-rex) : demi-largeur max
+  const largeurs = new Float32Array(N).fill(Infinity);
+  /** Demi-largeur où l'on peut rouler à l'échantillon i : au plus demiMax (on garde la plus petite). */
+  function limiter(i, demiMax) {
+    const j = ((i % N) + N) % N;
+    largeurs[j] = Math.min(largeurs[j], demiMax);
+  }
 
   /** Demi-largeur où l'on peut rouler à cet endroit (jusqu'aux barrières ou à l'entonnoir). */
   function limiteLaterale(indice) {
-    let lim = demi + marge - 1.0;
+    let lim = Math.min(demi + marge - 1.0, largeurs[indice] ?? Infinity);
     for (const r of retrecissements) {
       const k = (indice - r.debut + N) % N;
       const n = (r.fin - r.debut + N) % N;
@@ -420,6 +427,6 @@ export function construirePiste(def) {
   const centre = new THREE.Vector3((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
   const rayon = Math.hypot(maxX - minX, maxZ - minZ) / 2;
 
-  const api = { groupe, N, L, pas, cx, cz, tx, tz, nx, nz, demi, marge, localiser, distanceCentre, angleA, centre, rayon, tremplins, hauteurTremplin, surfaces, zonesIA, ajouterTremplin, retrecissements, limiteLaterale, passages: [], trous, trouer, profil, abaisser };
+  const api = { groupe, N, L, pas, cx, cz, tx, tz, nx, nz, demi, marge, localiser, distanceCentre, angleA, centre, rayon, tremplins, hauteurTremplin, surfaces, zonesIA, ajouterTremplin, retrecissements, limiteLaterale, limiter, passages: [], trous, trouer, profil, abaisser };
   return api;
 }

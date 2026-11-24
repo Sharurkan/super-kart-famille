@@ -1048,37 +1048,6 @@ button:active {
   opacity: 0.9;
 }
 
-/* =================== CROC du T-rex =================== */
-/* le noir se referme en cercle sur le kart qui file dans la gueule (piloté image par image
-   par course.js : --r = rayon du trou de lumière, --x/--y = son centre), puis se rouvre dedans */
-.croc {
-  --r: 115%;
-  --x: 50%;
-  --y: 50%;
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0;
-  background: radial-gradient(circle farthest-corner at var(--x) var(--y), rgba(0, 0, 0, 0) calc(var(--r) - 35%), #000 var(--r));
-}
-
-.flash {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background: #fff8e1;
-  opacity: 0;
-}
-
-.flash.actif {
-  animation: flash 0.7s ease-out;
-}
-
-@keyframes flash {
-  0% { opacity: 1; }
-  100% { opacity: 0; }
-}
-
 /* petit lien discret vers les crédits des modèles 3D (écran des options) */
 .lien-credits {
   position: absolute;

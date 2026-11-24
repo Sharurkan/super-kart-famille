@@ -144,7 +144,8 @@ function placerBonbons(P) {
   if (P.ravin) interdits.push([P.ravin.debut - m(12), P.ravin.depose + m(6)]);
   if (P.looping) interdits.push([P.looping.prise - m(6), P.looping.rendu + m(6)]);
   for (const t of P.tremplins) interdits.push([t.debut - m(4), t.debut + t.nb + m(6)]);
-  if (P.teteTrex) interdits.push([P.teteTrex.indice - m(30), P.teteTrex.recrache + m(10)]);
+  // entonnoir et gueule du T-rex (on peut en ramasser dans son ventre, une fois la gorge passée)
+  if (P.teteTrex) interdits.push([P.teteTrex.gueule - m(50), P.teteTrex.gueule + m(36)]);
   const D = P.diplodocus;
   if (D) interdits.push([D.indice - m(4), D.fin + m(6)]); // lignes spéciales, plus bas
   const libre = (i) => !interdits.some(([a, b]) => dans(i, (a + N) % N, (b + N) % N));

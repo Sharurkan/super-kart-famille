@@ -45,7 +45,7 @@ function rampe(u, q = 0.25) {
   return g / (1 - q);
 }
 
-/** Ambiance sous l'eau (mêmes clés que AMBIANCE_INTERIEUR de interieur.js). */
+/** Ambiance sous l'eau (mêmes clés que AMBIANCE_VENTRE de ventre.js). */
 const AMBIANCE_EAU = {
   brouillard: [0x1d7fae, 5, 80],
   ciel: [0xa6ecff, 0x1a5a7a, 2.0],

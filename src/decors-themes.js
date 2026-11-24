@@ -6,6 +6,7 @@ import { planter, gardeRoute, planterJungle } from "./vegetation.js";
 import { installerRavin } from "./ptero.js";
 import { installerAquarium } from "./aquarium.js";
 import { installerBrachio } from "./brachio.js";
+import { installerTrex, indicesTrex } from "./ventre.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { creerVolcan } from "./volcan.js";
 
@@ -60,9 +61,9 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
       { espece: "Triceratops", n: 3, t: 0.3, lat: 44, S: 2.9 },
       { espece: "Stegosaurus", n: 2, t: 0.75, lat: 58, S: 2.9, marche: true, heros: true },
     ] },
-    // ligne droite du T-rex (sa tête géante au bout, le T-rex à 60 m avant elle : voir TREX)
+    // ligne droite du T-rex (le T-rex géant couché de ventre.js ; un T-rex debout avant sa tête : voir TREX)
     { debut: 0.525, fin: 0.64, cote: "ext", largeur: 200, troupeaux: [
-      { espece: "Velociraptor", n: 3, t: 0.04, lat: 33, S: 3.0 },
+      { espece: "Velociraptor", n: 3, t: 0.04, lat: 52, S: 3.0 }, // au-delà du corps du T-rex couché (ventre.js)
       { espece: "Stegosaurus", n: 2, t: 0.13, lat: 58, S: 2.9, heros: true },
     ] },
     // ligne droite du départ (le looping), côté intérieur du circuit
@@ -209,9 +210,8 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
     }
   }
   // Le T-rex : debout tout près de la route (derrière les rochers de l'entonnoir, sans toucher les barrières), 60 m avant
-  // sa tête géante, côté plaine. Il regarde les karts arriver et rugit (clip Attack) quand le joueur passe.
-  // La tête n'est installée que plus bas (teteTrex) : même calcul que teteTrex() pour son indice ; à
-  // l'arrivée du modèle, on se recale sur piste.teteTrex (la vraie place).
+  // le centre de la tête du T-rex géant couché (ventre.js, indicesTrex), côté plaine. Il regarde les karts
+  // arriver et rugit (clip Attack) quand le joueur passe.
   const TREX = { avant: 60, lat: 38, S: 2.4, rugir: 60 }; // avant la gueule (m), du milieu de la route (m), taille, distance du rugissement (m)
   const P3 = PLAINES[2];
   const placeTrex = (iTete) => {
@@ -221,10 +221,9 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
     const x = piste.cx[i] + piste.nx[i] * l, z = piste.cz[i] + piste.nz[i] * l;
     return { i, x, z, angle: Math.atan2(piste.cx[iVise] - x, piste.cz[iVise] - z) };
   };
-  const trex = { place: placeTrex(ligneDroiteLongue(piste, 0.63, GUEULE_AVANT + ELAN_GUEULE + 4.5 + 70, 30, 0.06)), pret: false, arme: true };
+  const trex = { place: placeTrex(indicesTrex(piste).tete), pret: false, arme: true };
   clairiereDino(trex.place.x, trex.place.z, trex.place.angle, LONGUEUR.Trex * TREX.S, "Trex", trex.place.i);
   creerDino("Trex", { animation: "Idle", hauteur: HAUTEUR.Trex * TREX.S }).then(({ objet, mixer, clips }) => {
-    if (piste.teteTrex && piste.teteTrex.indice !== undefined) trex.place = placeTrex(piste.teteTrex.indice);
     // toute son emprise est vérifiée (route, barrières, vue de la caméra, tête géante)
     const boite = new THREE.Box3().setFromObject(objet);
     const raison = gene(boite, trex.place.x, trex.place.z, trex.place.angle);
@@ -330,7 +329,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   groupe.add(instances(new THREE.SphereGeometry(1, 16, 10), sol?.material ?? new THREE.MeshLambertMaterial({ color: 0x74b816 }), collines));
   // pas de petit nuage blanc devant le volcan (ni devant son panache)
   nuages(groupe, piste, rnd, (a) => Math.abs(Math.atan2(Math.sin(a - ANGLE_VOLCAN), Math.cos(a - ANGLE_VOLCAN))) < 0.6);
-  teteTrex(piste, groupe);
+  mixers.push(installerTrex(groupe, piste)); // T-rex géant couché : la route passe dans sa gueule et son ventre (ventre.js)
   diplodocus(piste, groupe); // après le T-rex : sa place ne change pas
   decorLooping(piste, groupe);
   ravinDuPtero(groupe, piste); // ligne droite du haut : le vide et le ptérodactyle
@@ -1082,25 +1081,6 @@ function sentiers(groupe, piste, rnd, nombre, garde) {
 }
 
 // ---------------------------------------------------------------------------
-/**
- * Grosse tête de T-rex (modèle 3D généré par IA puis coloré) posée en travers de la route.
- * La route se resserre entre deux rangées de rochers jusqu'à un tremplin qui envoie les
- * karts dans la gueule : le T-rex les croque puis les recrache derrière lui (voir course.js).
- */
-// Dans le modèle, la gueule ne regarde pas +x et la tête n'est pas centrée sur l'origine.
-// Mesuré (pas réglé à l'œil) : on cherche le plan vertical de symétrie gauche/droite de la tête,
-// celui pour lequel le reflet de chaque sommet retombe au plus près d'un autre sommet (recherche
-// sur l'angle et le décalage, sommets au-dessus du socle) : un seul minimum net, erreur moyenne
-// 0,024 unité contre ~0,07 ailleurs. Le milieu de la gueule ouverte est sur ce plan.
-const ROTATION_GUEULE = 0.86; // radians : direction du museau dans le modèle (axe de symétrie)
-const PLAN_SYMETRIE = 0.06; // unités du modèle : écart du plan de symétrie à l'origine (≈ 1 m une fois agrandi)
-const DECALAGE_GUEULE = 0; // mètres vers la droite de la route : la gueule est centrée sur l'axe
-
-// bord avant de la gueule (lèvres et dents), en mètres avant le centre de la tête : mesuré sur
-// le modèle placé (≈ 11,8 m) ; remplacé par la vraie mesure quand le modèle est chargé
-const GUEULE_AVANT = 12;
-const ELAN_GUEULE = 9; // mètres entre le haut du tremplin et la gueule : on y arrive en haut du saut
-
 /** Indice d'une ligne droite assez longue avant (et un peu après) un point, près d'une position voulue. */
 function ligneDroiteLongue(piste, fraction, avant, apres, fenetre) {
   const N = piste.N;
@@ -1117,86 +1097,6 @@ function ligneDroiteLongue(piste, fraction, avant, apres, fenetre) {
     if (c < cMin) { cMin = c; meilleur = j; }
   }
   return meilleur;
-}
-
-function teteTrex(piste, groupe) {
-  const N = piste.N;
-  const nbRampe = Math.max(1, Math.round(4.5 / piste.pas));
-  // il faut ~95 m de ligne droite avant la tête (entonnoir + tremplin + gueule) et ~30 m après (on est recraché)
-  const i = ligneDroiteLongue(piste, 0.63, GUEULE_AVANT + ELAN_GUEULE + 4.5 + 70, 30, 0.06);
-  const debutRampe = (i - Math.round((GUEULE_AVANT + ELAN_GUEULE) / piste.pas) - nbRampe + N) % N;
-  const debutEntonnoir = (debutRampe - Math.round(55 / piste.pas) + N) % N;
-  const DEMI_ETROIT = 3.6;
-  piste.retrecissements.push({ debut: debutEntonnoir, fin: i, demiMin: DEMI_ETROIT });
-  groupe.add(piste.ajouterTremplin({ debut: debutRampe, nb: nbRampe, lateral: 0, demiLargeur: DEMI_ETROIT, hauteur: 1.3 }));
-  // distanceGueule : distance (le long de la piste, avant l'indice) du bord avant de la gueule
-  piste.teteTrex = { indice: i, recrache: (i + Math.round(26 / piste.pas)) % N, distanceGueule: GUEULE_AVANT };
-
-  // rochers le long de l'entonnoir (ce sont eux qui "font" les murs) : vrais rochers du pack
-  // Quaternius, trois formes en alternance (les murs physiques viennent de piste.limiteLaterale)
-  const ROCHERS = ["Rock_Medium_1", "Rock_Medium_2", "Rock_Medium_3"];
-  const rochers = ROCHERS.map(() => []);
-  const longueur = (i - debutEntonnoir + N) % N;
-  for (let k = 0; k <= longueur; k += 2) {
-    const j = (debutEntonnoir + k) % N;
-    const lim = piste.limiteLaterale(j) + 1.6;
-    if (lim > piste.demi + piste.marge) continue;
-    for (const s of [1, -1]) {
-      rochers[(k / 2 + (s > 0 ? 0 : 1)) % 3].push({ x: piste.cx[j] + piste.nx[j] * s * lim, z: piste.cz[j] + piste.nz[j] * s * lim, s: 0.9 + ((k * 7) % 5) * 0.08, y: -0.2, r: k * 1.7 + s });
-    }
-  }
-  ROCHERS.forEach((nom, n) => planter(groupe, nom, rochers[n]));
-
-  // la tête : chargée en arrière-plan
-  new GLTFLoader().loadAsync(import.meta.env.BASE_URL + "dinos/tete-trex.glb").then((gltf) => {
-    const modele = gltf.scene;
-    modele.traverse((o) => {
-      if (o.isMesh) {
-        o.geometry.computeVertexNormals();
-        const map = o.material.map; // texture projetée depuis l'image Gemini (Blender)
-        if (map) map.anisotropy = 4;
-        o.material = map ? new THREE.MeshLambertMaterial({ map, flatShading: true }) : new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-      }
-    });
-    // le modèle fait ~2 unités de large, socle en bas, museau à ROTATION_GUEULE de +x (vers +z)
-    const boite = new THREE.Box3().setFromObject(modele);
-    const echelle = 17;
-    const v = new THREE.Vector3();
-    const tete = new THREE.Group();
-    tete.add(modele);
-    modele.scale.setScalar(echelle);
-    modele.position.y = -boite.min.y * echelle - 0.6; // socle un peu enfoncé dans le sol
-    tete.position.set(piste.cx[i] + piste.nx[i] * DECALAGE_GUEULE, 0, piste.cz[i] + piste.nz[i] * DECALAGE_GUEULE);
-    // oriente la tête (axe du museau dans le modèle) et pose son plan de symétrie sur l'axe de la route
-    const placer = (angleGueule, plan = PLAN_SYMETRIE) => {
-      const perp = new THREE.Vector2(-Math.sin(angleGueule), Math.cos(angleGueule));
-      modele.position.x = -perp.x * plan * echelle;
-      modele.position.z = -perp.y * plan * echelle;
-      tete.rotation.y = piste.angleA(i) + Math.PI / 2 + angleGueule; // gueule tournée vers les karts qui arrivent
-      piste.teteTrex.distanceGueule = mesurerGueule();
-    };
-    // où est vraiment le bord avant de la gueule (lèvres, dents) le long de la route ?
-    const mesurerGueule = () => {
-      tete.updateMatrixWorld(true);
-      let sMin = Infinity;
-      modele.traverse((o) => {
-        if (!o.isMesh) return;
-        const pa = o.geometry.attributes.position;
-        for (let k = 0; k < pa.count; k++) {
-          v.fromBufferAttribute(pa, k).applyMatrix4(o.matrixWorld);
-          if (v.y < 1 || v.y > 10) continue; // pas le socle posé par terre
-          const dx = v.x - piste.cx[i], dz = v.z - piste.cz[i];
-          if (Math.abs(dx * piste.nx[i] + dz * piste.nz[i]) > 4) continue; // devant la route seulement
-          sMin = Math.min(sMin, dx * piste.tx[i] + dz * piste.tz[i]);
-        }
-      });
-      return Number.isFinite(sMin) ? -sMin : GUEULE_AVANT;
-    };
-    placer(ROTATION_GUEULE);
-    piste.teteTrex.objet = tete;
-    piste.teteTrex.placer = placer;
-    groupe.add(tete);
-  });
 }
 
 // ---------------------------------------------------------------------------

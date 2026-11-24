@@ -170,7 +170,7 @@ export function installerBrachio(groupe, piste, { indice } = {}) {
     let mieux = null;
     for (const k of piste.humains ?? []) {
       const p = k.phys;
-      if (!p || p.indice < 0 || k.dedans) continue;
+      if (!p || p.indice < 0) continue;
       let e = (iAv - p.indice + N) % N;
       if (e > N / 2) e -= N;
       const d = e * pas;

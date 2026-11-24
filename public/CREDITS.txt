@@ -90,3 +90,4 @@ Poly Haven — https://polyhaven.com
 === Fabriqués pour ce jeu ===
 
 Tête de T-rex (dinos/tete-trex.glb) : image Gemini, maillage Hunyuan3D, texture projetée avec Blender.
+Corps du T-rex couché et son ventre (src/ventre.js) : construits en code pour ce jeu, autour de la même tête.

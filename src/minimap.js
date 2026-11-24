@@ -6,31 +6,16 @@
 const INTERVALLE = 1 / 20; // secondes entre deux dessins
 const MARGE = 0.1; // marge autour du tracé (fraction de la taille)
 
-/**
- * Où dessiner un kart sur le circuit principal. Dans le T-rex (k.ventre, voir course.js),
- * il glisse le long de la route de la gueule jusqu'au point où il ressort, au rythme de
- * sa traversée (f de 0 à 1) : personne ne disparaît ni ne saute.
- */
+/** Où dessiner un kart : sa vraie position (le ventre du T-rex fait partie de la route). */
 export function positionCarte(piste, k) {
-  const v = k.ventre;
-  if (!v) {
-    const ph = k.physPrincipale ?? k.phys;
-    return { x: ph.x, z: ph.z };
-  }
-  const N = piste.N, s = v.i0 + v.ecart * v.f;
-  const a = Math.floor(s), u = s - a, i = ((a % N) + N) % N, j = (i + 1) % N;
-  const reste = 1 - v.f; // l'écart à la ligne du milieu s'efface
-  return {
-    x: piste.cx[i] + (piste.cx[j] - piste.cx[i]) * u + v.dx * reste,
-    z: piste.cz[i] + (piste.cz[j] - piste.cz[i]) * u + v.dz * reste,
-  };
+  return { x: k.phys.x, z: k.phys.z };
 }
 
 export class Minimap {
   /**
    * @param {HTMLCanvasElement} canvas
    * @param {object} piste    piste principale (cx, cz, N, nx, nz, demi)
-   * @param {object[]} karts  karts de la course (phys, physPrincipale, perso, joueur, mange)
+   * @param {object[]} karts  karts de la course (phys, perso, joueur)
    * @param {object} options  { couleurs: {perso: "#hex"}, urlFace: (perso) => url }
    */
   constructor(canvas, piste, karts, { couleurs = {}, urlFace } = {}) {

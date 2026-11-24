@@ -258,12 +258,10 @@ export function gardeRoute(piste) {
     if (lim < demi + marge - 1.5 && lat < barriere && lat - r < lim + 2.6) return "entonnoir";
     const L = piste.looping;
     if (L && dans(i, (L.prise - 4 + N) % N, (L.rendu + 4) % N) && lat - r < barriere) return "looping";
-    // 2. le dos du diplodocus et la tête du T-rex (mesurés sur les modèles placés : ±15 m et ±22 m)
+    // 2. le dos du diplodocus (mesuré sur le modèle placé : ±15 m)
     const D = piste.diplodocus;
     if (D && dans(i, (D.indice - 3 + N) % N, (D.fin + 3) % N) && lat - r < 16.5) return "diplodocus";
-    const T = piste.teteTrex;
-    if (T && Math.abs(ecart(i, T.indice)) <= Math.round(18 / pas) && lat - r < 23.5) return "trex";
-    // autres grands décors posés sur la route (ex. l'aquarium) : [{ debut, fin, demi }]
+    // autres grands décors posés sur la route (ex. l'aquarium, le T-rex couché) : [{ debut, fin, demi }]
     for (const Z of piste.zonesDecor ?? []) if (dans(i, Z.debut, Z.fin) && lat - r < Z.demi) return "decor";
     // 3. le ravin : rien qui pende au-dessus du vide (rectangle aux bouts arrondis, bords bruités)
     const V = piste.ravin;
