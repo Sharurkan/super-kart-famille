@@ -592,6 +592,7 @@ const matOmbre = new THREE.MeshBasicMaterial({ map: texOmbre, transparent: true,
  */
 export function creerKart(type = "classique") {
   const groupe = new THREE.Group();
+  groupe.userData.kart = true; // (le décor suit les karts : ex. les raptors qui traversent sous le saut)
   const corps = new THREE.Group();
   groupe.add(corps);
   const roues = { avant: [], arriere: [] };

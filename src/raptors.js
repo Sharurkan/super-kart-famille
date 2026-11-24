@@ -336,11 +336,11 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
   const dansZone = (i, Z) => ((i - Z.debut + N) % N) <= ((Z.fin - Z.debut + N) % N);
   const enTunnel = (i) => (piste.zonesDecor ?? []).some((Z) => /trex|tranch|aquarium/i.test(Z.nom ?? "") && dansZone(i, Z));
 
-  // --- coureurs : en file, dans une voie juste derrière les barrières, sur une ligne droite dégagée ---
-  // Voie à bord + 5,1 m de l'axe (barrières à bord + 0,8) : le corps reste derrière les barrières et
-  // n'atteint pas la lave du 3e tour (elle commence à bord + 6 m, lave.js : smoothstep(b + 6, b + 9)).
+  // --- coureurs : en file, dans une voie juste derrière les barrières, sur une longue portion dégagée ---
+  // Voie à bord + 5,5 m de l'axe (barrières à bord + 0,8) : le corps reste derrière les barrières et
+  // touche à peine le bord de la lave du 3e tour (elle commence à bord + 6 m, lave.js : smoothstep(b + 6, b + 9)).
   // Plus loin (21-34 m), les rivières de lave longent plus de la moitié du tour.
-  const VOIES = [bord + 5.1];
+  const VOIES = [bord + 5.5];
   function voieLibre(i, lat, h) {
     const P = point(i, lat), dl = DL * h + 1.6, dw = DW * h + 1.6; // (marge de trajetGene : 1,5 m)
     for (const [u, w] of [[-1, -1], [-1, 1], [1, -1], [1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]]) {
@@ -350,7 +350,9 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
     }
     const pb = garde.probleme(P.x, P.z, DW * h, h);
     if (pb) return non("voie-" + pb);
-    for (const c of clairieres) if ((P.x - c.x) ** 2 + (P.z - c.z) ** 2 < (c.occupe + dl) ** 2) return non("voie-troupeau");
+    // route surélevée (virage relevé...) : on ne les verrait pas derrière son bord
+    if (Math.max(piste.hauteurTremplin(i, 12).h, piste.hauteurTremplin(i, -12).h) > 0.6) return non("voie-relief");
+    for (const c of clairieres) if ((P.x - c.x) ** 2 + (P.z - c.z) ** 2 < (0.85 * c.occupe + dl) ** 2) return non("voie-troupeau");
     for (const c of evite) if ((P.x - c.x) ** 2 + (P.z - c.z) ** 2 < (c.r + dl) ** 2) return non("voie-volcan");
     return true;
   }
@@ -373,13 +375,14 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
           const nb = (q - 1 - debut) * PAS; // échantillons libres
           // (3 m retirés à chaque bout, par prudence : voieLibre vérifie déjà la longueur du corps)
           const bout = Math.round(3 / pas);
-          if ((nb - 2 * bout) * pas >= 45) cands.push({ cote, i0: (((k0 + debut) % n) * PAS + bout) % N, n: Math.min(nb - 2 * bout, Math.round(170 / pas)) });
+          if ((nb - 2 * bout) * pas >= 45) cands.push({ cote, i0: (((k0 + debut) % n) * PAS + bout) % N, n: Math.min(nb - 2 * bout, Math.round(300 / pas)) });
           debut = -1;
         }
       }
     }
-    // les plus longues lignes droites, et pas deux fois au même endroit (côtés opposés compris)
+    // les plus longues portions (au moins 120 m s'il y en a : la course dure alors ~5 s ou plus)
     cands.sort((a, b) => b.n - a.n);
+    if (cands.some((c) => c.n * pas >= 120)) cands.splice(0, cands.length, ...cands.filter((c) => c.n * pas >= 120));
     const pris = [];
     for (const c of cands) {
       if (pris.length >= combien) break;
@@ -389,7 +392,7 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
       const L = c.n * pas;
       const g = { type: "coureurs", S, h, i0: c.i0, L, cote: c.cote, membres: [], etat: "attend", tAttente: 0 };
       // trois coureurs en file (14 m d'écart), un devant le kart, un à sa hauteur, un derrière
-      [[0, 30, 16], [0, 16, 2], [0, 2, -12]].forEach(([voie, maison, devant], k) => g.membres.push({ voie: VOIES[voie] * c.cote, maison, devant, s: maison, v: 0, echelle: 0.95 + rnd() * 0.1, k }));
+      [[0, 30, 15], [0, 16, 1], [0, 2, -13]].forEach(([voie, maison, devant], k) => g.membres.push({ voie: VOIES[voie] * c.cote, maison, devant, s: maison, v: 0, echelle: 0.95 + rnd() * 0.1, k }));
       for (let s = 0; s <= L; s += 4) for (const l of VOIES) { const p = positionVoie(g, s, l * c.cote); reserver(p.x, p.z, DW * h + 2.5); }
       groupes.push(g);
     }
@@ -402,6 +405,108 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
       x: cx[i] + (cx[j] - cx[i]) * a + ex * lat, z: cz[i] + (cz[j] - cz[i]) * a + ez * lat,
       angle: Math.atan2(tx[i] + (tx[j] - tx[i]) * a, tz[i] + (tz[j] - tz[i]) * a),
     };
+  }
+
+  // --- sauteurs : une petite meute court à côté du kart, puis traverse la route juste après un grand
+  // tremplin : le kart saute et passe au-dessus d'eux. ---
+  // Repère : s = distance (m) le long de la route depuis le haut du tremplin (bout de la pente).
+  // Traversée synchronisée sur le kart du joueur (voir majSauteurs) et jamais quand un kart roulerait
+  // au sol dans la zone : chaque kart est prévu (vitesse, saut) avant de partir.
+  const SAUT = {
+    H: 3.0, // m, hauteur du tremplin (envol : vy = 0,32 v + 2, physique.js ; à 24 m/s, ~4,5 m au plus haut)
+    LONG: 13, // m, longueur de la pente
+    S: 1.15, // taille des sauteurs (2,5 m de haut : le kart passe 1 m au-dessus)
+    SZ: 6.8, // m après le haut du tremplin : milieu de la zone de traversée (le kart y est en l'air)
+    S_ATT: -30, // m : où ils attendent, au bord, avant le tremplin
+    VC: 24, // m/s en travers de la route
+  };
+  // formation en courant (en file le long de la route : ds, dl vers l'extérieur ; une seule file :
+  // une deuxième, plus loin, toucherait les rivières de lave du 3e tour) et en traversant (dc le long,
+  // ll en travers, trois colonnes) : 5 raptors ; corps de ~6,2 m de long, ~2,4 m de large
+  const FORM_COURSE = [[14, 0], [7, 0], [0, 0], [-7, 0], [-14, 0]];
+  const FORM_TRAVERSE = [[-3.2, -3.5], [-3.2, 3], [0, 0], [3.2, -3.5], [3.2, 3]];
+  function planSaut() {
+    const h = HAUTEUR * SAUT.S, nb = Math.round(SAUT.LONG / pas);
+    const voie = bord + 4.6; // m : le corps (petit) reste derrière les barrières et avant la lave (bord + 6)
+    const L = piste.looping, V = piste.ravin, D = piste.diplodocus;
+    const dansFen = (i, a, b) => ((i - a + N) % N) <= ((b - a + N) % N);
+    const interdit = (j, rampe) =>
+      (piste.zonesDecor ?? []).some((Z) => dansFen(j, (Z.debut - 3 + N) % N, (Z.fin + 3) % N)) ? "decor" :
+      L && dansFen(j, ((L.debutEntonnoir ?? L.prise) - 8 + N) % N, (L.rendu + 10) % N) ? "looping" :
+      V && dansFen(j, (V.debut - 10 + N) % N, (V.fin + 10) % N) ? "ravin" :
+      D && dansFen(j, (D.indice - 10 + N) % N, (D.fin + 10) % N) ? "diplodocus" :
+      // (le tremplin pas sur la grille de départ ni la ligne ; l'atterrissage peut passer sur la grille)
+      rampe && dansFen(j, N - Math.round(31 / pas), Math.round(14 / pas)) ? "depart" :
+      piste.tremplins.some((t) => Math.abs(ecart(j, t.debut)) < 40) ? "tremplin" :
+      [0, 12, -12].some((l) => Math.abs(piste.hauteurTremplin(j, l).h) > 0.05) ? "relief" : ""; // virage relevé...
+    const avant = Math.round((-SAUT.S_ATT + 17 - SAUT.LONG) / pas), apres = Math.round((SAUT.SZ + 27) / pas);
+    const cands = [];
+    for (let r0 = 0; r0 < N; r0++) {
+      let ok = true;
+      let pb = "";
+      for (let k = -avant; k <= nb + apres && !pb; k++) pb = interdit((r0 + k + N) % N, k <= nb);
+      if (pb) { non("saut-" + pb); continue; }
+      // presque droit : peu de changement de direction sur toute la portion
+      // (droit du tremplin à la fin de la traversée ; avant, la meute peut suivre un virage)
+      const a0 = piste.angleA((r0 - 8 + N) % N), a1 = piste.angleA((r0 + nb + Math.round((SAUT.SZ + 12) / pas)) % N);
+      const virage = Math.abs(Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0)));
+      if (virage < 0.8) cands.push({ r0, virage }); else non("saut-virage");
+    }
+    cands.sort((a, b) => a.virage - b.virage);
+    for (const c of cands) {
+      const iFin = (c.r0 + nb) % N;
+      // un côté pour courir (avant la zone), l'autre pour arriver (après la traversée)
+      const g0 = { i0: iFin };
+      const libre = (cote, s0, s1) => {
+        for (let s = s0; s <= s1; s += 2.3) {
+          const i = (iFin + Math.round(s / pas) + N) % N;
+          if (!voieLibre(i, voie * cote, h)) return false;
+        }
+        return true;
+      };
+      const cote = [-1, 1].find((k) => libre(k, SAUT.S_ATT - 17, SAUT.SZ + 17) && libre(-k, SAUT.SZ - 10, SAUT.SZ + 27));
+      if (!cote) { non("saut-cotes"); if (import.meta.env.DEV) (refus.sautCotes ??= []).push(c.r0); continue; }
+      groupe.add(piste.ajouterTremplin({ debut: c.r0, nb, lateral: 0, demiLargeur: bord, hauteur: SAUT.H }));
+      const g = { type: "sauteurs", S: SAUT.S, h, i0: iFin, r0: c.r0, cote, voie, membres: [], etat: "attend", sP: SAUT.S_ATT, vP: 0, latP: 0, b: 0, t: 0 };
+      FORM_COURSE.forEach((f, k) => g.membres.push({ k, echelle: 0.95 + rnd() * 0.1, img: rnd() * 10 }));
+      // leurs places au bord (les plantes n'y poussent pas)
+      for (let s = SAUT.S_ATT - 17; s <= SAUT.SZ + 17; s += 3) for (const l of [voie]) { const p = positionVoie(g0, s, l * cote); reserver(p.x, p.z, DW * h + 2.5); }
+      for (let s = SAUT.SZ - 10; s <= SAUT.SZ + 27; s += 3) for (const l of [voie]) { const p = positionVoie(g0, s, -l * cote); reserver(p.x, p.z, DW * h + 2.5); }
+      groupes.push(g);
+      piste.sautRaptors = { debut: c.r0, fin: iFin }; // (outil de test)
+      return;
+    }
+  }
+
+  // --- guetteurs : seuls au bord, derrière les barrières ; ils regardent passer le kart (tout le corps
+  // tourne vers lui) et rugissent en reculant quand il passe tout près ---
+  function planGuetteurs(n, S) {
+    const h = HAUTEUR * S, lat = bord + 8.5; // (le corps qui tourne reste derrière les barrières)
+    const R = DL * h + 1.6, pris = [];
+    const ordre = [...Array(Math.floor(N / 3)).keys()].map((k) => k * 3);
+    // au hasard, mais répartis sur le tour (au moins 90 m entre deux)
+    for (let k = ordre.length - 1; k > 0; k--) { const j = Math.floor(rnd() * (k + 1)); [ordre[k], ordre[j]] = [ordre[j], ordre[k]]; }
+    for (const i of ordre) {
+      if (pris.length >= n) break;
+      if (enTunnel(i) || pris.some((p) => Math.abs(ecart(i, p.i)) < 70 / pas)) continue;
+      const cote = rnd() < 0.5 ? 1 : -1;
+      for (const c of [cote, -cote]) {
+        const P = point(i, lat * c);
+        // (rayon du corps pour la vue de la caméra ; l'emprise exacte, toutes directions, est vérifiée au chargement)
+        const pb = garde.probleme(P.x, P.z, DW * h, h);
+        if (pb) { non("guet-" + pb); continue; }
+        if (reserves.some((r) => (P.x - r.x) ** 2 + (P.z - r.z) ** 2 < (r.r + R + 2) ** 2)) { non("guet-raptors"); continue; }
+        if (clairieres.some((q) => (P.x - q.x) ** 2 + (P.z - q.z) ** 2 < (0.85 * q.occupe + R) ** 2)) { non("guet-troupeau"); continue; }
+        let lave = false;
+        for (let a = 0; a < 12 && !lave; a++) { const x = P.x + Math.cos(a * 0.524) * R, z = P.z + Math.sin(a * 0.524) * R; lave = laveProbable(x, z, Math.abs(piste.localiser(x, z, i).lateral), bord); }
+        // (sur une rivière de lave du 3e tour : permis, mais il s'en va avant qu'elle arrive, voir majGuetteur)
+        if (lave && pris.filter((q) => q.lave).length >= n - 1) { non("guet-lave"); continue; }
+        reserver(P.x, P.z, R + 1);
+        groupes.push({ type: "guetteurs", lave, S, h, i, cote: c, P, membres: [{ k: 0, echelle: 0.95 + rnd() * 0.1, img: rnd() * 10, recul: 0, cri: false, angle: null }] });
+        pris.push({ i, lave });
+        break;
+      }
+    }
   }
 
   // --- chasseurs : rôdent en rond près de la route, l'un après l'autre bondit au centre et rugit ---
@@ -551,10 +656,12 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
   // placement : coureurs (près des barrières) d'abord, puis chasseurs, puis les grandes meutes
   // (autant que la place le permet : certains groupes ne trouvent pas de place, voir bilan())
   // (meutes avant les chasseurs : elles ont besoin de grandes places, les chasseurs se glissent entre)
-  planCoureurs(2.0, 3);
+  planSaut(); // (avant les coureurs : le tremplin et la meute qui traverse prennent leur portion)
+  planCoureurs(2.0, 2);
+  planGuetteurs(7, 1.7);
   // (trois meutes, les plus visibles depuis la route : au-delà, elles seraient loin, cachées par le décor)
   for (const [n, S] of [[10, 2.4], [9, 2.3], [8, 2.4]]) planMeute(n, S);
-  for (const n of [4, 4, 4, 3, 3, 3]) planChasseurs(n, 2.6);
+  for (const n of [4, 3]) planChasseurs(n, 2.6);
   const tempsPlacement = performance.now() - debutPlacement;
 
   // ---------------------------------------------------------------------------
@@ -621,9 +728,9 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
   function majCoureurs(g, dt) {
     const sK = kart ? ((((kart.s - g.i0 * pas) % piste.L) + piste.L) % piste.L) : 1e9;
     const rel = sK > piste.L / 2 ? sK - piste.L : sK; // kart par rapport au début du segment (m)
-    // départ quand le kart arrive (la voie est courte : ils partent assez tôt pour être déjà lancés)
-    if (g.etat === "attend" && kart && rel > -18 && rel < 5 && kart.v > 6) g.etat = "court";
-    if (g.etat === "court" && (rel > g.L + 25 || rel < -80)) { g.etat = "fini"; g.tAttente = 0; }
+    // départ quand le kart arrive : ils accélèrent et se mettent à sa hauteur
+    if (g.etat === "attend" && kart && rel > -70 && rel < 5 && kart.v > 6) g.etat = "court";
+    if (g.etat === "court" && (rel > g.L + 25 || rel < -120)) { g.etat = "fini"; g.tAttente = 0; }
     if (g.etat === "fini") {
       g.tAttente += dt;
       // le kart est loin et personne ne les voit : ils retournent au départ
@@ -632,19 +739,19 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
         for (const m of g.membres) { m.s = m.maison; m.v = 0; }
       }
     }
-    const VMAX = 30, ACC = 22;
+    const VMAX = 36, ACC = 24;
     // ordre dans chaque voie : 14 m au moins entre deux coureurs
     const tries = [...g.membres].sort((a, b) => b.devant - a.devant);
     const FREIN = ACC * 1.5;
     for (const m of tries) {
       // fini : ils freinent et s'arrêtent (distance de freinage), sans dépasser la fin de la voie
-      // court : la vitesse du kart, moins s'ils sont en avance sur leur place à côté de lui (au moins
-      // 60 % de sa vitesse : le kart les rattrape et ils courent à côté de lui jusqu'au bout de la voie)
+      // court : la vitesse du kart, corrigée vers leur place à côté de lui (un devant, un à sa hauteur,
+      // un juste derrière) : ils attendent qu'il arrive, puis restent à sa hauteur jusqu'au bout de la voie
       const vK = kart?.v ?? 0, place = rel + m.devant;
       let cible = g.etat === "court" ? g.L - 8 : g.etat === "fini" ? m.s + (m.v * m.v) / (2 * FREIN) + 0.1 : m.maison;
       cible = Math.max(0, Math.min(g.L - 8, cible));
       for (const o of tries) if (o !== m && o.voie === m.voie && o.devant > m.devant) cible = Math.max(0, Math.min(cible, o.s - 14));
-      let vVoulue = g.etat === "court" ? vK + Math.max(-0.4 * vK, Math.min(8, (place - m.s) * 1.2)) : (cible - m.s) * 1.5;
+      let vVoulue = g.etat === "court" ? vK + Math.min(10, (place - m.s) * 1.5) : (cible - m.s) * 1.5;
       // jamais plus vite que ce qui permet de s'arrêter à temps
       vVoulue = Math.max(0, Math.min(VMAX, vVoulue, Math.sqrt(2 * FREIN * Math.max(0, cible - m.s))));
       m.v += Math.max(-FREIN * dt, Math.min(ACC * dt, vVoulue - m.v));
@@ -669,6 +776,172 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
     e.image = m.img;
   }
 
+  // --- sauteurs ---
+  // Tous les karts (le joueur et les adversaires) : position, vitesse, hauteur, suivis image par image
+  // (les modèles des karts sont dans la scène, marqués userData.kart : karts.js).
+  const suivis = new Map(); // groupe du kart -> { x, z, y, v, vy, i }
+  function majKarts(dt) {
+    const scene = groupe.parent;
+    if (!scene || dt <= 0) return;
+    for (const o of scene.children) {
+      if (!o.userData.kart) continue;
+      const x = o.position.x, y = o.position.y, z = o.position.z;
+      let k = suivis.get(o);
+      if (!k) { suivis.set(o, { x, y, z, v: 0, vy: 0, i: -1 }); continue; }
+      const v = Math.min(45, Math.hypot(x - k.x, z - k.z) / dt);
+      k.v = v > 40 ? k.v : k.v * 0.6 + v * 0.4; // (un saut de position : remis sur la piste)
+      k.vy = (y - k.y) / dt;
+      k.x = x; k.y = y; k.z = z;
+    }
+  }
+  /** Le kart dans le repère du saut : s (m depuis le haut du tremplin), latéral. */
+  function repereSaut(g, k) {
+    const L = piste.localiser(k.x, k.z, k.i >= 0 ? k.i : -1);
+    k.i = L.indice;
+    return { s: ecart(L.indice, g.i0) * pas + L.long, lat: L.lateral };
+  }
+  const hautSauteur = () => (M ? M.boite.max.y : 1.16) * HAUTEUR * SAUT.S * 1.05;
+  /**
+   * Personne ne roule au sol dans la zone pendant la traversée (de maintenant à t2 secondes) :
+   * chaque kart qui y passe pendant ce temps doit y être en l'air, assez haut (prévu par son saut).
+   */
+  function traverseeSure(g, t2) {
+    const s0 = SAUT.SZ - 4.6, s1 = SAUT.SZ + 4.6, hMin = hautSauteur() + 0.4;
+    for (const k of suivis.values()) {
+      if (Math.hypot(k.x - cx[g.i0], k.z - cz[g.i0]) > 160) continue;
+      const { s, lat } = repereSaut(g, k);
+      if (k.v < 1) { if (s > s0 - 3 && s < s1 + 3) return false; continue; }
+      const ta = (s0 - s) / k.v, tb = (s1 - s) / k.v;
+      if (tb < 0 || ta > t2 + 0.3) continue; // déjà passé, ou arrivera après
+      // hauteur prévue dans la zone (parabole : la plus basse à l'entrée ou à la sortie)
+      let y;
+      if (s < 0 && Math.abs(lat) <= bord) {
+        const tl = -s / k.v, vy = 0.32 * k.v + 2;
+        y = (tt) => (tt < tl ? 0 : SAUT.H + vy * (tt - tl) - 14 * (tt - tl) ** 2);
+      } else if (k.y > 0.3) y = (tt) => k.y + k.vy * tt - 14 * tt * tt;
+      else return false;
+      if (Math.min(y(Math.max(0, ta)), y(Math.max(0, tb))) < hMin) return false;
+    }
+    return true;
+  }
+  function majSauteurs(g, dt) {
+    g.t += dt;
+    const J = piste.humains?.[0]?.phys;
+    if (!J) return;
+    const jk = { x: J.x, z: J.z, i: J.indice };
+    const { s: sK, lat: latK } = repereSaut(g, jk);
+    const vK = Math.max(0, J.vitesse);
+    const latA = g.cote * (bord + 0.8 + 3.5 + 3.1 + 0.3), latB = -latA; // centre de la meute, avant / après
+    const dureeTraverse = (2 * Math.abs(latA)) / SAUT.VC;
+    const ACC = 26;
+    switch (g.etat) {
+      case "attend": case "court": {
+        // en avance sur le kart du temps qu'il faudra pour arriver devant lui en travers de la route
+        const tau = Math.abs(latK - latA) / SAUT.VC;
+        const sT = Math.min(SAUT.SZ, sK + vK * tau);
+        if (g.etat === "attend" && sT > g.sP && sK < SAUT.SZ && sK > -150) g.etat = "court";
+        if (g.etat === "court") {
+          const vV = Math.max(0, Math.min(34, vK + (sT - g.sP) * 1.6, Math.sqrt(2 * ACC * Math.max(0, SAUT.SZ - g.sP))));
+          g.vP += Math.max(-ACC * 1.5 * dt, Math.min(ACC * dt, vV - g.vP));
+          g.sP = Math.min(SAUT.SZ, g.sP + g.vP * dt);
+          if (g.sP >= SAUT.SZ - 0.01) g.vP = Math.min(g.vP, 0.5);
+          if (g.sP >= SAUT.SZ - 1.5) {
+            // le kart du joueur arrive juste au bon moment (et assez vite pour bien sauter), ou il est
+            // passé : on traverse si personne ne risque de rouler au sol dans la zone
+            const tK = (SAUT.SZ - sK) / Math.max(vK, 1);
+            const aTemps = vK >= 19 && tK <= tau + 0.04 && tK >= tau - 0.3;
+            const passe = sK > SAUT.SZ + 12;
+            if ((aTemps || passe) && traverseeSure(g, dureeTraverse)) { g.etat = "traverse"; g.latP = latA; g.b = 0; g.avecKart = aTemps; g.traversees = (g.traversees ?? 0) + 1; }
+          }
+          if (sK > SAUT.SZ + 400) { g.etat = "fini"; g.tFini = 0; } // (ne devrait pas arriver)
+        }
+        break;
+      }
+      case "traverse":
+        g.sP = SAUT.SZ;
+        g.b = Math.min(1, g.b + dt / 0.3);
+        g.latP += -g.cote * SAUT.VC * dt;
+        if (g.cote * g.latP <= g.cote * latB) { g.latP = latB; g.etat = "apres"; g.b = 1; g.vP = 14; }
+        break;
+      case "apres":
+        // de l'autre côté : ils ralentissent et s'arrêtent, puis rugissent vers la route
+        g.b = Math.max(0, g.b - dt / 0.4);
+        g.vP = Math.max(0, g.vP - 12 * dt);
+        g.sP += g.vP * dt;
+        if (g.vP === 0) { g.etat = "fini"; g.tFini = 0; }
+        break;
+      case "fini":
+        g.tFini += dt;
+        // plus personne ne les voit et le kart est loin : ils retournent attendre au départ
+        if (g.tFini > 4 && Math.abs(sK) > 150 && g.membres.every((m) => !m.vu)) { g.etat = "attend"; g.sP = SAUT.S_ATT; g.vP = 0; g.b = 0; }
+        break;
+    }
+  }
+  function poserSauteur(e, dt) {
+    const { g, m } = e;
+    const [ds, dl] = FORM_COURSE[m.k], [dc, ll] = FORM_TRAVERSE[m.k];
+    const apres = g.etat === "apres" || g.etat === "fini";
+    // en courant : leur file au bord (côté départ, ou côté arrivée après la traversée)
+    const coteC = apres ? -g.cote : g.cote;
+    const sC = g.sP + ds, latC = coteC * (g.voie + dl);
+    // en traversant : la formation en travers, centrée sur latP
+    const sT = SAUT.SZ + dc, latT = g.latP - g.cote * ll;
+    const b = g.b * g.b * (3 - 2 * g.b);
+    const s = sC + (sT - sC) * b, lat = latC + (latT - latC) * b;
+    const p = positionVoie(g, s, lat);
+    e.x = p.x; e.z = p.z;
+    // ils sautent par-dessus les barrières
+    const dB = Math.abs(Math.abs(lat) - (bord + 0.8));
+    e.y = g.etat === "traverse" ? Math.max(0, 1 - (dB / 2.6) ** 2) * 1.7 : 0;
+    // direction : le long de la route, ou en travers
+    const aRoute = p.angle, i = ((g.i0 + Math.round(s / pas)) % N + N) % N;
+    const aTravers = Math.atan2(-g.cote * nx[i], -g.cote * nz[i]);
+    const da = Math.atan2(Math.sin(aTravers - aRoute), Math.cos(aTravers - aRoute));
+    e.angle = aRoute + da * Math.min(1, b * 1.1);
+    // animation
+    const v = g.etat === "traverse" ? SAUT.VC : g.vP;
+    const vRun = M.clips.Run.vitesse * e.h, vWalk = M.clips.Walk.vitesse * e.h;
+    let clip;
+    if (v > vWalk * 1.3) clip = "Run";
+    else if (v > 0.4) clip = "Walk";
+    else clip = g.etat === "fini" && g.tFini < M.clips.Attack.duree * 1.2 ? "Attack" : m.k % 3 === 1 ? "Eat" : "Idle";
+    const C = M.clips[clip];
+    if (clip !== m.clipAvant) m.img = 0;
+    m.img += clip === "Run" ? (Math.min(2.4, v / vRun) * C.nb * dt) / C.duree : clip === "Walk" ? ((v / vWalk) * C.nb * dt) / C.duree : (C.nb * dt) / C.duree;
+    m.clipAvant = clip;
+    e.clip = clip; e.image = m.img;
+  }
+  // --- guetteurs ---
+  function poserGuetteur(e, dt) {
+    const { g, m } = e, J = piste.humains?.[0]?.phys;
+    const versRoute = Math.atan2(-g.cote * nx[g.i], -g.cote * nz[g.i]);
+    let cible = versRoute, d = Infinity;
+    if (J) {
+      d = Math.hypot(J.x - g.P.x, J.z - g.P.z);
+      // le kart est près : il le suit des yeux (tout le corps tourne), mais pas jusqu'à lui tourner le dos
+      if (d < 70) {
+        const a = Math.atan2(J.x - g.P.x, J.z - g.P.z), da = Math.atan2(Math.sin(a - versRoute), Math.cos(a - versRoute));
+        cible = versRoute + Math.max(-1.9, Math.min(1.9, da));
+      }
+      if (d < 20 && !m.cri) { m.cri = true; m.tCri = 0; }
+      if (d > 60) m.cri = false;
+    }
+    if (m.angle === null) m.angle = versRoute;
+    const da = Math.atan2(Math.sin(cible - m.angle), Math.cos(cible - m.angle));
+    m.angle += Math.sign(da) * Math.min(Math.abs(da), 3.2 * dt);
+    // rugit et recule d'un pas quand le kart passe tout près, puis revient
+    const enCri = m.cri && m.tCri < M.clips.Attack.duree;
+    if (m.cri) m.tCri += dt;
+    m.recul += ((enCri ? 1.8 : 0) - m.recul) * Math.min(1, dt * (enCri ? 5 : 1.2));
+    e.x = g.P.x + nx[g.i] * g.cote * m.recul; e.z = g.P.z + nz[g.i] * g.cote * m.recul; e.y = 0;
+    e.angle = m.angle;
+    const clip = enCri ? "Attack" : Math.abs(da) > 0.25 ? "Walk" : d > 90 && m.k % 2 === 0 && Math.sin(t * 0.3 + g.i) > 0.3 ? "Eat" : "Idle";
+    if (clip !== m.clipAvant) m.img = 0;
+    m.img += (M.clips[clip].nb * dt) / M.clips[clip].duree * (clip === "Walk" ? 0.6 : 1);
+    m.clipAvant = clip;
+    e.clip = clip; e.image = m.img;
+  }
+
   // ---------------------------------------------------------------------------
   // vérification avec la vraie emprise du modèle (au chargement) : un groupe gêné est retiré
   const contour = (b, h, x, z, angle, marge = 1.5) => {
@@ -681,6 +954,7 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
     return pts;
   };
   const barriere = piste.demi + piste.marge + 0.8;
+  const PRES_ROUTE = new Set(["coureurs", "sauteurs", "guetteurs"]); // dans des couloirs dégagés exprès (pas la jungle)
   /** Raison pour laquelle ce raptor (posé en e) gêne, ou "". */
   function gene(e) {
     const b = M.boite, L = piste.localiser(e.x, e.z);
@@ -692,13 +966,36 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
         if (r) return r;
       }
     }
-    if (laveProbable(e.x, e.z, Math.abs(L.lateral), bord)) return "lave";
-    if (e.g.type !== "coureurs" && ouverture(L.indice, L.lateral) < 0.6) return "jungle"; // (couloir réservé des coureurs)
+    if (!e.g.lave && laveProbable(e.x, e.z, Math.abs(L.lateral), bord)) return "lave"; // (guetteur sur la lave : parti au 3e tour)
+    if (!PRES_ROUTE.has(e.g.type) && ouverture(L.indice, L.lateral) < 0.6) return "jungle"; // (couloir réservé des coureurs)
     return "";
   }
   /** Tout le trajet d'un groupe (positions sur un long moment, ou toute la voie des coureurs). */
   function trajetGene(g, pasT, duree) {
     const es = etats.filter((e) => e.g === g);
+    if (g.type === "guetteurs") {
+      // ils tournent sur place et reculent d'un pas : toutes les directions, à leur place et reculés
+      const e = es[0];
+      for (const r of [0, 1.8]) for (let a = 0; a < 8; a++) {
+        Object.assign(e, { x: g.P.x + nx[g.i] * g.cote * r, z: g.P.z + nz[g.i] * g.cote * r, angle: a * 0.785 });
+        const pb = gene(e);
+        if (pb) return pb;
+      }
+      return "";
+    }
+    if (g.type === "sauteurs") {
+      // au bord : en courant avant la traversée (côté départ), puis arrêtés de l'autre côté
+      // (la traversée elle-même est sur la route : voir traverseeSure)
+      const sauve = { etat: g.etat, sP: g.sP, b: g.b, vP: g.vP };
+      for (const [etat, s0, s1] of [["court", SAUT.S_ATT, SAUT.SZ], ["apres", SAUT.SZ, SAUT.SZ + 9]]) {
+        for (let s = s0; s <= s1; s += 2) {
+          Object.assign(g, { etat, sP: s, b: 0, vP: 0 });
+          for (const e of es) { poserSauteur(e, 0); const pb = gene(e); if (pb) { Object.assign(g, sauve); return `${pb} (${etat}, s = ${s})`; } }
+        }
+      }
+      Object.assign(g, sauve);
+      return "";
+    }
     // par défaut : un tour de boucle et demi (meute), un cycle de bonds (chasseurs)
     if (g.type === "meute") { pasT ??= 2.5 / g.vMoy; duree ??= (1.5 * g.L) / g.vMoy; }
     else { pasT ??= 0.2; duree ??= g.periode * g.n + 1; }
@@ -780,12 +1077,17 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
     let Lc = piste.localiser(camera.position.x, camera.position.z, iCam); // recherche locale (rapide)
     if (Math.abs(Lc.lateral) > 40) Lc = piste.localiser(camera.position.x, camera.position.z); // perdue : tout le tour
     iCam = Lc.indice;
-    const sK = Lc.indice * pas + Lc.long + 7.2;
+    let sK = Lc.indice * pas + Lc.long + 7.2;
     // vitesse du kart : déplacement de la caméra (qui le suit), lissé
     const px = camera.position.x, pz = camera.position.z;
     const vInst = kart && dt > 0 ? Math.min(40, Math.hypot(px - kart.x, pz - kart.z) / dt) : 0;
-    kart = { s: sK, x: px, z: pz, v: kart ? vInst * 0.15 + kart.v * 0.85 : 0 };
-    for (const g of groupes) if (g.type === "coureurs") majCoureurs(g, dt);
+    let vK = kart ? vInst * 0.15 + kart.v * 0.85 : 0;
+    // mieux : le kart du joueur lui-même, s'il est connu
+    const J = piste.humains?.[0]?.phys;
+    if (J && J.indice >= 0) { sK = J.indice * pas + piste.localiser(J.x, J.z, J.indice).long; vK = Math.max(0, J.vitesse); }
+    kart = { s: sK, x: px, z: pz, v: vK };
+    majKarts(dt);
+    for (const g of groupes) if (g.type === "coureurs") majCoureurs(g, dt); else if (g.type === "sauteurs") majSauteurs(g, dt);
     camera.updateMatrixWorld();
     pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     frustum.setFromProjectionMatrix(pv);
@@ -797,13 +1099,16 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
       const ancien = e.clip, ancienneImage = e.image;
       if (g.type === "meute") poserMeute(e, t);
       else if (g.type === "chasseurs") poserChasseur(e, t);
-      else poserCoureur(e, dt);
+      else if (g.type === "coureurs") poserCoureur(e, dt);
+      else if (g.type === "sauteurs") poserSauteur(e, dt);
+      else poserGuetteur(e, dt);
       if (e.clip !== ancien) { e.prec = { clip: ancien, image: ancienneImage, v: 0 }; e.fondu = 0; }
       else if (e.prec) {
         e.fondu += dt;
         e.prec.image += (M.clips[e.prec.clip].nb * dt) / M.clips[e.prec.clip].duree;
         if (e.fondu >= FONDU) e.prec = null;
       }
+      if (g.lave && (g.parti || ((piste.infoCourse?.tour ?? 0) >= 3 && !e.m.vu))) { g.parti = true; e.m.vu = false; stats.caches++; continue; }
       const d = Math.hypot(e.x - camera.position.x, e.z - camera.position.z);
       sphere.center.set(e.x, e.y + e.h * 0.5, e.z);
       sphere.radius = e.h * 1.15;
@@ -829,18 +1134,27 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
       get prets() { return pret; },
       get temps() { return { placement: +tempsPlacement.toFixed(1), cuisson: M?.tempsCuisson }; },
       get grilles() { return grilles?.map((G) => { let l = []; for (let b = G.nl - 1; b >= 0; b -= 1) { let s = String(Math.round(G.l0 + b * PAS_G)).padStart(4) + " "; for (let a = 0; a < G.nk; a++) s += G.libre[a * G.nl + b] ? "." : "#"; l.push(s); } return `plaine ${G.P.debut}\n` + l.join("\n"); }).join("\n"); },
-      groupes, etats, stats, refus, raisonDisque, voieLibre: (i, lat) => voieLibre(i, lat, HAUTEUR * 2),
+      suivis, get saut() { const g = groupes.find((q) => q.type === "sauteurs"); return g && { etat: g.etat, sP: +g.sP.toFixed(1), latP: +g.latP.toFixed(1), avecKart: g.avecKart, r0: g.r0, i0: g.i0, cote: g.cote, traversees: g.traversees ?? 0 }; },
+      groupes, etats, stats, refus, raisonDisque, voieLibre: (i, lat, h = HAUTEUR * 2) => voieLibre(i, lat, h), laveProbable: (x, z, d) => laveProbable(x, z, d, bord),
       /** Emprise de chaque raptor à sa place actuelle : distance mini à l'axe de la route, lave, jungle. */
       verifier() {
         const barriere = piste.demi + piste.marge + 0.8, hors = [];
         let latMin = 1e9;
         if (!pret) return { latMin, hors };
         for (const e of etats) {
+          if (e.g.type === "sauteurs" && e.g.etat === "traverse") {
+            // sur la route exprès : aucun kart au-dessus d'eux trop bas (ou au sol à côté)
+            for (const k of suivis.values()) {
+              if (Math.hypot(k.x - e.x, k.z - e.z) < 3.5 + e.h * 0.6 && k.y < e.y + hautSauteur() + 0.1) hors.push({ type: "sauteurs", k: e.m.k, pb: "kart-bas", y: +k.y.toFixed(2) });
+            }
+            continue;
+          }
           let lm = 1e9;
           for (const [px, pz] of contour(M.boite, e.h, e.x, e.z, e.angle, 0)) lm = Math.min(lm, Math.abs(piste.localiser(px, pz).lateral));
           latMin = Math.min(latMin, lm);
           const L = piste.localiser(e.x, e.z);
-          const pb = lm < barriere ? "route" : laveProbable(e.x, e.z, Math.abs(L.lateral), bord) ? "lave" : e.g.type !== "coureurs" && ouverture(L.indice, L.lateral) < 0.6 ? "jungle" : "";
+          if (e.g.parti) continue;
+          const pb = lm < barriere ? "route" : !e.g.lave && laveProbable(e.x, e.z, Math.abs(L.lateral), bord) ? "lave" : !PRES_ROUTE.has(e.g.type) && ouverture(L.indice, L.lateral) < 0.6 ? "jungle" : "";
           if (pb) hors.push({ type: e.g.type, k: e.m.k, pb, lat: +lm.toFixed(1) });
         }
         return { latMin: +latMin.toFixed(1), hors };
