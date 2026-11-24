@@ -5,7 +5,7 @@ import { fusion, matCouleurs } from "./decors-circuits.js";
 import { instances } from "./decor.js";
 import { audio } from "./audio.js";
 
-// Série de 4 loopings verticaux enchaînés (comme sur un circuit de petites voitures) dans la
+// Série de 3 loopings verticaux enchaînés (comme sur un circuit de petites voitures) dans la
 // ligne droite du départ. La route est resserrée par un entonnoir de plots, puis chaque kart
 // (enfant et adversaires) est pris "sur des rails" : boucle 1, un petit bout de route, boucle 2,
 // etc., sans jamais être lâché entre deux boucles. Il repart un peu plus vite à la fin.
@@ -21,9 +21,9 @@ import { audio } from "./audio.js";
 // Entre les boucles, le chemin suit la vraie route (elle tourne un tout petit peu ici).
 
 const R = 8; // rayon (16 m de diamètre)
-const NB = 4; // nombre de boucles
+const NB = 3; // nombre de boucles
 const ESPACE = 19.5; // mètres entre les bases de deux boucles (> 2R : elles ne se touchent pas)
-const BASE1 = 62; // échantillon de la base de la 1re boucle (~71 m après la ligne)
+const BASE1 = 60; // échantillon de la base de la 1re boucle (~69 m après la ligne ; la série finit vers 119 m)
 const DEMI = 3.2; // demi-largeur du ruban
 const BANDE = 0.7; // largeur des bandes de bordure
 const VOIE = 3.6; // décalage des deux voies (entrée de la 1re boucle à gauche, sortie à droite...)
@@ -411,13 +411,13 @@ function construireRuban(groupe, point, G, fin) {
 
 /**
  * Portiques qui tiennent les boucles (deux tours rayées, une poutre, une étoile) et un grand
- * numéro 1, 2, 3, 4 sur chaque poutre pour compter les loopings. Une même géométrie de base
+ * numéro 1, 2, 3 sur chaque poutre pour compter les loopings. Une même géométrie de base
  * est recopiée pour chaque boucle, tout est fusionné : un maillage de couleurs + un de numéros.
  */
 function construireStructures(groupe, dansBoucle) {
   const lat = VOIE + DEMI + 1.4; // tours de part et d'autre des deux voies
   const haut = 2 * R + 0.9;
-  const couleursTours = [0x9775fa, 0x4dabf7, 0x51cf66, 0xf783ac]; // une couleur par boucle
+  const couleursTours = [0x9775fa, 0x4dabf7, 0x51cf66, 0xf783ac]; // une couleur par boucle (NB au plus 4)
 
   // géométries de base (repère local : x en travers, y en haut, z le long de la route)
   const troncon = new THREE.CylinderGeometry(0.45, 0.5, haut / 6, 8, 1, true);
@@ -465,7 +465,7 @@ function construireStructures(groupe, dansBoucle) {
   groupe.add(new THREE.Mesh(fusion(parties), matCouleurs()));
   for (const g of [troncon, socle, boule, jambe, poutre, attache, etoile]) g.dispose();
 
-  // numéros : une seule texture (1 2 3 4 côte à côte), un seul maillage
+  // numéros : une seule texture (1 2 3 côte à côte), un seul maillage
   const toile = document.createElement("canvas");
   toile.width = 128 * NB;
   toile.height = 128;
