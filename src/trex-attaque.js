@@ -23,13 +23,13 @@ export const ATTAQUE = {
   approche: 85, // m avant le point de frappe : il se tourne vers le kart et se penche un peu
   hauteurBouche: 6.3, // m au-dessus de la route : milieu de la gueule au plus bas de la frappe
   plancher: 4.3, // m : aucun point de la tête ni de la mâchoire plus bas au-dessus de la route
-  descenteMin: 0.5, // s : durée du plongeon (selon la vitesse du kart)
-  descenteMax: 0.9,
+  descenteMin: 0.4, // s : durée du plongeon (selon la vitesse du kart ; rapide : il ne rate jamais le départ)
+  descenteMax: 0.7,
   tenue: 0.35, // s : gueule fermée, au plus bas, juste après le CLAC
   remontee: 1.2, // s : il se redresse
   rugit: 2.4, // s après le CLAC : la gueule se referme, retour au repos
   cote: 3.2, // m : la gueule claque à côté du kart (du côté du T-rex)
-  avance: 3, // m : ... et un peu devant lui (bien en vue de la caméra, derrière le kart)
+  avance: 13, // m : ... et devant lui : la gueule claque bien dans le champ de la caméra (derrière le kart)
   pivot: 0.7, // rad : il pivote au plus de tant sur ses pieds vers le kart (le reste : buste et cou)
 };
 
@@ -333,7 +333,7 @@ export function attaqueTrex({ objet, mixer, clips, piste, cote, iFrappe }) {
     if (E.phase === "frappe") {
       const u = E.tau / E.duree;
       // un petit recul (il prend son élan), puis le plongeon
-      wFrappe = u < 0.22 ? -0.18 * lisse(u / 0.22) : -0.18 + 1.18 * lisse((u - 0.22) / 0.78);
+      wFrappe = u < 0.15 ? -0.1 * lisse(u / 0.15) : -0.1 + 1.1 * lisse((u - 0.15) / 0.85);
       regardCible = 1;
       ouvre = 0.1 + 0.05 * lisse(u); // le clip ouvre déjà la gueule de ~55° : à peine plus
       if (u >= 1) {
@@ -398,7 +398,7 @@ export function attaqueTrex({ objet, mixer, clips, piste, cote, iFrappe }) {
     posF(chaine[0], pivot);
     bouche(Mrepos);
     const psiR = clamp(angle(az(R) - az(Mrepos)), -1.3, 1.3) * E.regard;
-    const thetaR = 0.1 * E.regard;
+    const thetaR = 0.22 * E.regard; // déjà penché pendant la guette : le plongeon est plus court
     let psi = psiR, theta = thetaR, kappa = 0;
     opts.regard = R; opts.wTete = E.regard; opts.ouvre = ouvre; opts.ferme = ferme; opts.secoue = secoue;
     if (wFrappe !== 0) {
