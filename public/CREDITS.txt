@@ -51,10 +51,12 @@ Chaque œuvre : « This work is based on "<titre>" by <auteur> licensed under CC
   https://sketchfab.com/3d-models/sago-palm-game-ready-low-poly-baked-textures-85c86658224a4fe493f0f35091635555
   Fichier : nature/realiste.glb (cycas)
 
-"Volcano" — santhu (santhu48)
-  https://sketchfab.com/3d-models/volcano-e89153ec4f324e688f78d001dd3f7e3c
-  Fichier : nature/volcan.glb (occlusion mélangée à la couleur, étiré en hauteur ;
-  sommet creusé en cratère et recoloré en roche volcanique : outils/blender/volcan_realiste.py)
+"Zheltovsky volcano" — SebastianSosnowski
+  https://sketchfab.com/3d-models/zheltovsky-volcano-fbe039ada6544e1da210f38381d78e9a
+  Fichier : nature/volcan.glb (jupe noire supprimée, terrain découpé en disque autour du sommet
+  et pied abaissé sous le sol, cratère peu profond creusé au sommet, textures réduites,
+  texture metallic/roughness supprimée, légèrement étiré en hauteur dans le jeu :
+  outils/blender/pack_zheltovsky.py)
 
 === CC0 (domaine public, merci quand même !) ===
 Licence : https://creativecommons.org/publicdomain/zero/1.0/

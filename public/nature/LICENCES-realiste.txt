@@ -1,6 +1,6 @@
 (Fichier de référence pour tous les crédits : public/CREDITS.txt. Extrait ci-dessous.)
 
-realiste.glb (outils/blender/pack_realiste.py) et volcan.glb (outils/blender/pack_volcan.py)
+realiste.glb (outils/blender/pack_realiste.py) et volcan.glb (outils/blender/pack_zheltovsky.py)
 
 Rochers (rock_moss_set_01, rock_07) et fougère (fern_02) : Poly Haven, CC0
   https://polyhaven.com/a/rock_moss_set_01
@@ -12,13 +12,15 @@ Cycas : "Sago Palm, Game ready, Low poly, baked textures." par Valykor, CC-BY 4.
   This work is based on "Sago Palm, Game ready, Low poly, baked textures." by Valykor
   (https://sketchfab.com/Valykor) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
 
-Volcan : "Volcano" par santhu (santhu48), CC-BY 4.0
-  https://sketchfab.com/3d-models/volcano-e89153ec4f324e688f78d001dd3f7e3c
-  This work is based on "Volcano" by santhu (https://sketchfab.com/santhu48)
+Volcan : "Zheltovsky volcano" par SebastianSosnowski, CC-BY 4.0
+  https://sketchfab.com/3d-models/zheltovsky-volcano-fbe039ada6544e1da210f38381d78e9a
+  This work is based on "Zheltovsky volcano" (https://sketchfab.com/3d-models/zheltovsky-volcano-fbe039ada6544e1da210f38381d78e9a)
+  by SebastianSosnowski (https://sketchfab.com/SebastianSosnowski)
   licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
 
-Modifications : maillages simplifiés, textures réduites et converties en WebP, occlusion
-mélangée à la couleur (volcan), canal alpha ajouté à la couleur (fougère).
+Modifications : maillages simplifiés, textures réduites et converties en WebP, canal alpha
+ajouté à la couleur (fougère) ; volcan découpé en disque autour du sommet, pied abaissé sous
+le sol, cratère creusé au sommet, texture metallic/roughness supprimée.
 
 arbres.webp + arbres.json (imposteurs : outils/blender/impostors_rendre.py puis impostors_atlas.py)
 Modèles photographiés sous 8 angles avec Blender, tous Poly Haven, CC0 :

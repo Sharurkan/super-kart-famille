@@ -5,8 +5,10 @@ import { audio } from "./audio.js";
 
 // Volcan en éruption (circuit Dinosaures), au fond de la grande plaine.
 //
-// Modèle : "Volcano" de santhu48 (Sketchfab, CC-BY 4.0), préparé par outils/blender/pack_volcan.py
-// puis outils/blender/volcan_realiste.py (vrai cratère au sommet, roche volcanique sombre).
+// Modèle : "Zheltovsky volcano" de SebastianSosnowski (Sketchfab, CC-BY 4.0), préparé par
+// outils/blender/pack_zheltovsky.py : sommet recentré sur l'origine, pied qui plonge sous le sol
+// (plus de bord carré), cratère peu profond creusé au sommet, textures réduites. La photo
+// d'origine (roche, ravines) reste la couleur de base.
 //
 // Tout est fait pour rester léger sur une tablette :
 //  - la montagne : 1 draw call ; son shader ajoute le pied qui se fond dans le sol, les coulées
@@ -17,7 +19,11 @@ import { audio } from "./audio.js";
 // Moins de 140 sprites en tout. Toutes les projections retombent sur les flancs (moins de
 // 130 m de l'axe ; la route passe à plus de 300 m) et la fumée part à l'opposé de la piste.
 
-const DIMENSIONS = { hauteur: 125, largeur: 340 }; // mètres (assez grand pour être imposant depuis la piste)
+// mètres (assez grand pour être imposant depuis la piste) ; un peu plus haut que les proportions
+// réelles du modèle (×1,15 en hauteur) : plus lisible de loin pour les enfants
+const DIMENSIONS = { hauteur: 140, largeur: 380 };
+// le terrain du modèle plonge sous le sol avant son bord : au-delà de ~87 % du rayon, plus rien ne dépasse
+const RAYON_PIED = (DIMENSIONS.largeur / 2) * 0.87;
 const NB_FUMEE = 56;
 const NB_LAVE = 72; // projections (les 2 dernières places : lueur du cratère)
 const GRAVITE = 22; // m/s² (un peu moins que la vraie : les boules restent lisibles plus longtemps)
@@ -60,10 +66,12 @@ export function creerVolcan(groupe, x, z, { versPiste = 0 } = {}) {
       a.dispose();
     });
     const boite = new THREE.Box3().setFromObject(modele);
-    const taille = boite.getSize(new THREE.Vector3()), centre = boite.getCenter(new THREE.Vector3());
+    const taille = boite.getSize(new THREE.Vector3());
     const sh = DIMENSIONS.largeur / Math.max(taille.x, taille.z), sv = DIMENSIONS.hauteur / taille.y;
     modele.scale.set(sh, sv, sh);
-    modele.position.set(-centre.x * sh, -boite.min.y * sv - 4, -centre.z * sh); // un peu enfoncé : pas de bord visible
+    // l'axe du cratère est déjà à l'origine du modèle ; son zéro (terrain d'origine) reste un peu
+    // sous le sol du jeu, le bord du disque est bien plus bas (pas de bord visible)
+    modele.position.set(0, -2, 0);
     support.add(modele);
     support.updateMatrixWorld(true);
 
@@ -232,7 +240,7 @@ export function creerVolcan(groupe, x, z, { versPiste = 0 } = {}) {
 
   return {
     support,
-    rayonPied: DIMENSIONS.largeur / 2,
+    rayonPied: RAYON_PIED,
     get pret() { return etat.pret; },
     get etat() { return etat; },
     update(dt, camera) {
@@ -292,8 +300,8 @@ float pied = 1.0 - smoothstep(4.0, 26.0 + 14.0 * bruit(vMonde.xz / 25.0), local.
 float mousse = (1.0 - smoothstep(20.0, 55.0, local.y)) * smoothstep(0.45, 0.75, bruit(vMonde.xz / 9.0)) * 0.45;
 diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.7, 1.05, 0.55) + vec3(0.02, 0.04, 0.0), mousse);
 diffuseColor.rgb = mix(diffuseColor.rgb, sol, pied);
-// près du sommet : roche oxydée, rougeâtre
-diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.35, 0.85, 0.7), smoothstep(0.25, 0.0, hn) * 0.6);
+// près du cratère : roche à peine roussie par la chaleur (la photo du modèle reste la base)
+diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.2, 0.9, 0.8), smoothstep(0.12, 0.0, hn) * 0.5);
 // coulées de lave (croûte sombre qui avance, lave visible dans les fissures)
 float c = max(max(coulee(q, hn, r, -0.5, 6.0, 0.55, 1.0), coulee(q, hn, r, 0.08, 7.0, 0.72, 2.0)),
               max(coulee(q, hn, r, 0.55, 5.0, 0.42, 3.0), coulee(q, hn, r, 2.4, 7.0, 0.65, 4.0)));

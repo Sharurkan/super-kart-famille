@@ -1,4 +1,6 @@
 # Blender (sans fenêtre) : prépare le volcan ("Volcano" par santhu48, CC-BY 4.0, Sketchfab).
+# ANCIEN MODÈLE : le jeu utilise maintenant "Zheltovsky volcano" (pack_zheltovsky.py). Gardé comme
+# exemple générique (AO multipliée dans la couleur, textures réduites, simplification).
 #  - l'occlusion ambiante (AO) est multipliée dans la couleur (une texture de moins)
 #  - textures ramenées à 1024 px (couleur) et TAILLE_RELIEF (normal map), export WebP
 #
