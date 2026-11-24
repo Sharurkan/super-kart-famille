@@ -254,12 +254,16 @@ const CAM_RECUL = 7.2, CAM_HAUT = 3.1; // comme CameraPoursuite
  * repoussé loin de la route) ou null (retiré). gardeRoute(piste).bilan : compte par modèle.
  * gardeRoute(piste).probleme(x, z, rayon, hauteur, rocher) -> raison du refus ou "" (sans rien compter).
  * Les rochers (nom Rock, Rocher, Caillou, Pebble) sont en plus tenus hors de portée des karts.
+ * gardeRoute(piste).interdire(x, z, rayon) : zone réservée (ex. trajet d'une meute de raptors) ;
+ * verifier() y refuse tout ce qui serait planté ensuite (retiré, pas déplacé).
  */
 export function gardeRoute(piste) {
   const { N, pas, cx, cz, nx, nz, tx, tz, demi, marge } = piste;
   const bordure = demi + 1.4; // fin des bordures rouges et blanches
   const barriere = demi + marge + 0.8; // derrière les boudins
   const bilan = {};
+  const interdits = []; // { x, z, r }
+  const interdit = (x, z, r) => interdits.some((c) => (x - c.x) ** 2 + (z - c.z) ** 2 < (c.r + r) ** 2);
   const dans = (i, debut, fin) => ((i - debut + N) % N) <= ((fin - debut + N) % N);
   const ecart = (i, j) => { const d = (i - j + N) % N; return d > N / 2 ? d - N : d; };
 
@@ -321,6 +325,11 @@ export function gardeRoute(piste) {
   function verifier(x, z, r, h, nom = "?", deplacer = true) {
     const b = (bilan[nom] ??= { plantes: 0, deplacees: 0, retirees: 0, raisons: {} });
     b.plantes++;
+    if (interdits.length && interdit(x, z, r)) {
+      b.raisons.reserve = (b.raisons.reserve ?? 0) + 1;
+      b.retirees++;
+      return null;
+    }
     const rocher = ROCHER.test(nom);
     let raison = probleme(x, z, r, h, rocher);
     if (!raison) return { x, z };
@@ -341,7 +350,7 @@ export function gardeRoute(piste) {
     return null;
   }
 
-  const garde = { verifier, probleme, bilan };
+  const garde = { verifier, probleme, bilan, interdire: (x, z, r) => interdits.push({ x, z, r }) };
   if (import.meta.env.DEV) window.__auditVegetation = bilan;
   return garde;
 }
