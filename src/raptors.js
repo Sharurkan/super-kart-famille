@@ -330,6 +330,10 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
   const disqueLibre = (x, z, R, h, ouvMin) => { const r = raisonDisque(x, z, R, h, ouvMin); return r ? non(r) : true; };
   const point = (i, lat) => ({ x: cx[i] + nx[i] * lat, z: cz[i] + nz[i] * lat });
   const groupes = [];
+  // portions où la route passe dans un grand décor fermé (ventre du T-rex, tranchée, aquarium) :
+  // de là, on ne voit rien autour ; les chasseurs (près de la route) n'y vont pas
+  const dansZone = (i, Z) => ((i - Z.debut + N) % N) <= ((Z.fin - Z.debut + N) % N);
+  const enTunnel = (i) => (piste.zonesDecor ?? []).some((Z) => /trex|tranch|aquarium/i.test(Z.nom ?? "") && dansZone(i, Z));
 
   // --- coureurs : en file, dans une voie juste derrière les barrières, sur une ligne droite dégagée ---
   // Voie à bord + 5,1 m de l'axe (barrières à bord + 0,8) : le corps reste derrière les barrières et
@@ -366,9 +370,9 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
         if (ok[k] && debut < 0) debut = q;
         if (!ok[k] && debut >= 0) {
           const nb = (q - 1 - debut) * PAS; // échantillons libres
-          // (10 m retirés à chaque bout : le corps dépasse de sa place en avant et en arrière)
-          const bout = Math.round(10 / pas);
-          if ((nb - 2 * bout) * pas >= 55) cands.push({ cote, i0: (((k0 + debut) % n) * PAS + bout) % N, n: Math.min(nb - 2 * bout, Math.round(170 / pas)) });
+          // (3 m retirés à chaque bout, par prudence : voieLibre vérifie déjà la longueur du corps)
+          const bout = Math.round(3 / pas);
+          if ((nb - 2 * bout) * pas >= 45) cands.push({ cote, i0: (((k0 + debut) % n) * PAS + bout) % N, n: Math.min(nb - 2 * bout, Math.round(170 / pas)) });
           debut = -1;
         }
       }
@@ -378,7 +382,8 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
     const pris = [];
     for (const c of cands) {
       if (pris.length >= combien) break;
-      if (pris.some((p) => Math.abs(ecart(c.i0 + c.n / 2, p.i0 + p.n / 2)) < (c.n + p.n) / 2 + 40)) continue;
+      // (les deux côtés au même endroit : permis, ils courent alors de part et d'autre du kart)
+      if (pris.some((p) => p.cote === c.cote && Math.abs(ecart(c.i0 + c.n / 2, p.i0 + p.n / 2)) < (c.n + p.n) / 2 + 40)) continue;
       pris.push(c);
       const L = c.n * pas;
       const g = { type: "coureurs", S, h, i0: c.i0, L, cote: c.cote, membres: [], etat: "attend", tAttente: 0 };
@@ -405,6 +410,7 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
       const P = plaines[Math.floor(rnd() * plaines.length)], long = (P.fin - P.debut + N) % N;
       const r = 7 + rnd() * 2.5, R = r + DL * h + 1.5;
       const i = (P.debut + Math.floor(rnd() * long)) % N;
+      if (enTunnel(i)) { non("tunnel"); continue; } // invisibles depuis la route
       // près de la route de préférence (essais suivants : un peu plus loin)
       const lat = (bord + 4 + R + rnd() * (20 + essai / 3)) * P.cote;
       const C = point(i, lat);
@@ -425,55 +431,105 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
     }
   }
 
-  // --- meutes : courent derrière leur chef sur une grande boucle irrégulière dans une plaine ---
-  function planMeute(n, S) {
-    // R : demi-largeur du couloir de la meute (les corps sont dans le sens de la course : demi-largeur
-    // du corps, écart des flancs, balancement, marge, et 2 m pour la corde du corps dans les virages)
-    const h = HAUTEUR * S, ECART = 3.0, BALANCE = 0.8, R = DW * h + ECART + BALANCE + 1.5 + 2;
-    // Les plaines libres (entre troupeaux, mares de lave et jungle) sont étroites : la boucle est un
-    // « stade » (deux lignes droites, deux demi-tours de rayon b), allongé le long de la route,
-    // un peu déformé. Beaucoup d'essais : les places libres sont rares.
-    for (let essai = 0; essai < 1500; essai++) {
-      const P = plaines[Math.floor(rnd() * plaines.length)], long = (P.fin - P.debut + N) % N;
-      const b = 9.5 + rnd() * 4, c = [6, 14, 24, 34][Math.floor(rnd() * 4)]; // rayon des virages, demi-ligne droite
-      const marge = Math.ceil((c + b + R) / pas) - RAMPE; // (la rampe jungle -> plaine est encore assez ouverte)
-      if (long < 2 * marge + 4) { non("plaine-courte"); continue; }
-      const ic = (P.debut + marge + Math.floor(rnd() * (long - 2 * marge))) % N;
-      const latMin = bord + 4 + b + R, latMax = P.largeur - 30 - b - R;
-      if (latMax < latMin) { non("plaine-etroite"); continue; }
-      const lat = (latMin + rnd() * (latMax - latMin)) * P.cote;
-      const C = point(ic, lat);
-      const rot = (rnd() - 0.5) * 0.6, ux = tx[ic] * Math.cos(rot) + nx[ic] * Math.sin(rot), uz = tz[ic] * Math.cos(rot) + nz[ic] * Math.sin(rot);
-      const vx = -uz, vz = ux;
-      // un peu irrégulier : la largeur ondule doucement le long de la boucle
-      const per = 4 * c + 6.283 * b, nS = Math.ceil(per / 2), ph1 = rnd() * 6.283, ph2 = rnd() * 6.283, ech = [];
-      for (let k = 0; k < nS; k++) {
-        // point du stade à l'abscisse curviligne q (ligne droite du haut, virage, ligne du bas, virage)
-        let q = (k / nS) * per, u, v;
-        if (q < 2 * c) { u = -c + q; v = b; }
-        else if ((q -= 2 * c) < Math.PI * b) { const a = q / b; u = c + Math.sin(a) * b; v = Math.cos(a) * b; }
-        else if ((q -= Math.PI * b) < 2 * c) { u = c - q; v = -b; }
-        else { const a = (q - 2 * c) / b; u = -c - Math.sin(a) * b; v = -Math.cos(a) * b; }
-        const w = (k / nS) * 6.283, f = 1 + 0.04 * Math.sin(w + ph1) + 0.03 * Math.sin(2 * w + ph2);
-        u *= f; v *= f;
-        ech.push(new THREE.Vector3(C.x + ux * u + vx * v, 0, C.z + uz * u + vz * v));
+  // --- meutes : courent derrière leur chef sur une boucle irrégulière dans une plaine ---
+  // Les plaines libres (entre troupeaux, mares de lave et jungle) sont rares et étroites : une grille
+  // des places libres est calculée une fois (disque de rayon RM libre en chaque case), les boucles
+  // possibles y sont toutes essayées (rapide), puis la boucle choisie est vérifiée exactement.
+  // La boucle est un « stade » (deux lignes droites, deux demi-tours de rayon b), le long de la route
+  // ou en travers, un peu déformé.
+  const ECART = 3.0, BALANCE = 0.8;
+  // R : demi-largeur du couloir de la meute (les corps sont dans le sens de la course : demi-largeur
+  // du corps, écart des flancs, balancement, marge, et 2 m pour la corde du corps dans les virages)
+  const rayonMeute = (h) => DW * h + ECART + BALANCE + 1.5 + 2;
+  const PAS_G = 4; // m, côté d'une case de la grille
+  let grilles = null, RM = 0;
+  function construireGrilles(R) {
+    RM = R;
+    grilles = plaines.map((P) => {
+      const long = (P.fin - P.debut + N) % N, kPas = Math.max(1, Math.round(PAS_G / pas));
+      const k0 = -RAMPE, nk = Math.ceil((long + 2 * RAMPE) / kPas) + 1, l0 = bord + 4, nl = Math.ceil((P.largeur - l0) / PAS_G) + 1;
+      const libre = new Uint8Array(nk * nl);
+      for (let a = 0; a < nk; a++) {
+        const i = (P.debut + k0 + a * kPas + N) % N;
+        for (let b = 0; b < nl; b++) {
+          const p = point(i, (l0 + b * PAS_G) * P.cote);
+          // (hauteur 1 m : la vue de la caméra est vérifiée plus tard, sur la boucle choisie)
+          libre[a * nl + b] = raisonDisque(p.x, p.z, R - 1.5, 1.0) ? 0 : 1; // (un peu permissive : la boucle choisie est vérifiée exactement)
+        }
       }
+      return { P, long, kPas, k0, nk, l0, nl, libre };
+    });
+  }
+  /** Case de la grille G (repère de l'échantillon ic) libre pour le point local (u le long de la route, v vers l'extérieur). */
+  function caseLibre(G, ic, latC, u, v) {
+    const a = Math.round((ecart(ic, G.P.debut) + u / pas - G.k0) / G.kPas), b = Math.round((latC + v - G.l0) / PAS_G);
+    return a >= 0 && a < G.nk && b >= 0 && b < G.nl && G.libre[a * G.nl + b] === 1;
+  }
+  /** Points (u, v) du stade : demi-ligne droite c, rayon b, tourné de rot (0 : le long de la route). */
+  function stade(c, b, rot, nS, ph1 = 0, ph2 = 0, amp = 0) {
+    const per = 4 * c + 2 * Math.PI * b, co = Math.cos(rot), si = Math.sin(rot), pts = [];
+    for (let k = 0; k < nS; k++) {
+      let q = (k / nS) * per, u, v;
+      if (q < 2 * c) { u = -c + q; v = b; }
+      else if ((q -= 2 * c) < Math.PI * b) { const a = q / b; u = c + Math.sin(a) * b; v = Math.cos(a) * b; }
+      else if ((q -= Math.PI * b) < 2 * c) { u = c - q; v = -b; }
+      else { const a = (q - 2 * c) / b; u = -c - Math.sin(a) * b; v = -Math.cos(a) * b; }
+      // un peu irrégulier : la largeur ondule doucement le long de la boucle
+      const w = (k / nS) * 2 * Math.PI, f = 1 + amp * (0.57 * Math.sin(w + ph1) + 0.43 * Math.sin(2 * w + ph2));
+      pts.push([(u * co - v * si) * f, (u * si + v * co) * f]);
+    }
+    return pts;
+  }
+  const FORMES = [];
+  for (const travers of [false, true]) for (const c of [4, 10, 18, 26]) for (const b of [9.5, 12]) FORMES.push({ travers, c, b });
+  const refusees = new Set(); // boucles refusées à la vérification exacte
+  function planMeute(n, S) {
+    const h = HAUTEUR * S, R = rayonMeute(h);
+    if (!grilles || R > RM) construireGrilles(R);
+    // toutes les boucles possibles dans la grille
+    const cands = [];
+    for (const G of grilles) for (const F of FORMES) {
+      const pts = stade(F.c, F.b, F.travers ? Math.PI / 2 : 0, Math.ceil((4 * F.c + 2 * Math.PI * F.b) / 4));
+      const demiLarge = (F.travers ? F.c : 0) + F.b;
+      for (let kk = -RAMPE; kk <= G.long + RAMPE; kk += 6) {
+        const ic = (G.P.debut + kk + N) % N;
+        for (let lat = G.l0 + demiLarge; lat <= G.P.largeur - 30 - demiLarge; lat += 6) {
+          const cle = `${ic},${lat},${F.travers},${F.c}`;
+          if (refusees.has(cle) || !caseLibre(G, ic, lat, 0, 0)) continue;
+          if (pts.every(([u, v]) => caseLibre(G, ic, lat, u, v))) cands.push({ G, F, ic, lat, cle, bord: lat - demiLarge });
+        }
+      }
+    }
+    // près de la route de préférence (on les voit), au hasard parmi les plus proches
+    cands.sort((p, q) => p.bord - q.bord);
+    while (cands.length) {
+      const proches = cands.filter((q) => q.bord <= cands[0].bord + 30);
+      const choix = proches[Math.floor(rnd() * proches.length)];
+      cands.splice(cands.indexOf(choix), 1);
+      const { G, F, ic } = choix, P = G.P, C = point(ic, choix.lat * P.cote);
+      // forme définitive (déformée, un peu tournée), en coordonnées du monde
+      const rot = (F.travers ? Math.PI / 2 : 0) + (rnd() - 0.5) * 0.3;
+      const nS = Math.ceil((4 * F.c + 2 * Math.PI * F.b) / 2);
+      const loc = stade(F.c, F.b, rot, nS, rnd() * 6.283, rnd() * 6.283, 0.06);
+      const ux = tx[ic], uz = tz[ic], vx = nx[ic] * P.cote, vz = nz[ic] * P.cote;
+      const ech = loc.map(([u, v]) => new THREE.Vector3(C.x + ux * u + vx * v, 0, C.z + uz * u + vz * v));
       let L = 0;
       for (let k = 0; k < nS; k++) L += ech[k].distanceTo(ech[(k + 1) % nS]);
-      // pas de virage trop serré (rayon > 8 m)
-      let serre = false;
-      for (let k = 0; k < nS && !serre; k++) {
-        const p0 = ech[(k - 3 + nS) % nS], p1 = ech[k], p2 = ech[(k + 3) % nS];
-        const d = Math.abs(Math.atan2(p2.z - p1.z, p2.x - p1.x) - Math.atan2(p1.z - p0.z, p1.x - p0.x));
-        if (Math.min(d, 6.283 - d) > (3 * L) / nS / 8) serre = true;
-      }
-      if (serre) { non("serre"); continue; }
-      // un point sur deux, les quatre « coins » de la boucle d'abord (la plupart des essais s'arrêtent là)
+      // vérification exacte, un point sur deux (les « coins » d'abord : la plupart des refus s'arrêtent là)
       const ordre = [];
       for (let q = 0; q < 8; q++) { const k = Math.floor((q * nS) / 8); ordre.push(k - (k % 2)); }
       for (let k = 0; k < nS; k += 2) ordre.push(k);
-      if (!ordre.every((k) => disqueLibre(ech[k].x, ech[k].z, R, h))) continue;
+      if (!ordre.every((k) => disqueLibre(ech[k].x, ech[k].z, R, h))) { refusees.add(choix.cle); continue; }
       for (let k = 0; k < nS; k += 2) reserver(ech[k].x, ech[k].z, R);
+      // la grille ne voit plus ces places
+      for (const H of grilles) for (let a = 0; a < H.nk; a++) {
+        const i = (H.P.debut + H.k0 + a * H.kPas + N) % N;
+        for (let b = 0; b < H.nl; b++) {
+          if (!H.libre[a * H.nl + b]) continue;
+          const p = point(i, (H.l0 + b * PAS_G) * H.P.cote);
+          for (let k = 0; k < nS; k += 2) if ((p.x - ech[k].x) ** 2 + (p.z - ech[k].z) ** 2 < (R + RM + 3) ** 2) { H.libre[a * H.nl + b] = 0; break; }
+        }
+      }
       const X = new Float32Array(nS), Z = new Float32Array(nS);
       ech.forEach((p, k) => { X[k] = p.x; Z[k] = p.z; });
       const vMoy = 0; // fixée au chargement (vitesse sans glissade du modèle)
@@ -482,14 +538,14 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
       groupes.push(g);
       return;
     }
+    non("meute-sans-place");
   }
-
   // placement : coureurs (près des barrières) d'abord, puis chasseurs, puis les grandes meutes
   // (autant que la place le permet : certains groupes ne trouvent pas de place, voir bilan())
   // (meutes avant les chasseurs : elles ont besoin de grandes places, les chasseurs se glissent entre)
   planCoureurs(2.0, 3);
-  for (const [n, S] of [[8, 2.1], [7, 2.0], [7, 2.2], [6, 2.0], [6, 2.1], [6, 2.0]]) planMeute(n, S);
-  for (const n of [4, 4, 3, 3, 3]) planChasseurs(n, 2.4);
+  for (const [n, S] of [[10, 2.1], [9, 2.0], [8, 2.1], [8, 2.0], [7, 2.1], [6, 2.0], [6, 2.0]]) planMeute(n, S);
+  for (const n of [4, 4, 4, 3, 3, 3]) planChasseurs(n, 2.4);
   const tempsPlacement = performance.now() - debutPlacement;
 
   // ---------------------------------------------------------------------------
@@ -556,7 +612,8 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
   function majCoureurs(g, dt) {
     const sK = kart ? ((((kart.s - g.i0 * pas) % piste.L) + piste.L) % piste.L) : 1e9;
     const rel = sK > piste.L / 2 ? sK - piste.L : sK; // kart par rapport au début du segment (m)
-    if (g.etat === "attend" && kart && rel > -55 && rel < 5 && kart.v > 6) g.etat = "court";
+    // départ quand le kart arrive (la voie est courte : ils partent assez tôt pour être déjà lancés)
+    if (g.etat === "attend" && kart && rel > -18 && rel < 5 && kart.v > 6) g.etat = "court";
     if (g.etat === "court" && (rel > g.L + 25 || rel < -80)) { g.etat = "fini"; g.tAttente = 0; }
     if (g.etat === "fini") {
       g.tAttente += dt;
@@ -566,16 +623,19 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
         for (const m of g.membres) { m.s = m.maison; m.v = 0; }
       }
     }
-    const VMAX = 29, ACC = 16;
+    const VMAX = 30, ACC = 22;
     // ordre dans chaque voie : 14 m au moins entre deux coureurs
     const tries = [...g.membres].sort((a, b) => b.devant - a.devant);
     const FREIN = ACC * 1.5;
     for (const m of tries) {
       // fini : ils freinent et s'arrêtent (distance de freinage), sans dépasser la fin de la voie
-      let cible = g.etat === "court" ? rel + m.devant : g.etat === "fini" ? m.s + (m.v * m.v) / (2 * FREIN) + 0.1 : m.maison;
+      // court : la vitesse du kart, moins s'ils sont en avance sur leur place à côté de lui (au moins
+      // 60 % de sa vitesse : le kart les rattrape et ils courent à côté de lui jusqu'au bout de la voie)
+      const vK = kart?.v ?? 0, place = rel + m.devant;
+      let cible = g.etat === "court" ? g.L - 8 : g.etat === "fini" ? m.s + (m.v * m.v) / (2 * FREIN) + 0.1 : m.maison;
       cible = Math.max(0, Math.min(g.L - 8, cible));
       for (const o of tries) if (o !== m && o.voie === m.voie && o.devant > m.devant) cible = Math.max(0, Math.min(cible, o.s - 14));
-      let vVoulue = g.etat === "court" ? (kart?.v ?? 0) + (cible - m.s) * 1.2 : (cible - m.s) * 1.5;
+      let vVoulue = g.etat === "court" ? vK + Math.max(-0.4 * vK, Math.min(8, (place - m.s) * 1.2)) : (cible - m.s) * 1.5;
       // jamais plus vite que ce qui permet de s'arrêter à temps
       vVoulue = Math.max(0, Math.min(VMAX, vVoulue, Math.sqrt(2 * FREIN * Math.max(0, cible - m.s))));
       m.v += Math.max(-FREIN * dt, Math.min(ACC * dt, vVoulue - m.v));
@@ -756,6 +816,7 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
     window.__raptors = {
       get prets() { return pret; },
       get temps() { return { placement: +tempsPlacement.toFixed(1), cuisson: M?.tempsCuisson }; },
+      get grilles() { return grilles?.map((G) => { let l = []; for (let b = G.nl - 1; b >= 0; b -= 1) { let s = String(Math.round(G.l0 + b * PAS_G)).padStart(4) + " "; for (let a = 0; a < G.nk; a++) s += G.libre[a * G.nl + b] ? "." : "#"; l.push(s); } return `plaine ${G.P.debut}\n` + l.join("\n"); }).join("\n"); },
       groupes, etats, stats, refus, raisonDisque, voieLibre: (i, lat) => voieLibre(i, lat, HAUTEUR * 2),
       /** Emprise de chaque raptor à sa place actuelle : distance mini à l'axe de la route, lave, jungle. */
       verifier() {
