@@ -5,6 +5,7 @@ import { creerDino } from "./dinos.js";
 import { planter, gardeRoute, planterJungle } from "./vegetation.js";
 import { installerRavin } from "./ptero.js";
 import { installerAquarium } from "./aquarium.js";
+import { installerBrachio } from "./brachio.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { creerVolcan } from "./volcan.js";
 
@@ -334,6 +335,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   decorLooping(piste, groupe);
   ravinDuPtero(groupe, piste); // ligne droite du haut : le vide et le ptérodactyle
   mixers.push(aquariumGeant(groupe, piste)); // virages du bas : tunnel sous un aquarium géant (son update(dt) suit les mixers)
+  mixers.push(installerBrachio(groupe, piste)); // fin du 1er virage : brachiosaure géant au-dessus de la route (coucou)
   // la jungle (imposteurs réalistes), une fois le ravin, le diplodocus, le T-rex et l'aquarium installés ;
   // rien sur le pied du volcan ni sur les troupeaux des plaines (ni dans piste.zonesDecor)
   if (import.meta.env.DEV) window.__troupeaux = Object.assign(clairieres, { plaines: PLAINES, trex, dinos: poses });
