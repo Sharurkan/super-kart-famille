@@ -9,7 +9,8 @@
 #    d'origine du « Cartoonish Go-Kart »). karts.js le pose devant le baquet, penché, la colonne
 #    descend jusque sous le capot ; le nœud "volant" tourne quand on braque.
 # 2) Pour chaque personnage (dessins d'origine <nom>_face.png / <nom>_dos.png) :
-#    - le dessin est recadré pour que le milieu des poings soit au centre (256, 372) ;
+#    - recadrage mesuré, identique pour tous : axe du casque (mesuré sur l'alpha) sur x = 256,
+#      haut du casque à 8 px, casque de même largeur (215 px) ;
 #    - chaque poing (avec l'avant-bras) est déplacé jusqu'à l'anneau : (168, 372) et (344, 372),
 #      soit ±0,275 m sur le panneau de 1,6 m. Seul le bras bouge (calque glissé, avant-bras
 #      étiré en douceur jusqu'au coude) : visages et combinaisons restent intacts ;
@@ -307,25 +308,46 @@ def rampe(y, a, b):
 
 
 def deplacer_poing(img, P, T, R):
-    """Glisse le poing P (et le bras qui le porte) jusqu'à T, par-dessus le reste du dessin.
-    Tout ce qui est du côté extérieur du poing, de l'épaule au coude, suit le poing ; le
-    déplacement s'estompe vers le coude (l'avant-bras s'incline) et vers le haut."""
+    """Amène le poing P en T sans trou ni coupure dans le dessin.
+    - Vers l'extérieur : simple déformation douce (la manche s'étire, le buste à côté du poing
+      suit un peu), rien n'est découpé.
+    - Vers l'intérieur : le bras glisse comme un calque par-dessus le buste ; du côté extérieur, le
+      déplacement s'estompe jusqu'au bord de la manche (elle se resserre), sans bord coupé.
+    Verticalement, le déplacement s'estompe au-dessus du poing et jusqu'au coude."""
     s = -1 if P[0] < TAILLE / 2 else 1  # côté gauche / droit du dessin
     dx, dy = T[0] - P[0], T[1] - P[1]
     h0, h1 = P[1] - R * 1.1 - 70, P[1] - R * 1.1  # rampe au-dessus du poing (le poing bouge d'un bloc)
     b0, b1 = P[1] + R, P[1] + R + 90  # rampe jusqu'au coude
     t = rampe(YY, h0, h1) * (1 - rampe(YY, b0, b1))
-    xb = P[0] - s * (R + 8)  # coupe : bord intérieur du poing
+    # distance (vers l'extérieur du dessin) à la position d'ARRIVÉE du poing : la déformation est
+    # lue depuis l'image finale (pour chaque pixel final, on va chercher son pixel d'origine)
+    o = (XX - T[0]) * s
+    exterieur = 1 - rampe(o, R, R + abs(dx) + 60)
+    vers_dehors = dx * s
+    pm = premult(img)
+    if vers_dehors > 0:
+        interieur = rampe(o, -R - max(40, 2.5 * vers_dehors), -R)
+        k = t * exterieur * interieur
+        return depremult(echantillonner(pm, XX - dx * k, YY - dy * k))
+    # côté extérieur : la manche suit le poing puis le déplacement s'estompe en douceur (bord du
+    # bras décalé sans coupure ni étirement baveux, jamais replié sur lui-même)
+    exterieur = 1 - rampe(o, R, R + abs(dx) + 120)
+    k = t * exterieur
+    sx, sy = XX - dx * k, YY - dy * k
+    # limite entre bras (qui glisse) et buste (qui reste) : bord intérieur du poing à sa hauteur,
+    # puis elle s'écarte en biais au-dessus et au-dessous (épaule, coude et hanche restent en place,
+    # pas de bord vertical tranché dans le buste)
+    def xb(y):
+        return P[0] - s * (R + 8) + s * 2 * np.maximum(0, np.abs(y - P[1]) - R)
 
     def zone(x, y):
-        cote = np.clip((x - xb) * s / 10 + 0.5, 0, 1)
+        cote = np.clip((x - xb(y)) * s / 10 + 0.5, 0, 1)
         return cote * ((y > h0) & (y < b1))
 
-    sx, sy = XX - dx * t, YY - dy * t
-    L = echantillonner(premult(img), sx, sy) * zone(sx, sy)[..., None]
+    L = echantillonner(pm, sx, sy) * zone(sx, sy)[..., None]
     W = zone(XX, YY)
     a = img[..., 3]
-    aB = a * (1 - W) / np.maximum(1 - a * W, 1e-6)  # recompose l'original là où rien ne bouge
+    aB = a * (1 - W) / np.maximum(1 - a * W, 1e-6)  # l'original là où rien ne bouge
     B = np.concatenate([img[..., :3] * aB[..., None], aB[..., None]], -1)
     return depremult(L + B * (1 - L[..., 3:4]))
 
@@ -366,45 +388,74 @@ def sur(haut, bas):
     return np.concatenate([rgb, a], -1)
 
 
-# Décalage horizontal du dessin de face (pixels) : le buste reste au milieu du baquet autant que
-# possible ; il ne compense que les poses penchées (harry tend le bras gauche, maman vise à droite).
-DECALAGE_FACE = {"viggo": -10, "harry": 30, "maman": -20, "bryan": 0, "mamy": 0}
+# Recadrage mesuré (le même pour tous les dessins) : le casque sert de repère, car il ne dépend ni
+# de la pose des bras (harry tend un bras) ni des cheveux (boucles de maman, plus bas).
+LARGEUR_CASQUE = 199  # px, mesurée 50 px sous le haut du casque
+# Échelle bornée : bryan a un petit casque pour un grand buste ; l'agrandir davantage mettrait
+# ses poings trop bas sous le volant.
+ECHELLE_MIN, ECHELLE_MAX = 0.95, 1.08
+# Poses tournées : maman a le buste de trois quarts, ses poings sont loin à droite de sa tête.
+# Son axe est pris entre la tête et les mains (milieu du buste) ; les autres : axe du casque.
+POIDS_MAINS = {}
+HAUT_CASQUE = 8  # px
 # De dos, les mains sont naturellement cachées devant le buste : on rapproche seulement un peu
 # les poings levés sur les côtés (au plus 35 px, moins pour maman dont les boucles tombent sur
 # les bras), sans les faire passer sur le dos.
 MAX_DOS = {"viggo": 35, "harry": 25, "maman": 14, "bryan": 35, "mamy": 35}
 
 
-def preparer(nom, cote, oy=None):
+def mesurer_casque(img):
+    """(axe x, haut y, largeur) du casque : dôme = lignes 10 à 70 px sous le haut du dessin."""
+    a = img[..., 3] > 0.5
+    haut = int(np.where(a.any(1))[0][0])
+    milieux = []
+    for dy in range(10, 71, 4):
+        xs = np.where(a[haut + dy])[0]
+        milieux.append((xs[0] + xs[-1]) / 2)
+    xs = np.where(a[haut + 50])[0]
+    return float(np.mean(milieux)), haut, float(xs[-1] - xs[0])
+
+
+def normaliser(img, echelle, axe, haut):
+    """Mise à l'échelle autour du haut du casque, axe du casque sur x = 256, haut à HAUT_CASQUE."""
+    sx = axe + (XX - TAILLE / 2) / echelle
+    sy = haut + (YY - HAUT_CASQUE) / echelle
+    return depremult(echantillonner(premult(img), sx, sy))
+
+
+def preparer(nom, cote, echelle=None):
     """Recadre le dessin puis amène chaque poing sur l'anneau (de face) ou vers lui (de dos)."""
     img = lire(os.path.join(DOSSIER, f"{nom}_{cote}.png"))
-    poings = sorted(POINGS[nom][cote])
-    my = sum(p[1] for p in poings) / 2
-    ox = DECALAGE_FACE[nom] if cote == "face" else 0
-    if oy is None:
-        oy = round(CENTRE[1] - my)
-    avant = img = decaler(img, ox, oy)
-    for p, cible in zip(poings, CIBLES):
-        P = (p[0] + ox, p[1] + oy)
+    axe, haut, largeur = mesurer_casque(img)
+    if echelle is None:
+        echelle = min(ECHELLE_MAX, max(ECHELLE_MIN, LARGEUR_CASQUE / largeur))
+    if cote == "face":
+        milieu_mains = sum(p[0] for p in POINGS[nom]["face"]) / 2
+        axe += POIDS_MAINS.get(nom, 0) * (milieu_mains - axe)
+    else:
+        axe += POIDS_MAINS.get(nom, 0) * (sum(p[0] for p in POINGS[nom]["dos"]) / 2 - axe)
+    img = normaliser(img, echelle, axe, haut)
+    vers = lambda p: (TAILLE / 2 + (p[0] - axe) * echelle, HAUT_CASQUE + (p[1] - haut) * echelle)
+    poings = sorted(vers(p) for p in POINGS[nom][cote])
+    for P, cible in zip(poings, CIBLES):
         if cote == "dos":
             dx = max(-MAX_DOS[nom], min(MAX_DOS[nom], cible[0] - P[0]))
             cible = (P[0] + dx, P[1])  # de dos : même hauteur, rapprochement limité
         if math.dist(P, cible) <= 3:
             continue
-        vers_exterieur = (cible[0] - P[0]) * (P[0] - TAILLE / 2) > 0
-        img = deplacer_poing(img, P, cible, RAYON_POING[nom])
-        if vers_exterieur:
-            # poing écarté de quelques pixels : le dessin d'origine comble ce qu'il découvre
-            img = sur(img, avant)
-    print("PREPARE", nom, cote, "decalage", ox, oy)
-    return img, oy
+        img = deplacer_poing(img, P, cible, RAYON_POING[nom] * echelle)
+        if os.environ.get("DEBUG_POINGS"):
+            ecrire(img, os.path.join(DOSSIER, f"debug_{nom}_{cote}_{round(P[0])}.webp"))
+    print("PREPARE", nom, cote, "axe", round(axe, 1), "largeur", round(largeur), "echelle", round(echelle, 3),
+          "poings", [tuple(round(v) for v in p) for p in poings])
+    return img, echelle
 
 
 anneau = lire(tmp)
 for nom in POINGS:
-    face, oy = preparer(nom, "face")
-    # de dos : même hauteur que de face (la tête ne saute pas quand le pilote se retourne)
-    dos, _ = preparer(nom, "dos", oy)
+    face, echelle = preparer(nom, "face")
+    # de dos : même échelle et même haut de casque (la tête ne saute pas quand il se retourne)
+    dos, _ = preparer(nom, "dos", echelle)
     ecrire(face, os.path.join(DOSSIER, f"{nom}_face_assis.webp"))
     ecrire(dos, os.path.join(DOSSIER, f"{nom}_dos_assis.webp"))
 
@@ -423,4 +474,7 @@ for nom in POINGS:
     ombre = flou(decaler(v, 4, 9)[..., 3], 5) * 0.35 * (1 - mains)  # ombre douce sur la combinaison
     corps = face.copy()
     corps[..., :3] *= (1 - ombre * (face[..., 3] > 0))[..., None]
-    ecrire(sur(v, corps), os.path.join(DOSSIER, f"{nom}_face_volant.webp"))
+    portrait = sur(v, corps)
+    # bas du portrait fondu (sous le volant : hanches et bras retouchés, inutiles sur une carte)
+    portrait[..., 3] *= 1 - rampe(YY, 452, 505)
+    ecrire(portrait, os.path.join(DOSSIER, f"{nom}_face_volant.webp"))

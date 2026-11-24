@@ -139,13 +139,18 @@ export class Vitrine {
       const k = o.kart;
       for (const r of [...k.roues.avant, ...k.roues.arriere]) r.tourne.rotation.x += dt * 2;
       k.corps.position.y = Math.abs(Math.sin(this.t * 6 + k.groupe.position.x)) * 0.03;
+      // chaque kart regarde exactement la caméra (même ceux des bouts) : pilote, volant et kart
+      // ont alors le même axe à l'écran, et le panneau reste perpendiculaire à la vue
+      const base = o.parent === this.plateau ? this.plateau.rotation.y : 0;
+      k.groupe.getWorldPosition(vPos);
+      k.groupe.rotation.y = Math.atan2(c.position.x - vPos.x, c.position.z - vPos.z) - base;
       k.groupe.updateMatrixWorld();
-      const yaw = k.groupe.rotation.y + (o.parent === this.plateau ? this.plateau.rotation.y : 0);
-      o.pilote.orienter(c, yaw, yaw, 1); // panneau exactement face à la caméra
+      o.pilote.orienter(c, k.groupe.rotation.y + base, null, 1); // panneau exactement face à la caméra
     }
   }
 }
 
+const vPos = new THREE.Vector3();
 const ECART_TITRE = 2.7; // mètres entre deux karts de l'accueil
 
 /** Recul de la caméra pour que la demi-largeur voulue tienne dans l'écran (jamais sous "mini"). */

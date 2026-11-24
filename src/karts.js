@@ -162,9 +162,99 @@ function preparerThemes(racine) {
         o.material = matTheme("phong" + hex, () => new THREE.MeshPhongMaterial({ color: hex, shininess: 70, specular: 0x333333 }));
       }
     });
+    if (ORNEMENTS[type]) reduireOrnements(t, ORNEMENTS[type]);
     themes.set(type, t);
   }
   return themes;
+}
+
+// Décors posés sur le capot, devant le volant (nez de fusée, tête de dino ou de licorne) : en vue
+// de face, ils cachaient le volant et les mains du pilote. Ils sont rapetissés sur place (même
+// forme, posés au même endroit) pour ne pas dépasser `haut` (m) ; jamais moins que `mini`.
+const ORNEMENTS = {
+  fusee: { haut: 0.86, mini: 0.55 },
+  dino: { haut: 0.92, mini: 0.5 },
+  licorne: { haut: 0.92, mini: 0.5 },
+  // gyrophares posés sur le capot : chacun rapetissé sur place
+  pompier: { haut: 0.8, mini: 0.5, parIlot: true },
+};
+
+/** Îlots de triangles (sommets soudés par position) d'un maillage, en repère du kart. */
+function ilots(geo, matrice) {
+  const pos = geo.attributes.position;
+  const n = pos.count;
+  const parent = new Int32Array(n).map((_, i) => i);
+  const racine = (i) => {
+    while (parent[i] !== i) i = parent[i] = parent[parent[i]];
+    return i;
+  };
+  const unir = (a, b) => {
+    a = racine(a);
+    b = racine(b);
+    if (a !== b) parent[a] = b;
+  };
+  const vus = new Map();
+  for (let i = 0; i < n; i++) {
+    const cle = `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`;
+    if (vus.has(cle)) unir(i, vus.get(cle));
+    else vus.set(cle, i);
+  }
+  const idx = geo.index;
+  const nTri = idx ? idx.count : n;
+  for (let k = 0; k < nTri; k += 3) {
+    const a = idx ? idx.getX(k) : k;
+    unir(a, idx ? idx.getX(k + 1) : k + 1);
+    unir(a, idx ? idx.getX(k + 2) : k + 2);
+  }
+  const groupes = new Map();
+  const v = new THREE.Vector3();
+  for (let i = 0; i < n; i++) {
+    const r = racine(i);
+    if (!groupes.has(r)) groupes.set(r, { sommets: [], boite: new THREE.Box3() });
+    const g = groupes.get(r);
+    g.sommets.push(i);
+    g.boite.expandByPoint(v.fromBufferAttribute(pos, i).applyMatrix4(matrice));
+  }
+  return [...groupes.values()];
+}
+
+function reduireOrnements(theme, { haut, mini, parIlot = false }) {
+  // repère du kart = repère de la scène du fichier (le thème y est posé avec sa propre position)
+  theme.updateWorldMatrix(true, true);
+  const choisis = [];
+  const boite = new THREE.Box3();
+  theme.traverse((o) => {
+    if (!o.isMesh || o.name.startsWith("anim_") || o.parent?.name.startsWith("anim_")) return;
+    const m = o.matrixWorld.clone();
+    for (const il of ilots(o.geometry, m)) {
+      const b = il.boite;
+      // entièrement devant le volant, près de l'axe, et dépassant du capot
+      if (b.min.z > 0.2 && b.min.x > -0.7 && b.max.x < 0.7 && b.max.y > haut) {
+        choisis.push({ o, m, sommets: il.sommets, boite: b });
+        boite.union(b);
+      }
+    }
+  });
+  if (!choisis.length) return;
+  let s = Math.max(mini, Math.min(1, (haut - boite.min.y) / (boite.max.y - boite.min.y)));
+  const pivot = new THREE.Vector3((boite.min.x + boite.max.x) / 2, boite.min.y, (boite.min.z + boite.max.z) / 2);
+  const v = new THREE.Vector3();
+  for (const { o, m, sommets, boite: bi } of choisis) {
+    if (parIlot) {
+      s = Math.max(mini, Math.min(1, (haut - bi.min.y) / (bi.max.y - bi.min.y)));
+      pivot.set((bi.min.x + bi.max.x) / 2, bi.min.y, (bi.min.z + bi.max.z) / 2);
+    }
+    const inv = m.clone().invert();
+    const pos = o.geometry.attributes.position;
+    for (const i of sommets) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(m).sub(pivot).multiplyScalar(s).add(pivot).applyMatrix4(inv);
+      pos.setXYZ(i, v.x, v.y, v.z);
+    }
+    pos.needsUpdate = true;
+    o.geometry.computeBoundingSphere();
+    o.geometry.computeBoundingBox();
+  }
+  if (import.meta.env.DEV) console.info("ornements réduits", theme.name, choisis.length, "îlots, échelle", s.toFixed(2));
 }
 
 const horloge = () => performance.now() / 1000;
