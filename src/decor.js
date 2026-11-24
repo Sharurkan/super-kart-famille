@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { LAVE, GLSL_SOL_LAVE } from "./lave.js";
+import { LAVE, GLSL_SOL_LAVE, lierRouteLave, DIST_MAX_ROUTE } from "./lave.js";
 
 /** Boîte aux coins arrondis (les pièces très fines restent des boîtes simples). */
 export function boiteRonde(l, h, p) {
@@ -277,23 +277,29 @@ function imagesSol(piste, photo = false) {
   // monde en lave (lave.js) pour ne jamais ouvrir de lave sur la route ni ses bas-côtés
   let proche = null;
   if (photo) {
-    const P = 512, pp = P / taille;
+    const P = 1024, pp = P / taille;
     proche = document.createElement("canvas");
     proche.width = proche.height = P;
     const gp = proche.getContext("2d");
     gp.fillStyle = "#000";
     gp.fillRect(0, 0, P, P);
-    gp.filter = `blur(${Math.max(2, 10 * pp)}px)`;
-    gp.strokeStyle = "#fff";
-    gp.lineWidth = (bord + 14) * 2 * pp;
+    // distance codée : des traits de plus en plus étroits et clairs (blanc = sur l'axe,
+    // noir = à DIST_MAX_ROUTE m ou plus)
+    gp.globalCompositeOperation = "lighten";
     gp.lineJoin = gp.lineCap = "round";
-    gp.beginPath();
-    for (let i = 0; i <= piste.N; i++) {
-      const j = i % piste.N;
-      const X = (piste.cx[j] - x0) * pp, Y = (piste.cz[j] - z0) * pp;
-      i ? gp.lineTo(X, Y) : gp.moveTo(X, Y);
+    gp.filter = "blur(1px)";
+    for (let dm = DIST_MAX_ROUTE; dm > 0; dm -= 1.5) {
+      const v = Math.round(255 * (1 - dm / DIST_MAX_ROUTE));
+      gp.strokeStyle = `rgb(${v},${v},${v})`;
+      gp.lineWidth = dm * 2 * pp;
+      gp.beginPath();
+      for (let i = 0; i <= piste.N; i++) {
+        const j = i % piste.N;
+        const X = (piste.cx[j] - x0) * pp, Y = (piste.cz[j] - z0) * pp;
+        i ? gp.lineTo(X, Y) : gp.moveTo(X, Y);
+      }
+      gp.stroke();
     }
-    gp.stroke();
   }
   return { detail: cd, carte: cc, proche, carteMin: new THREE.Vector2(x0, z0), carteTaille: taille };
 }
@@ -317,7 +323,10 @@ export function materiauSol(def, piste) {
     cacheSol.set(cle, { detail, carte, proche, carteMin: im.carteMin, carteTaille: im.carteTaille });
   }
   const t = cacheSol.get(cle);
-  if (def.decor === "dino") return materiauSolPhoto(def, t);
+  if (def.decor === "dino") {
+    lierRouteLave(t.proche, t.carteMin, t.carteTaille, piste.demi + piste.marge); // monde en lave (lave.js)
+    return materiauSolPhoto(def, t);
+  }
   const uniforms = {
     tDetail: { value: t.detail },
     tCarte: { value: t.carte },
@@ -411,7 +420,7 @@ function materiauSolPhoto(def, t) {
   const f = (x) => x.toFixed(2);
   const m = new THREE.MeshLambertMaterial({ color: 0xffffff });
   m.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms, LAVE.uniforms, { tProche: { value: t.proche } });
+    Object.assign(shader.uniforms, uniforms, LAVE.uniforms);
     // coordonnées du monde (aussi pour un InstancedMesh, ex. les collines au loin)
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nvarying vec2 vSolXZ;")
