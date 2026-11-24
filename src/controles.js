@@ -35,11 +35,28 @@ function angleRelatif(a) {
  * monte, donc quand on penche à droite. À 270° (= -90°) c'est l'inverse.
  * Renvoie null en portrait (non géré).
  */
-export function inclinaisonPaysage(beta, angleEcran) {
+export function inclinaisonPaysage(beta, angleEcran, gamma = null) {
   const a = ((angleEcran % 360) + 360) % 360;
   if (a === 90) return beta;
   if (a === 270) return -beta;
+  // Tablettes dont la position "naturelle" est déjà le paysage : l'angle d'écran vaut 0 (ou 180)
+  // en paysage, et l'axe gauche/droite est alors "gamma" (positif quand le bord droit descend).
+  if (gamma != null && a === 0) return gamma;
+  if (gamma != null && a === 180) return -gamma;
   return null;
+}
+
+/**
+ * Secours sans gyroscope (beaucoup de tablettes Android) : Chrome n'envoie alors que des
+ * "deviceorientation" vides, mais l'accéléromètre ("devicemotion") donne la pesanteur.
+ * gx, gy : accelerationIncludingGravity dans le repère de l'appareil. Renvoie l'inclinaison
+ * gauche/droite de l'écran en degrés (droite = positif), quel que soit le sens de l'écran.
+ */
+export function inclinaisonPesanteur(gx, gy, angleEcran) {
+  const a = (angleEcran * Math.PI) / 180;
+  const sx = gx * Math.cos(a) - gy * Math.sin(a); // composante le long du bord horizontal de l'écran
+  // Android : la mesure pointe vers le haut ; quand le bord droit descend, sx devient négatif
+  return (Math.asin(Math.max(-1, Math.min(1, -sx / 9.81))) * 180) / Math.PI;
 }
 
 export class Controles {
@@ -85,6 +102,8 @@ export class Controles {
     this.dirInclinaison = 0; // direction lissée
     this.dernierCapteur = 0; // performance.now() du dernier événement du capteur
     this.surOrientation = (e) => this.lireOrientation(e);
+    this.surMouvement = (e) => this.lireMouvement(e);
+    this.orientationOk = false; // le gyroscope donne de vraies valeurs : on ignore l'accéléromètre
   }
 
   /** Active / coupe la direction par inclinaison. */
@@ -94,10 +113,17 @@ export class Controles {
     this.calibrer();
     if (actif) {
       this.dernierCapteur = 0;
+      this.orientationOk = false;
       addEventListener("deviceorientation", this.surOrientation);
+      addEventListener("devicemotion", this.surMouvement);
     } else {
       removeEventListener("deviceorientation", this.surOrientation);
+      removeEventListener("devicemotion", this.surMouvement);
     }
+  }
+
+  angleEcran() {
+    return screen.orientation?.angle ?? window.orientation ?? 90;
   }
 
   /** La position actuelle de la tablette devient le "tout droit" (au prochain événement). */
@@ -107,9 +133,20 @@ export class Controles {
   }
 
   lireOrientation(e) {
-    if (e.beta == null) return;
+    if (e.beta == null) return; // pas de gyroscope : l'accéléromètre prend le relais
+    this.orientationOk = true;
+    this.appliquer(inclinaisonPaysage(e.beta, this.angleEcran(), e.gamma));
+  }
+
+  lireMouvement(e) {
+    if (this.orientationOk) return;
+    const g = e.accelerationIncludingGravity;
+    if (!g || g.x == null || g.y == null) return;
+    this.appliquer(inclinaisonPesanteur(g.x, g.y, this.angleEcran()));
+  }
+
+  appliquer(incl) {
     this.dernierCapteur = performance.now();
-    const incl = inclinaisonPaysage(e.beta, screen.orientation?.angle ?? window.orientation ?? 90);
     if (incl === null) {
       this.brut = null;
       this.dirInclinaison = 0;

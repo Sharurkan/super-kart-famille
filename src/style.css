@@ -252,7 +252,8 @@ body.mode-auto #commandes .btn-frein {
   }
 }
 
-@media (orientation: portrait) and (max-width: 1100px) {
+/* toute tablette ou téléphone tenu en portrait (le jeu ne se joue qu'en paysage) */
+@media (orientation: portrait) and (pointer: coarse), (orientation: portrait) and (max-width: 1100px) {
   #tourner {
     display: flex;
   }

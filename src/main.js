@@ -68,12 +68,16 @@ function montrer(nom) {
 
 function pleinEcran() {
   const el = document.documentElement;
+  // bloque en paysage (Android : seulement en plein écran ou en appli installée)
+  const bloquer = () => screen.orientation?.lock?.("landscape").catch(() => {});
   if (!document.fullscreenElement && el.requestFullscreen) {
-    el.requestFullscreen({ navigationUI: "hide" })
-      .then(() => screen.orientation?.lock?.("landscape"))
-      .catch(() => {});
-  }
+    el.requestFullscreen({ navigationUI: "hide" }).then(bloquer).catch(() => {});
+  } else bloquer();
 }
+// revenu en plein écran (ou appli installée) : on rebloque le paysage
+document.addEventListener("fullscreenchange", () => {
+  if (document.fullscreenElement) screen.orientation?.lock?.("landscape").catch(() => {});
+});
 
 // --- Personnages ---
 const listePersos = $("#liste-persos");
