@@ -15,6 +15,8 @@ import { audio } from "./audio.js";
 //  - (ψ, θ) résolus (Newton, 2 inconnues, repart de la solution précédente) pour que la gueule arrive
 //    sur la cible : direction et hauteur ; la distance suit la courbure de la colonne ;
 //  - tête : le museau vise le kart ; mâchoire : fermée de force pour le CLAC, puis rouverte (rugissement) ;
+//  - sons : grognement quand il voit arriver le kart, claquement au CLAC, rugissement au raté
+//    (enregistrements CC0 de public/sons ; sons synthétisés d'audio.js en secours) ;
 //  - sécurité : les points extrêmes de la tête et de la mâchoire (mesurés sur le maillage) restent à
 //    plus de ATTAQUE.plancher au-dessus de la route ; sinon le tangage est réduit (dichotomie).
 export const ATTAQUE = {
@@ -31,6 +33,14 @@ export const ATTAQUE = {
   pivot: 0.7, // rad : il pivote au plus de tant sur ses pieds vers le kart (le reste : buste et cou)
 };
 
+// Sons enregistrés (CC0, voir public/CREDITS.txt et outils/blender/sons_trex.py)
+const SONS = {
+  rugit: `${import.meta.env.BASE_URL}sons/trex-rugissement.ogg`, // « T-rex calls » (CaveboyTup)
+  grogne: `${import.meta.env.BASE_URL}sons/trex-grognement.ogg`, // idem
+  clac: `${import.meta.env.BASE_URL}sons/trex-clac.ogg`, // « 80 CC0 creature SFX #2 » (rubberduck)
+};
+let sonsPrets = false;
+
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const lisse = (x) => { const u = clamp(x, 0, 1); return u * u * (3 - 2 * u); };
 const angle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -43,6 +53,7 @@ const angle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 export function attaqueTrex({ objet, mixer, clips, piste, cote, iFrappe }) {
   const A = ATTAQUE;
   const { N, pas } = piste;
+  for (const u of Object.values(SONS)) audio.precharger?.(u); // fichiers téléchargés tout de suite
   const yRoute = piste.hauteurTremplin?.(iFrappe, 0, 0)?.h ?? 0; // hauteur de la route au point de frappe
   const modele = objet.children[0];
   const clip = (n) => clips.find((c) => c.name === n);
@@ -282,7 +293,12 @@ export function attaqueTrex({ objet, mixer, clips, piste, cote, iFrappe }) {
     let wFrappe = 0, ouvre = 0, ferme = 0, secoue = 0, regardCible = 0;
     if (!J && E.phase === "repos") E.arme = true; // le joueur est loin : prêt pour le prochain tour
 
-    if (E.phase === "repos" && E.arme && J && J.d > 0 && J.d < A.approche) { E.phase = "guette"; E.tau = 0; }
+    if (!sonsPrets && audio.ctx) { sonsPrets = true; for (const u of Object.values(SONS)) audio.precharger(u); } // décodés dès que le son démarre
+    if (E.phase === "repos" && E.arme && J && J.d > 0 && J.d < A.approche) {
+      E.phase = "guette";
+      E.tau = 0;
+      audio.jouer?.(SONS.grogne, 0.8); // il gronde en voyant arriver le kart
+    }
     if (E.phase === "guette") {
       if (!J || J.d < -5) { E.phase = "repos"; E.arme = false; }
       else {
@@ -309,7 +325,7 @@ export function attaqueTrex({ objet, mixer, clips, piste, cote, iFrappe }) {
       if (u >= 1) {
         E.phase = "clac";
         E.tau = 0;
-        audio.croc?.(); // CLAC ! (deux claquements de mâchoires et un grognement)
+        if (!audio.jouer?.(SONS.clac, 1.0)) audio.croc?.(); // CLAC ! (son synthétisé si le fichier n'est pas prêt)
         E.clacs.push(J ? { d: J.d, lateral: J.phys.lateral, vitesse: J.phys.vitesse } : null);
       }
     }
@@ -317,7 +333,11 @@ export function attaqueTrex({ objet, mixer, clips, piste, cote, iFrappe }) {
       wFrappe = 1;
       regardCible = 1;
       ferme = lisse(E.tau / 0.07);
-      if (E.tau >= A.tenue) { E.phase = "remonte"; E.tau = 0; audio.grondement?.(0.45); } // il rugit, furieux
+      if (E.tau >= A.tenue) {
+        E.phase = "remonte";
+        E.tau = 0;
+        if (!audio.jouer?.(SONS.rugit, 1.1)) audio.grondement?.(0.45); // il rugit, furieux (secours : grondement synthétisé)
+      }
     }
     if (E.phase === "remonte") {
       const t = E.tau;
