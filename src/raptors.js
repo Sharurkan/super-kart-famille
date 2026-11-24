@@ -413,8 +413,8 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
   // Traversée synchronisée sur le kart du joueur (voir majSauteurs) et jamais quand un kart roulerait
   // au sol dans la zone : chaque kart est prévu (vitesse, saut) avant de partir.
   const SAUT = {
-    H: 3.0, // m, hauteur du tremplin (envol : vy = 0,32 v + 2, physique.js ; à 24 m/s, ~4,5 m au plus haut)
-    LONG: 13, // m, longueur de la pente
+    H: 3.6, // m, hauteur du tremplin (envol : vy = 0,32 v + 2, physique.js ; à 24 m/s, ~5,3 m au plus haut)
+    LONG: 15, // m, longueur de la pente
     S: 1.15, // taille des sauteurs (2,5 m de haut : le kart passe 1 m au-dessus)
     SZ: 6.8, // m après le haut du tremplin : milieu de la zone de traversée (le kart y est en l'air)
     S_ATT: -30, // m : où ils attendent, au bord, avant le tremplin
@@ -466,7 +466,11 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
       };
       const cote = [-1, 1].find((k) => libre(k, SAUT.S_ATT - 17, SAUT.SZ + 17) && libre(-k, SAUT.SZ - 10, SAUT.SZ + 27));
       if (!cote) { non("saut-cotes"); if (import.meta.env.DEV) (refus.sautCotes ??= []).push(c.r0); continue; }
-      groupe.add(piste.ajouterTremplin({ debut: c.r0, nb, lateral: 0, demiLargeur: bord, hauteur: SAUT.H }));
+      const rampe = piste.ajouterTremplin({ debut: c.r0, nb, lateral: 0, demiLargeur: bord, hauteur: SAUT.H });
+      // chevrons plus petits et plus nombreux (la rampe fait toute la largeur : 28 m)
+      const tex = rampe.material.map?.clone();
+      if (tex) { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(4, 2); tex.needsUpdate = true; rampe.material.map = tex; }
+      groupe.add(rampe);
       const g = { type: "sauteurs", S: SAUT.S, h, i0: iFin, r0: c.r0, cote, voie, membres: [], etat: "attend", sP: SAUT.S_ATT, vP: 0, latP: 0, b: 0, t: 0 };
       FORM_COURSE.forEach((f, k) => g.membres.push({ k, echelle: 0.95 + rnd() * 0.1, img: rnd() * 10 }));
       // leurs places au bord (les plantes n'y poussent pas)
@@ -489,6 +493,10 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
     for (const i of ordre) {
       if (pris.length >= n) break;
       if (enTunnel(i) || pris.some((p) => Math.abs(ecart(i, p.i)) < 70 / pas)) continue;
+      // pas dans le looping ni la vrille (on y a la tête en bas), ni à côté d'une route surélevée
+      const Lp = piste.looping;
+      if (Lp && ((i - (Lp.debutEntonnoir ?? Lp.prise) + N) % N) <= ((Lp.rendu + 8 - (Lp.debutEntonnoir ?? Lp.prise) + N) % N)) { non("guet-looping"); continue; }
+      if (Math.max(piste.hauteurTremplin(i, 12).h, piste.hauteurTremplin(i, -12).h) > 0.6) { non("guet-relief"); continue; }
       const cote = rnd() < 0.5 ? 1 : -1;
       for (const c of [cote, -cote]) {
         const P = point(i, lat * c);
@@ -838,7 +846,8 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
       case "attend": case "court": {
         // en avance sur le kart du temps qu'il faudra pour arriver devant lui en travers de la route
         const tau = Math.abs(latK - latA) / SAUT.VC;
-        const sT = Math.min(SAUT.SZ, sK + vK * tau);
+        // (0,6 s d'avance : ils arrivent un peu avant et guettent le bon moment au bord)
+        const sT = Math.min(SAUT.SZ, sK + vK * (tau + 0.6));
         if (g.etat === "attend" && sT > g.sP && sK < SAUT.SZ && sK > -150) g.etat = "court";
         if (g.etat === "court") {
           const vV = Math.max(0, Math.min(34, vK + (sT - g.sP) * 1.6, Math.sqrt(2 * ACC * Math.max(0, SAUT.SZ - g.sP))));
@@ -849,9 +858,9 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
             // le kart du joueur arrive juste au bon moment (et assez vite pour bien sauter), ou il est
             // passé : on traverse si personne ne risque de rouler au sol dans la zone
             const tK = (SAUT.SZ - sK) / Math.max(vK, 1);
-            const aTemps = vK >= 19 && tK <= tau + 0.04 && tK >= tau - 0.3;
+            const aTemps = vK >= 18 && tK <= tau + 0.04 && tK >= tau - 0.3;
             const passe = sK > SAUT.SZ + 12;
-            if ((aTemps || passe) && traverseeSure(g, dureeTraverse)) { g.etat = "traverse"; g.latP = latA; g.b = 0; g.avecKart = aTemps; g.traversees = (g.traversees ?? 0) + 1; }
+            if ((aTemps || passe) && traverseeSure(g, dureeTraverse + 0.5)) { g.etat = "traverse"; g.latP = latA; g.b = 0; g.avecKart = aTemps; g.traversees = (g.traversees ?? 0) + 1; }
           }
           if (sK > SAUT.SZ + 400) { g.etat = "fini"; g.tFini = 0; } // (ne devrait pas arriver)
         }
@@ -1153,7 +1162,7 @@ export function installerRaptors(groupe, piste, { garde, plaines, clairieres = [
           for (const [px, pz] of contour(M.boite, e.h, e.x, e.z, e.angle, 0)) lm = Math.min(lm, Math.abs(piste.localiser(px, pz).lateral));
           latMin = Math.min(latMin, lm);
           const L = piste.localiser(e.x, e.z);
-          if (e.g.parti) continue;
+          if (e.g.parti || (e.g.type === "sauteurs" && e.g.b > 0)) continue; // (en se tournant pour traverser : la queue frôle le bord de la lave, un instant)
           const pb = lm < barriere ? "route" : !e.g.lave && laveProbable(e.x, e.z, Math.abs(L.lateral), bord) ? "lave" : !PRES_ROUTE.has(e.g.type) && ouverture(L.indice, L.lateral) < 0.6 ? "jungle" : "";
           if (pb) hors.push({ type: e.g.type, k: e.m.k, pb, lat: +lm.toFixed(1) });
         }
