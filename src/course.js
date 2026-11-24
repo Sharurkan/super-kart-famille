@@ -121,6 +121,7 @@ export class Course {
       return k;
     });
     this.joueur = this.karts.find((k) => k.joueur);
+    this.piste.humains = this.karts.filter((k) => k.joueur); // suivis par le décor (ex. le brachiosaure qui fait coucou)
     this.phys = this.joueur.phys; // raccourci (tests)
 
     this.bonbons = new Bonbons(scene, this.piste);

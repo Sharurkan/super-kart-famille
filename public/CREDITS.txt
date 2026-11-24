@@ -40,6 +40,8 @@ Chaque œuvre : « This work is based on "<titre>" by <auteur> licensed under CC
   https://sketchfab.com/3d-models/brachiosaurus-ar-card-751b32784e1a4ddd9c95aa88d7640ab7
   Fichiers : dinos/diplodocus.glb (le grand sauropode couché que l'on escalade, reposé dans Blender),
              dinos/sauropode-troupeau.glb, dinos/sauropode-troupeau-loin.glb (le troupeau)
+  Le brachiosaure géant debout au-dessus de la route (qui baisse la tête pour faire coucou) réutilise
+  dinos/sauropode-troupeau.glb, agrandi, pattes écartées et cou animé par le jeu (src/brachio.js).
 
 "Mosasaurus" — Alexey Zaika (lexazaixa25)
   https://sketchfab.com/3d-models/mosasaurus-684754a2ad8c46aca0634326b53d1f04
