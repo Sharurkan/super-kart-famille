@@ -40,7 +40,7 @@ export function creerMeteorite(groupe, volcan, piste) {
   const support = volcan.support; // tout est placé dans le repère du volcan (origine au pied)
   for (const u of Object.values(SONS)) audio.precharger(u);
   reinitialiserLave(support.position.x, support.position.z); // nouvelle course : plus de lave
-  const cendres = creerCendres(groupe);
+  const cendres = creerCendres(groupe, piste);
 
   // ---------- la roche ----------
   const uniformes = { uChaleur: { value: 0.6 }, uTemps: { value: 0 } };
