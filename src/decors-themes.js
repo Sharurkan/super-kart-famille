@@ -33,32 +33,36 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   const garde = gardeRoute(piste);
   const { N } = piste;
   const exterieur = (i) => Math.sign((piste.cx[i] - piste.centre.x) * piste.nx[i] + (piste.cz[i] - piste.centre.z) * piste.nz[i]) || 1;
-  // Troupeaux : espece, n (nombre), t (position le long de la plaine, 0 à 1), lat (distance à la route, m).
+  // Troupeaux : espece, n (nombre), t (position le long de la plaine, 0 à 1), lat (distance au milieu
+  // de la route, m ; bord de la route à 8 m, barrières à ~15 m).
+  // S : taille par rapport à la taille réelle (HAUTEUR plus bas). À taille réelle, vus du kart, ils
+  // étaient trop petits pour les enfants : tous sont agrandis (×1,7 à ×1,9) en gardant l'ordre des
+  // tailles (sauropode > T-rex > stégosaure, tricératops > parasaurolophus > raptors).
   // marche : ils tournent lentement en rond (seulement les espèces qui ont une vraie marche :
   // Stégosaure et Tricératops ; le T-rex n'a qu'une course, le Parasaurolophus et le sauropode rien).
   // heros : version détaillée du modèle (proche de la route) ; sinon la version « loin », ~3 fois
   // plus légère (budget de triangles ; raptor et tricératops n'existent qu'en une version).
+  // Le T-rex n'est pas dans ce tableau : il attend tout près de la route, avant sa tête géante (TREX plus bas).
   const PLAINES = [
     // ligne droite du haut (le ravin du ptérodactyle) : le volcan au fond de la plaine
     { debut: 0.155, fin: 0.3, cote: "ext", largeur: 230, troupeaux: [
-      { espece: "Apatosaurus", n: 3, t: 0.4, lat: 75 },
-      { espece: "Parasaurolophus", n: 4, t: 0.78, lat: 35 },
+      { espece: "Apatosaurus", n: 3, t: 0.12, lat: 66, S: 1.7 }, // avant le ravin (rien au-dessus du vide)
+      { espece: "Parasaurolophus", n: 4, t: 0.78, lat: 30, S: 1.8, heros: true },
     ] },
     // ligne droite du diplodocus
     { debut: 0.37, fin: 0.47, cote: "ext", largeur: 200, troupeaux: [
-      { espece: "Triceratops", n: 4, t: 0.3, lat: 34 },
-      { espece: "Stegosaurus", n: 3, t: 0.75, lat: 48, marche: true },
+      { espece: "Triceratops", n: 4, t: 0.3, lat: 30, S: 1.9 },
+      { espece: "Stegosaurus", n: 3, t: 0.75, lat: 44, S: 1.9, marche: true, heros: true },
     ] },
-    // ligne droite du T-rex
+    // ligne droite du T-rex (sa tête géante au bout, le T-rex à 50 m avant elle : voir TREX)
     { debut: 0.525, fin: 0.64, cote: "ext", largeur: 200, troupeaux: [
-      { espece: "Stegosaurus", n: 2, t: 0.25, lat: 38, heros: true },
-      { espece: "Velociraptor", n: 3, t: 0.45, lat: 28 },
-      { espece: "Trex", n: 1, t: 0.8, lat: 55, heros: true },
+      { espece: "Velociraptor", n: 3, t: 0.05, lat: 24, S: 1.8 },
+      { espece: "Stegosaurus", n: 2, t: 0.22, lat: 34, S: 1.9, heros: true },
     ] },
     // ligne droite du départ (le looping), côté intérieur du circuit
     { debut: 0.975, fin: 0.085, cote: "int", largeur: 120, troupeaux: [
-      { espece: "Parasaurolophus", n: 3, t: 0.55, lat: 42 },
-      { espece: "Triceratops", n: 2, t: 0.3, lat: 34, marche: true },
+      { espece: "Parasaurolophus", n: 3, t: 0.62, lat: 34, S: 1.8, heros: true },
+      { espece: "Triceratops", n: 2, t: 0.2, lat: 38, S: 1.9, marche: true }, // loin du troupeau voisin (cercle de marche ~20 m)
     ] },
   ].map((P) => {
     const debut = Math.round(P.debut * N) % N, fin = Math.round(P.fin * N) % N;
@@ -88,8 +92,10 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
     const i = (P.debut + Math.round(T.t * long)) % N;
     const lat = T.lat * P.cote;
     const cx = piste.cx[i] + piste.nx[i] * lat, cz = piste.cz[i] + piste.nz[i] * lat;
-    const L = LONGUEUR[T.espece];
-    const rayonMarche = T.marche ? 12 + rnd() * 6 : 0;
+    const S = T.S ?? 1;
+    const L = LONGUEUR[T.espece] * S; // écarts, cercle de marche et clairière suivent la taille
+    // cercle de marche : assez grand pour la file de marcheurs (n × (longueur + 5 m))
+    const rayonMarche = T.marche ? Math.max((8 + rnd() * 4) * S, (T.n * (L + 5)) / 6.283) : 0;
     // en rond (troupeau sur place) : rayon tel que deux voisins soient à ~0,9 longueur l'un de l'autre
     const anneau = T.n > 1 && !T.marche ? (0.9 * L) / (2 * Math.sin(Math.PI / T.n)) : 0;
     const occupe = (T.marche ? rayonMarche : anneau) + L * 0.6 + 2;
@@ -104,14 +110,15 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
       const anim = T.marche ? "Walk" : clips[Math.floor(rnd() * clips.length)];
       const tourne = (rnd() - 0.5) * (travers ? 0.8 : 2.4), vitesse = 0.85 + rnd() * 0.3, echelle = 0.9 + rnd() * 0.2;
       const angle0 = k * (L * echelle + 5) / Math.max(1, rayonMarche) + rnd() * 0.1; // en file sur le cercle de marche
-      creerDino(T.espece, { animation: anim, vitesse, hauteur: HAUTEUR[T.espece] * echelle, detail: T.heros ? undefined : "loin" }).then(({ objet, mixer }) => {
+      creerDino(T.espece, { animation: anim, vitesse, hauteur: HAUTEUR[T.espece] * S * echelle, detail: T.heros ? undefined : "loin" }).then(({ objet, mixer }) => {
         // sa vraie taille (un apatosaure est très long) : il ne doit pas déborder sur la route
         const boite = new THREE.Box3().setFromObject(objet);
         const r = 0.6 * Math.hypot(boite.max.x - boite.min.x, boite.max.z - boite.min.z) / 2, h = boite.max.y - boite.min.y;
         if (T.marche) {
           // marche lente en rond autour du troupeau : tout le cercle doit rester loin de la route
           for (let m = 0; m < 12; m++) if (!garde.verifier(cx + Math.cos(m * 0.52) * rayonMarche, cz + Math.sin(m * 0.52) * rayonMarche, r, h, "dino " + T.espece, false)) return;
-          marcheurs.push({ objet, cx, cz, R: rayonMarche, a: angle0, w: (MARCHE[T.espece] * echelle * vitesse) / rayonMarche });
+          // la foulée grandit avec la taille : vitesse ∝ taille × vitesse d'animation (pas de glissade)
+          marcheurs.push({ objet, cx, cz, R: rayonMarche, a: angle0, w: (MARCHE[T.espece] * S * echelle * vitesse) / rayonMarche });
         } else {
           const ok = garde.verifier(x, z, r, h, "dino " + T.espece);
           if (!ok) return;
@@ -123,6 +130,67 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
       });
     }
   }
+  // Le T-rex : debout tout près de la route (16 m du bord, derrière les rochers de l'entonnoir), 50 m avant
+  // sa tête géante, côté plaine. Il regarde les karts arriver et rugit (clip Attack) quand le joueur passe.
+  // La tête n'est installée que plus bas (teteTrex) : même calcul que teteTrex() pour son indice ; à
+  // l'arrivée du modèle, on se recale sur piste.teteTrex (la vraie place).
+  const TREX = { avant: 50, lat: 24, S: 1.5, rugir: 45 }; // avant la gueule (m), du milieu de la route (m), taille, distance du rugissement (m)
+  const P3 = PLAINES[2];
+  const placeTrex = (iTete) => {
+    const i = (iTete - Math.round(TREX.avant / piste.pas) + N) % N;
+    const l = TREX.lat * P3.cote;
+    const iVise = (i - Math.round(25 / piste.pas) + N) % N; // il regarde la route 25 m avant lui
+    const x = piste.cx[i] + piste.nx[i] * l, z = piste.cz[i] + piste.nz[i] * l;
+    return { i, x, z, angle: Math.atan2(piste.cx[iVise] - x, piste.cz[iVise] - z) };
+  };
+  const trex = { place: placeTrex(ligneDroiteLongue(piste, 0.63, GUEULE_AVANT + ELAN_GUEULE + 4.5 + 70, 30, 0.06)), pret: false, arme: true };
+  {
+    const L = LONGUEUR.Trex * TREX.S;
+    clairieres.push({ x: trex.place.x, z: trex.place.z, r: L * 0.6 + 6, occupe: L * 0.6 + 2, espece: "Trex", i: trex.place.i });
+  }
+  creerDino("Trex", { animation: "Idle", hauteur: HAUTEUR.Trex * TREX.S }).then(({ objet, mixer, clips }) => {
+    if (piste.teteTrex && piste.teteTrex.indice !== undefined) trex.place = placeTrex(piste.teteTrex.indice);
+    // la garde vérifie quand même (route, vue de la caméra, tête géante) ; au besoin il recule un peu
+    const boite = new THREE.Box3().setFromObject(objet);
+    const ok = garde.verifier(trex.place.x, trex.place.z, 0.6 * Math.hypot(boite.max.x - boite.min.x, boite.max.z - boite.min.z) / 2, boite.max.y - boite.min.y, "dino Trex");
+    if (!ok) return;
+    Object.assign(trex.place, ok);
+    const { x, z, angle } = trex.place;
+    objet.position.set(x, 0, z);
+    objet.rotation.y = angle;
+    groupe.add(objet);
+    mixers.push(mixer);
+    const racine = objet.children[0];
+    const trouver = (n) => clips.find((c) => c.name === n);
+    trex.repos = mixer.clipAction(trouver("Idle"), racine);
+    const cri = trouver("Attack");
+    if (cri) {
+      trex.cri = mixer.clipAction(cri, racine);
+      trex.cri.setLoop(THREE.LoopOnce, 1);
+      trex.cri.clampWhenFinished = true;
+      mixer.addEventListener("finished", (e) => {
+        if (e.action !== trex.cri) return;
+        trex.repos.reset().play();
+        trex.repos.crossFadeFrom(trex.cri, 0.5, false);
+      });
+    }
+    trex.objet = objet;
+    trex.pret = true;
+  });
+  const rugir = (camera) => {
+    if (!trex.pret || !trex.cri || !camera) return;
+    const { x, z, i } = trex.place;
+    const d = Math.hypot(camera.position.x - x, camera.position.z - z);
+    if (d > 90) { trex.arme = true; return; }
+    // le joueur arrive (le T-rex est encore devant lui sur la route) et passe tout près : il rugit, une fois par passage
+    const devant = (x - camera.position.x) * piste.tx[i] + (z - camera.position.z) * piste.tz[i] > 0;
+    if (trex.arme && devant && d < TREX.rugir) {
+      trex.arme = false;
+      trex.cri.reset().play();
+      trex.cri.crossFadeFrom(trex.repos, 0.3, false);
+    }
+  };
+
   // plantes, rochers et nids : pas sur les dinosaures des plaines
   const horsTroupeaux = (liste) => liste.filter((p) => clairieres.every((c) => Math.hypot(p.x - c.x, p.z - c.z) > c.occupe));
 
@@ -195,7 +263,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   mixers.push(aquariumGeant(groupe, piste)); // virages du bas : tunnel sous un aquarium géant (son update(dt) suit les mixers)
   // la jungle (imposteurs réalistes), une fois le ravin, le diplodocus, le T-rex et l'aquarium installés ;
   // rien sur le pied du volcan ni sur les troupeaux des plaines (ni dans piste.zonesDecor)
-  if (import.meta.env.DEV) window.__troupeaux = Object.assign(clairieres, { plaines: PLAINES });
+  if (import.meta.env.DEV) window.__troupeaux = Object.assign(clairieres, { plaines: PLAINES, trex });
   planterJungle(groupe, piste, rnd, garde, { plaines: PLAINES, exclusions: [{ x: xV, z: zV, r: 150 }, ...clairieres] });
   // les nids passent par la garde une fois le ravin, le diplodocus et le T-rex installés
   groupe.add(instances(nid, matCouleurs(), nids.flatMap((p) => {
@@ -205,8 +273,9 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
 
   let t = 0;
   const o = new THREE.Object3D();
-  return (dt) => {
+  return (dt, camera) => {
     t += dt;
+    rugir(camera);
     for (let k = 0; k < NB_FUMEE; k++) {
       const vie = (t * 0.07 + k / NB_FUMEE) % 1;
       o.position.set(xV + sommet.x + Math.sin(k * 3 + t * 0.2) * 12 * vie + vie * vie * 30, sommet.y + 4 + vie * 110, zV + sommet.z + Math.cos(k * 2) * 9 * vie);
