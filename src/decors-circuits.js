@@ -24,14 +24,18 @@ export function fusion(parties) {
 export const matCouleurs = () => new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: false });
 const filtrer = (liste, ok) => liste.filter((p) => ok(p.x, p.z));
 
-export function nuages(groupe, piste, rnd) {
+export function nuages(groupe, piste, rnd, eviter = null) {
   const liste = [];
   for (let i = 0; i < 18; i++) {
     const a = rnd() * Math.PI * 2;
     const r = 150 + rnd() * 300;
     const x = piste.centre.x + Math.cos(a) * r, z = piste.centre.z + Math.sin(a) * r, y = 70 + rnd() * 40;
-    for (let k = 0; k < 4; k++)
-      liste.push({ x: x + (k - 1.5) * 9 + rnd() * 4, y: y + rnd() * 4, z: z + rnd() * 6, s: 7 + rnd() * 5, sy: 4 + rnd() * 3 });
+    // (mêmes tirages même si le nuage est écarté : le reste du décor ne bouge pas)
+    const garde = !eviter?.(a);
+    for (let k = 0; k < 4; k++) {
+      const n = { x: x + (k - 1.5) * 9 + rnd() * 4, y: y + rnd() * 4, z: z + rnd() * 6, s: 7 + rnd() * 5, sy: 4 + rnd() * 3 };
+      if (garde) liste.push(n);
+    }
   }
   groupe.add(instances(new THREE.IcosahedronGeometry(1, 2), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), liste));
 }
