@@ -88,6 +88,8 @@ OpenGameArt — sons du T-rex debout au bord de la route (src/trex-attaque.js ; 
 ambientCG — https://ambientcg.com (monde en lave après la météorite, src/lave.js)
   Lava 001 (couleur + émission) -> lave/roche-lave.jpg, lave/roche-lave-braise.jpg   https://ambientcg.com/view?id=Lava001
   Lava 004 (couleur)            -> lave/lave.jpg                                     https://ambientcg.com/view?id=Lava004
+  Rock 031 (couleur)            -> lave/roche-volcan.jpg (roche sombre du volcan) https://ambientcg.com/view?id=Rock031
+  Gravel 024 (couleur)          -> lave/cendre-volcan.jpg (cendres du volcan)     https://ambientcg.com/view?id=Gravel024
   (réduites en 1024 / 512 px, JPEG)
 
 Poly Haven — https://polyhaven.com

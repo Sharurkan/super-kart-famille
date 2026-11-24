@@ -26,7 +26,20 @@ import { LAVE, GLSL_LAVE } from "./lave.js";
 const DIMENSIONS = { hauteur: 140, largeur: 380 };
 // le terrain du modèle plonge sous le sol avant son bord : au-delà de ~87 % du rayon, plus rien ne dépasse
 const RAYON_PIED = (DIMENSIONS.largeur / 2) * 0.87;
-const NB_FUMEE = 56;
+const NB_FUMEE = 84;
+// variante des coulées : 0 = très lumineuses (A), 0,35 = croûte dominante (B)
+const varianteCroute = () => (import.meta.env.DEV && window.__varianteCroute != null ? window.__varianteCroute : 0);
+const texturesVolcan = {};
+function textureVolcan(nom) {
+  if (!texturesVolcan[nom]) {
+    const t = new THREE.TextureLoader().load(import.meta.env.BASE_URL + "lave/" + nom);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 4;
+    texturesVolcan[nom] = t;
+  }
+  return texturesVolcan[nom];
+}
 const NB_LAVE = 72; // projections (les 2 dernières places : lueur du cratère)
 const NB_HALOS = 40; // lueurs le long des coulées
 const GRAVITE = 22; // m/s² (un peu moins que la vraie : les boules restent lisibles plus longtemps)
@@ -55,6 +68,10 @@ export function creerVolcan(groupe, x, z, { versPiste = 0, echelle = 1 } = {}) {
     tCoulees: { value: null }, // masque des coulées (tracerCoulees)
     uDemi: { value: 200 * echelle }, // demi-côté (m) du carré couvert par ce masque
     uSombre: { value: 0 }, // après l'impact : la roche noircit (la lave ressort)
+    uFront: { value: 0 }, // m parcourus par le front des coulées (0 avant l'impact)
+    uCroute: { value: varianteCroute() }, // 0 : coulées très lumineuses ; 0,35 : croûte dominante
+    tRocheV: { value: textureVolcan("roche-volcan.jpg") }, // détail de près (ambientCG Rock031)
+    tCendre: { value: textureVolcan("cendre-volcan.jpg") }, // cendres (ambientCG Gravel024)
   };
   const etat = {
     pret: false, t: 0,
@@ -62,7 +79,7 @@ export function creerVolcan(groupe, x, z, { versPiste = 0, echelle = 1 } = {}) {
     prochaine: 8 + Math.random() * 6, // première grosse éruption assez tôt
     eruption: -1, // temps écoulé depuis le début de la grosse éruption en cours (-1 : aucune)
     emisFumee: 0, emisLave: 0,
-    forceMax: 1, renfort: 0,
+    forceMax: 1, renfort: 0, tCoulee: 0, emisVapeur: 0,
   };
 
   // ---------- la montagne ----------
@@ -166,35 +183,64 @@ export function creerVolcan(groupe, x, z, { versPiste = 0, echelle = 1 } = {}) {
     g.fillRect(0, 0, P, P);
     g.lineCap = g.lineJoin = "round";
     g.globalCompositeOperation = "lighten";
-    // 4 coulées, du côté de la piste (versPiste) : bien visibles en roulant
-    const departs = [0, -0.6, 0.62, -1.2];
-    for (const [nf, da] of departs.entries()) {
-      const a0 = versPiste + da + (Math.random() - 0.5) * 0.2;
-      let x = cx + Math.cos(a0) * etat.rayon * 0.95, z = cz + Math.sin(a0) * etat.rayon * 0.95;
-      let dx = Math.cos(a0), dz = Math.sin(a0);
+    // Coulées dissymétriques, comme sur un vrai volcan : une principale large et longue qui sort
+    // par une brèche du cratère, une moyenne qui se divise en deux bras, une petite langue courte.
+    // Départs à des endroits différents du bord, tracés qui suivent les ravines (plus grande pente)
+    // avec un peu de méandres, largeur irrégulière (étranglements, élargissements, lobe au front).
+    const COULEES = [
+      { da: 0.28 + (Math.random() - 0.5) * 0.25, larg: 27, pasMax: 160, breche: true },
+      { da: -1.0 + (Math.random() - 0.5) * 0.3, larg: 15, pasMax: 105, division: 0.42 },
+      { da: 1.8 + (Math.random() - 0.5) * 0.3, larg: 9, pasMax: 48 },
+    ];
+    const tracer = (x, z, dx, dz, pasMax, ph) => {
       const chemin = [[x, z]];
-      for (let s = 0; s < 150; s++) {
+      for (let s = 0; s < pasMax; s++) {
         const e = 6;
-        let gx = H(x + e, z) - H(x - e, z), gz = H(x, z + e) - H(x, z - e);
+        const gx = H(x + e, z) - H(x - e, z), gz = H(x, z + e) - H(x, z - e);
         const gl = Math.hypot(gx, gz) || 1;
-        // la pente + l'élan + une petite poussée vers l'extérieur (pas de demi-tour sur un replat)
         const rx = x - cx, rz = z - cz, rl = Math.hypot(rx, rz) || 1;
-        dx = dx * 0.7 - (gx / gl) * 0.18 + (rx / rl) * 0.16;
-        dz = dz * 0.7 - (gz / gl) * 0.18 + (rz / rl) * 0.16;
+        // la pente (les ravines) + l'élan + un léger méandre + une petite poussée vers l'extérieur
+        const m = Math.sin(s * 0.19 + ph) * 0.16 + Math.sin(s * 0.071 + ph * 2.3) * 0.1;
+        dx = dx * 0.62 - (gx / gl) * 0.32 + (rx / rl) * 0.08 - dz * m;
+        dz = dz * 0.62 - (gz / gl) * 0.32 + (rz / rl) * 0.08 + dx * m;
         const dl = Math.hypot(dx, dz) || 1;
         dx /= dl; dz /= dl;
         x += dx * 2.5; z += dz * 2.5;
         chemin.push([x, z]);
         if (H(x, z) < 4 || rl > rayonPied * 0.92) break;
       }
-      const L = chemin.length;
-      // halo (B) large et doux, puis la coulée (R, G) qui s'élargit
+      return chemin;
+    };
+    const flux = []; // { chemin, larg, ph, depart (m déjà parcourus avant ce bras) }
+    for (const C of COULEES) {
+      const a0 = versPiste + C.da, r0 = etat.rayon * (C.breche ? 1.12 : 0.98); // (brèche : la lave sort plus bas, par une entaille du bord)
+      const ph = Math.random() * 6.283;
+      const ch = tracer(cx + Math.cos(a0) * r0, cz + Math.sin(a0) * r0, Math.cos(a0), Math.sin(a0), C.pasMax, ph);
+      flux.push({ chemin: ch, larg: C.larg, ph, depart: 0 });
+      if (C.division && ch.length > 20) {
+        // un bras se détache et part de son côté
+        const k = Math.floor(ch.length * C.division), [x, z] = ch[k], [xp, zp] = ch[k - 2];
+        const sens = Math.random() < 0.5 ? -1 : 1, ang = Math.atan2(z - zp, x - xp) + sens * 0.6;
+        const bras = tracer(x, z, Math.cos(ang), Math.sin(ang), Math.floor((ch.length - k) * 0.75), ph + 1.7);
+        flux.push({ chemin: bras, larg: C.larg * 0.6, ph: ph + 1.7, depart: k * 2.5 });
+      }
+    }
+    for (const F of flux) {
+      const chemin = F.chemin, L = chemin.length;
+      // largeur (m) le long du chenal : s'élargit en descendant, étranglements, lobe au front
+      const largAt = (k, dist) => {
+        const a = k / Math.max(1, L - 1);
+        const irr = 0.72 + 0.28 * Math.sin(dist * 0.043 + F.ph) + 0.17 * Math.sin(dist * 0.13 + F.ph * 3.1);
+        return F.larg * (0.45 + 0.55 * Math.pow(a, 0.6)) * irr * (1 + 0.55 * THREE.MathUtils.smoothstep(a, 0.82, 1));
+      };
+      // masque : halo (B) large et doux, puis la coulée (R) et la distance parcourue (G, /400 m)
       for (const passe of [0, 1]) {
         g.filter = passe ? `blur(${(2.2 * px).toFixed(1)}px)` : `blur(${(8 * px).toFixed(1)}px)`;
+        let dist = F.depart;
         for (let k = 1; k < L; k++) {
-          const a = k / L, larg = largeur(a) * (passe ? 1.1 : 1.7);
-          g.lineWidth = larg * px;
-          g.strokeStyle = passe ? `rgb(255,${Math.round(a * 255)},0)` : "rgb(0,0,200)";
+          dist += 2.5;
+          g.lineWidth = largAt(k, dist) * (passe ? 1.05 : 1.8) * px;
+          g.strokeStyle = passe ? `rgb(255,${Math.min(255, Math.round((dist / 400) * 255))},0)` : "rgb(0,0,200)";
           g.beginPath();
           g.moveTo((chemin[k - 1][0] + DEMI) * px, (chemin[k - 1][1] + DEMI) * px);
           g.lineTo((chemin[k][0] + DEMI) * px, (chemin[k][1] + DEMI) * px);
@@ -203,49 +249,46 @@ export function creerVolcan(groupe, x, z, { versPiste = 0, echelle = 1 } = {}) {
       }
       // le ruban : 3 sommets par section (bord, milieu un peu bombé, bord), posés sur le relief
       const base = pos.length / 3;
-      let dist = 0;
+      let dist = F.depart;
       for (let k = 0; k < L; k += 2) {
         const [x0, z0] = chemin[k], [x1, z1] = chemin[Math.min(L - 1, k + 2)], [xp, zp] = chemin[Math.max(0, k - 2)];
         let tx = x1 - xp, tz = z1 - zp;
         const tl = Math.hypot(tx, tz) || 1;
         tx /= tl; tz /= tl;
         if (k > 0) dist += Math.hypot(x0 - chemin[k - 2][0], z0 - chemin[k - 2][1]);
-        const a = k / (L - 1), w = largeur(a) / 2;
+        const a = k / (L - 1), w = largAt(k, dist) / 2;
         for (const s of [-1, 0, 1]) {
           const x = x0 - tz * w * s, z = z0 + tx * w * s;
-          pos.push(x, surface(x, z) + (s ? 0.7 : 1.3), z);
+          pos.push(x, surface(x, z) + (s ? 0.7 : 1.4), z);
           uvs.push((s + 1) / 2, dist);
-          avs.push(a);
+          avs.push(a, w * 2, F.ph);
         }
       }
       const sections = (pos.length / 3 - base) / 3;
       for (let k = 0; k < sections - 1; k++)
         for (let s = 0; s < 2; s++) {
-          const a = base + k * 3 + s, b = a + 3;
-          idx.push(a, b, a + 1, a + 1, b, b + 1);
+          const i0 = base + k * 3 + s, i1 = i0 + 3;
+          idx.push(i0, i1, i0 + 1, i0 + 1, i1, i1 + 1);
         }
-      // quelques lueurs le long de la coulée (sprites additifs, pas de vraie lumière)
-      for (let k = 6; k < L; k += 14) {
+      // quelques lueurs et départs de vapeur le long de la coulée
+      for (let k = 6; k < L; k += 12) {
         const [hx, hz] = chemin[k];
-        halosCoulees.push({ p: new THREE.Vector3(hx, surface(hx, hz) + 5, hz), a: k / L, ph: Math.random() * 6.283 });
+        halosCoulees.push({ p: new THREE.Vector3(hx, surface(hx, hz) + 5, hz), a: k / L, dist: F.depart + k * 2.5, larg: largAt(k, F.depart + k * 2.5), ph: Math.random() * 6.283 });
       }
-    }
-    const tex = new THREE.CanvasTexture(cv);
+    }    const tex = new THREE.CanvasTexture(cv);
     tex.flipY = false; // ligne 0 du dessin = z minimal
     uniformes.tCoulees.value = tex;
     // les rubans de lave : 1 draw call, quelques centaines de triangles
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
-    geo.setAttribute("aAvance", new THREE.Float32BufferAttribute(avs, 1));
+    geo.setAttribute("aAvance", new THREE.Float32BufferAttribute(avs, 3)); // avancée 0..1, largeur (m), phase
     geo.setIndex(idx);
     geo.computeBoundingSphere();
     const rubans = new THREE.Mesh(geo, materiauCoulee(uniformes));
     rubans.renderOrder = 1;
     support.add(rubans);
   }
-  // largeur d'une coulée (m) selon l'avancée : 10 m au cratère, 25 m au pied
-  const largeur = (a) => 10 + 15 * Math.pow(a, 0.7);
 
   // ---------- sprites (fumée, lave) ----------
   const fumee = new Sprites(NB_FUMEE, textureParticules(), THREE.NormalBlending);
@@ -253,7 +296,7 @@ export function creerVolcan(groupe, x, z, { versPiste = 0, echelle = 1 } = {}) {
   support.add(fumee.mesh, lave.mesh);
 
   // fumée : position, vitesse, âge, durée de vie, taille de départ/fin, sombre (cendres)
-  const F = Array.from({ length: NB_FUMEE }, () => ({ vivant: false, p: new THREE.Vector3(), v: new THREE.Vector3(), age: 0, vie: 1, t0: 1, t1: 1, sombre: 0, rot: 0, dr: 0, cell: 0 }));
+  const F = Array.from({ length: NB_FUMEE }, () => ({ vivant: false, p: new THREE.Vector3(), v: new THREE.Vector3(), age: 0, vie: 1, t0: 1, t1: 1, sombre: 0, rot: 0, dr: 0, cell: 0, vapeur: false }));
   // projections : position, vitesse, âge ; posee = temps passé sur le flanc (refroidit)
   const L = Array.from({ length: NB_LAVE - 2 }, () => ({ vivant: false, p: new THREE.Vector3(), v: new THREE.Vector3(), age: 0, posee: -1, taille: 6 }));
   let iF = 0, iL = 0;
@@ -265,11 +308,23 @@ export function creerVolcan(groupe, x, z, { versPiste = 0, echelle = 1 } = {}) {
     const montee = 6 + Math.random() * 3 + force * 26; // colonne de cendres bien droite pendant l'éruption
     f.v.set(vent.x * 3 + (Math.random() - 0.5) * 3, montee, vent.y * 3 + (Math.random() - 0.5) * 3);
     f.age = 0; f.vie = 14 + Math.random() * 5 - force * 3;
-    f.t0 = etat.rayon * (1.1 + Math.random() * 0.4) * (1 + force * 0.3);
+    f.t0 = etat.rayon * (1.4 + Math.random() * 0.5) * (1 + force * 0.3);
     f.t1 = f.t0 * (4 + Math.random()) * (1 + force * 0.3);
     f.sombre = Math.min(1, force * 1.2 + Math.random() * 0.25);
     f.rot = Math.random() * 6.283; f.dr = (Math.random() - 0.5) * 0.15;
     f.cell = CELLULES_FUMEE[Math.floor(Math.random() * CELLULES_FUMEE.length)];
+    f.vapeur = false;
+    f.vivant = true;
+  }
+  function lancerVapeur(hc) {
+    const f = F[iF]; iF = (iF + 1) % NB_FUMEE;
+    f.p.set(hc.p.x + (Math.random() - 0.5) * hc.larg * 0.6, hc.p.y - 3, hc.p.z + (Math.random() - 0.5) * hc.larg * 0.6);
+    f.v.set(vent.x * 2, 4 + Math.random() * 4, vent.y * 2);
+    f.age = 0; f.vie = 5 + Math.random() * 3;
+    f.t0 = hc.larg * 0.6; f.t1 = hc.larg * 2.2;
+    f.sombre = 0; f.rot = Math.random() * 6.283; f.dr = (Math.random() - 0.5) * 0.2;
+    f.cell = CELLULES_FUMEE[Math.floor(Math.random() * CELLULES_FUMEE.length)];
+    f.vapeur = true;
     f.vivant = true;
   }
 
@@ -296,8 +351,12 @@ export function creerVolcan(groupe, x, z, { versPiste = 0, echelle = 1 } = {}) {
     if (!brouillardPret) brouillardPret = fumee.lierBrouillard(support) && lave.lierBrouillard(support);
 
     // --- calendrier : grosse éruption toutes les 15 à 25 s ---
+    // avant la météorite : volcan actif mais calme (dégazage, petite lueur, pas de grosse éruption)
     etat.prochaine -= dt;
-    if (etat.prochaine <= 0) declencher();
+    if (etat.prochaine <= 0 && etat.renfort > 0) declencher();
+    // les coulées avancent après l'impact (front à ~5 m/s depuis le cratère)
+    if (etat.renfort > 0) etat.tCoulee += dt;
+    uniformes.uFront.value = etat.tCoulee * 5;
     let force = 0; // 0 : activité normale ; 1 au plus fort d'une grosse éruption (plus après la météorite)
     if (etat.eruption >= 0) {
       etat.eruption += dt;
@@ -308,12 +367,21 @@ export function creerVolcan(groupe, x, z, { versPiste = 0, echelle = 1 } = {}) {
     const b = etat.renfort; // activité de fond renforcée (après l'impact de la météorite)
     uniformes.uSombre.value += (b - uniformes.uSombre.value) * Math.min(1, dt * 0.15);
     // rougeoiement : respire doucement, flambe pendant l'éruption
-    uniformes.uLueur.value = 0.65 + 0.12 * Math.sin(etat.t * 1.7) + 0.08 * Math.sin(etat.t * 4.3) + force * 1.2 + b * 0.6;
+    uniformes.uLueur.value = 0.45 + 0.1 * Math.sin(etat.t * 1.7) + 0.06 * Math.sin(etat.t * 4.3) + force * 1.2 + b * 0.8;
 
     // --- émission --- (les projections restent assez lentes pour retomber sur les flancs)
-    etat.emisFumee += dt * (3 + b * 3 + force * 9);
+    etat.emisFumee += dt * (4.5 + b * 3 + force * 9); // dégazage permanent, panache dense
     while (etat.emisFumee >= 1) { etat.emisFumee--; lancerFumee(Math.max(force, b * 0.5)); }
-    etat.emisLave += dt * (0.8 + b * 2.5 + force * (etat.eruption < 1.8 ? 34 : 4));
+    etat.emisLave += dt * (0.25 + b * 2.5 + force * (etat.eruption < 1.8 ? 34 : 4));
+    // vapeur blanchâtre qui monte des coulées (là où elles sont arrivées)
+    if (halosCoulees.length && uniformes.uFront.value > 0) {
+      etat.emisVapeur += dt * 3;
+      while (etat.emisVapeur >= 1) {
+        etat.emisVapeur--;
+        const hc = halosCoulees[Math.floor(Math.random() * halosCoulees.length)];
+        if (hc.dist < uniformes.uFront.value) lancerVapeur(hc);
+      }
+    }
     while (etat.emisLave >= 1) { etat.emisLave--; lancerLave(Math.min(1.2, Math.max(force, b * 0.4))); }
 
     camLocale.copy(camera.position).sub(support.position);
@@ -331,11 +399,18 @@ export function creerVolcan(groupe, x, z, { versPiste = 0, echelle = 1 } = {}) {
       f.p.addScaledVector(f.v, dt);
       f.rot += f.dr * dt;
       const s = f.t0 + (f.t1 - f.t0) * Math.sqrt(u);
-      const alpha = Math.min(1, u * 6) * Math.pow(1 - u, 1.3) * (0.82 + 0.15 * f.sombre);
-      // en bas : éclairée par la lave ; puis grise (cendres plus sombres pendant l'éruption)
-      const g = (0.48 + 0.32 * u) * (1 - 0.45 * f.sombre);
-      const feu = Math.max(0, 1 - u * 7) * Math.min(1.5, uniformes.uLueur.value);
-      coul.setRGB(g + (1 - g) * feu, g + (0.45 - g) * feu, g + (0.15 - g) * feu);
+      if (f.vapeur) {
+        // vapeur des coulées : blanchâtre, légère, rosie par la lave en dessous
+        const a = Math.min(1, u * 5) * Math.pow(1 - u, 1.5) * 0.45, rose = Math.max(0, 1 - u * 3) * 0.3;
+        fumee.poser(n++, f.p, s, f.rot, coul.setRGB(0.86, 0.84 - rose * 0.3, 0.82 - rose * 0.5), a, camLocale, f.cell);
+        continue;
+      }
+      const alpha = Math.min(1, u * 6) * Math.pow(1 - u, 1.2) * (0.86 + 0.12 * f.sombre);
+      // panache éclairé par dessous par la lueur du cratère (plus fort près du sommet), puis gris
+      const g = (0.42 + 0.3 * u) * (1 - 0.45 * f.sombre);
+      const hRel = (f.p.y - etat.sommet.y) / (etat.rayon * 5);
+      const feu = Math.min(1, Math.max(0, 1 - u * 7) + Math.max(0, 1 - hRel) * 0.45) * Math.min(1.4, uniformes.uLueur.value);
+      coul.setRGB(g + (1 - g) * feu, g + (0.42 - g) * feu, g + (0.14 - g) * feu);
       fumee.poser(n++, f.p, s, f.rot, coul, alpha, camLocale, f.cell);
     }
     fumee.finir(n, true);
@@ -369,6 +444,7 @@ export function creerVolcan(groupe, x, z, { versPiste = 0, echelle = 1 } = {}) {
     // la lave des coulées éclaire l'air au-dessus d'elle (plus fort près du cratère)
     for (const hc of halosCoulees) {
       if (n >= NB_LAVE + NB_HALOS) break;
+      if (hc.dist > uniformes.uFront.value) continue;
       const a = (1 - hc.a * 0.6) * (0.75 + 0.25 * Math.sin(etat.t * 1.7 + hc.ph)) * Math.min(1, 0.6 + lu * 0.3);
       lave.poser(n++, hc.p, 16 + 18 * hc.a, 0, coul.setRGB(1, 0.42 - hc.a * 0.15, 0.1), a, camLocale, CELLULE.lueur);
     }
@@ -413,15 +489,15 @@ function materiauRoche(ancien, uniformes) {
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, LAVE.uniforms, uniformes);
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nvarying vec3 vMonde;")
-      .replace("#include <project_vertex>", "#include <project_vertex>\nvMonde = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+      .replace("#include <common>", "#include <common>\nvarying vec3 vMonde, vNormalMonde;")
+      .replace("#include <project_vertex>", "#include <project_vertex>\nvMonde = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvNormalMonde = normalize(mat3(modelMatrix) * objectNormal);");
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", `#include <common>
-varying vec3 vMonde;
-uniform float uTemps, uLueur, uVue, uSombre, uDemi;
+varying vec3 vMonde, vNormalMonde;
+uniform float uTemps, uLueur, uVue, uSombre, uDemi, uFront;
 uniform vec3 uOrigine;
 uniform vec4 uCratere;
-uniform sampler2D tSol, tRocheLave, tBraiseLave, tLave, tCoulees;
+uniform sampler2D tSol, tRocheLave, tBraiseLave, tLave, tCoulees, tRocheV, tCendre;
 ${GLSL_LAVE}
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float bruit(vec2 p) {
@@ -436,47 +512,52 @@ vec3 local = vMonde - uOrigine;
 vec2 q = local.xz - uCratere.xz;
 float r = length(q);
 float hn = clamp((uCratere.y - local.y) / uCratere.y, -0.2, 1.0);
+// --- roche sombre et cendres grises : la photo du modèle garde ses formes (ravines, arêtes),
+// la couleur vient d'une photo de roche volcanique sombre (ambientCG Rock031) plaquée en
+// triplanaire à petite échelle (net de près) et de cendres (Gravel024) sur les pentes douces
+float lumP = dot(diffuseColor.rgb, vec3(0.3, 0.5, 0.2));
+vec3 nW = normalize(vNormalMonde);
+vec3 bw = pow(abs(nW), vec3(4.0)); bw /= (bw.x + bw.y + bw.z);
+vec3 det = texture2D(tRocheV, vMonde.zy / 11.0).rgb * bw.x + texture2D(tRocheV, vMonde.xz / 11.0).rgb * bw.y + texture2D(tRocheV, vMonde.xy / 11.0).rgb * bw.z;
+vec3 det2 = texture2D(tRocheV, vMonde.xz / 63.0 + 0.4).rgb;
+vec3 cendre = texture2D(tCendre, vMonde.xz / 6.0).rgb;
+// le relief de la photo (ravines claires/sombres) reste bien marqué
+vec3 roche = det * (0.3 + 2.6 * lumP * lumP) * (0.7 + 2.0 * dot(det2, vec3(0.33)));
+float cendreW = sat(smoothstep(0.78, 0.95, nW.y) * 0.75 + smoothstep(0.55, 0.95, hn) * 0.35);
+roche = mix(roche, cendre * 0.85, cendreW);
+// neige : seulement en haut et dans les parties claires de la photo ; salie puis fondue après l'impact
+float neige = smoothstep(0.5, 0.72, lumP) * smoothstep(0.45, 0.2, hn) * (1.0 - uSombre * 0.85);
+vec3 neigeC = mix(diffuseColor.rgb, cendre * 1.6, uSombre);
+diffuseColor.rgb = mix(roche, neigeC, neige);
 // pied : la roche se couvre de terre et d'herbe (même photo que le sol de la forêt), sans bord net
 vec3 sol = texture2D(tSol, vMonde.xz / 7.0).rgb * vec3(0.78, 0.86, 0.6);
 // monde en lave (lave.js) : le pied herbeux devient de la roche volcanique, la mousse disparaît
 float wLave = vagueLave(vMonde.xz);
-if (wLave > 0.002) sol = mix(sol, texture2D(tRocheLave, vMonde.xz / 9.0).rgb * vec3(0.62, 0.56, 0.54), wLave);
+if (wLave > 0.002) sol = mix(sol, texture2D(tRocheLave, vMonde.xz / 9.0).rgb * vec3(0.5, 0.46, 0.44), wLave);
 float pied = 1.0 - smoothstep(4.0, 26.0 + 14.0 * bruit(vMonde.xz / 25.0), local.y);
-// un peu de mousse et de buissons sur le bas des pentes
 float mousse = (1.0 - smoothstep(20.0, 55.0, local.y)) * smoothstep(0.45, 0.75, bruit(vMonde.xz / 9.0)) * 0.45;
 diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.7, 1.05, 0.55) + vec3(0.02, 0.04, 0.0), mousse * (1.0 - wLave));
 diffuseColor.rgb = mix(diffuseColor.rgb, sol, pied);
-// près du cratère : roche à peine roussie par la chaleur (la photo du modèle reste la base)
-diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.2, 0.9, 0.8), smoothstep(0.12, 0.0, hn) * 0.5);
-// coulées de lave : masque des vraies ravines (tracerCoulees) ; l'aspect vient des photos de lave
+// après l'impact : tout s'assombrit encore (cendres fraîches)
+diffuseColor.rgb *= 1.0 - 0.35 * uSombre;
+// --- coulées : masque des ravines (tracerCoulees) ; sous les rubans la roche est noire et croûtée,
+// autour elle rougeoie (lueur de la lave) ; seulement là où les coulées sont déjà arrivées
 vec4 cm = texture2D(tCoulees, (local.xz + uDemi) / (2.0 * uDemi));
-float c = cm.r, avance = sat(cm.g / max(cm.r, 0.02)), haloC = cm.b;
-// repère de l'écoulement : la lave descend depuis le cratère ; la photo se déforme en coulant
-vec2 fl = vec2(atan(q.y, q.x) * 40.0, r);
-vec2 dw = texture2D(tLave, fl / 80.0 + vec2(0.0, -uTemps * 0.003)).rg - 0.5;
-vec3 fusion = texture2D(tLave, (fl + dw * 14.0) / 20.0 + vec2(0.0, -uTemps * 0.018)).rgb;
-// plaques de croûte noire qui dérivent plus lentement, lave brillante dans les fentes
-float fente = texture2D(tBraiseLave, (fl + dw * 5.0) / 12.0 + vec2(0.0, -uTemps * 0.006)).r;
-float coeurC = smoothstep(0.8, 1.0, c) * (1.0 - avance);
-float croute = 1.0 - sat(coeurC * 0.45 + fente * 1.7); // plaques partout, lave dans les fentes ; plus ouverte près du cratère
-croute = max(croute, smoothstep(0.6, 1.0, avance) * 0.85); // front sombre et croûté
-croute = max(croute, (1.0 - smoothstep(0.3, 0.6, c)) * 0.7); // bords épais et croûtés
-float couv = smoothstep(0.08, 0.45, c);
-vec3 plaque = texture2D(tRocheLave, (fl + dw * 5.0) / 8.0).rgb * 0.5;
-// sous les rubans (rendus à part, voir materiauCoulee) : roche sombre et croûtée
-diffuseColor.rgb = mix(diffuseColor.rgb, vec3(dot(plaque, vec3(0.33))) * vec3(0.5, 0.42, 0.36), couv);
-// après l'impact : la roche noircit, la neige disparaît (on garde le grain de la photo)
-float lumR = dot(diffuseColor.rgb, vec3(0.3, 0.5, 0.2));
-diffuseColor.rgb = mix(diffuseColor.rgb, vec3(min(lumR, 0.45)) * vec3(0.42, 0.33, 0.27), uSombre * 0.9);
-float chaudC = dot(fusion, vec3(0.4, 0.4, 0.2));
-vec3 laveV = fusion * haloC * (1.0 - couv) * (0.04 + 0.06 * uSombre); // la roche autour, éclairée par la lave des rubans
-// fond du cratère : lave
-float fond = (1.0 - smoothstep(uCratere.w * 0.5, uCratere.w * 0.85, r)) * smoothstep(-0.02, 0.06, hn);
-vec3 fusionF = texture2D(tLave, q / 18.0 + vec2(uTemps * 0.01, uTemps * 0.007) + dw * 0.4).rgb;`)
+float c = cm.r, parcouru = cm.g / max(cm.r, 0.02) * 400.0, haloC = cm.b;
+float arrivee = 1.0 - smoothstep(uFront - 6.0, uFront, parcouru);
+float couv = smoothstep(0.08, 0.45, c) * arrivee;
+vec3 plaque = vec3(dot(texture2D(tRocheLave, vMonde.xz / 8.0).rgb, vec3(0.33))) * vec3(0.3, 0.27, 0.25);
+diffuseColor.rgb = mix(diffuseColor.rgb, plaque, couv);
+vec3 lueurV = texture2D(tLave, vMonde.xz / 40.0).rgb * haloC * arrivee * (1.0 - couv) * 0.12;
+// fond du cratère : lave qui bouillonne
+float fond = (1.0 - smoothstep(uCratere.w * 0.45, uCratere.w * 0.8, r)) * smoothstep(-0.02, 0.06, hn);
+vec2 dwF = texture2D(tLave, q / 60.0 + vec2(0.0, uTemps * 0.01)).rg - 0.5;
+vec3 fusionF = texture2D(tLave, q / 16.0 + vec2(uTemps * 0.02, uTemps * 0.013) + dwF * 0.5).rgb;`)
       .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
-totalEmissiveRadiance += laveV * (0.8 + 0.25 * uLueur);
-totalEmissiveRadiance += fusionF * (1.0 + 3.0 * pow(dot(fusionF, vec3(0.4, 0.4, 0.2)), 3.0)) * fond * (1.2 + 0.8 * uLueur);// le bord et le haut des pentes reflètent la lueur du cratère
-totalEmissiveRadiance += vec3(0.6, 0.16, 0.03) * uLueur * 0.22 * smoothstep(0.18, 0.0, hn) * (1.0 - smoothstep(uCratere.w, uCratere.w * 2.2, r));`)
+totalEmissiveRadiance += lueurV * (0.8 + 0.25 * uLueur);
+totalEmissiveRadiance += fusionF * (1.2 + 5.0 * pow(dot(fusionF, vec3(0.4, 0.4, 0.2)), 2.0)) * fond * (0.9 + 0.8 * uLueur);
+// le haut des parois du cratère est éclairé par la lave (lueur de la photo de lave, pas une couleur fixe)
+totalEmissiveRadiance += fusionF * uLueur * 0.35 * smoothstep(0.16, 0.0, hn) * (1.0 - smoothstep(uCratere.w, uCratere.w * 1.9, r));`)
       .replace("#include <fog_fragment>", `#ifdef USE_FOG
   float fogFactor = smoothstep(fogNear, fogFar, vFogDepth) * ${BROUILLARD.toFixed(2)};
   gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, fogFactor);
@@ -486,45 +567,70 @@ totalEmissiveRadiance += vec3(0.6, 0.16, 0.03) * uLueur * 0.22 * smoothstep(0.18
   return m;
 }
 
-
 // ---------------------------------------------------------------------------
-// Les coulées : rubans posés sur le relief. Aspect = photos ambientCG (lave.js) : lave en fusion
-// (Lava 004) qui se déforme en descendant, plaques de croûte (fissures de Lava 001) qui dérivent
-// plus lentement, bords épais et front croûtés, cœur très lumineux (> 1). Pas de lumière ajoutée.
+// Les coulées : rubans posés sur le relief. Aspect = photos ambientCG (lave.js). Elles coulent
+// comme une rivière : courant vers l'aval plus rapide au milieu qu'aux bords (deux lectures de
+// la photo décalées à tour de rôle, sans étirement infini), vitesse apparente adaptée à la
+// distance ; un chenal incandescent étroit qui serpente (pas centré), levées de croûte noire,
+// plaques qui dérivent et se fendent, lave qui se fige en gris vers l'aval avec seulement quelques
+// fentes lumineuses, front large et sombre. Pas de lumière ajoutée.
 function materiauCoulee(uniformes) {
   return new THREE.ShaderMaterial({
-    uniforms: { uTemps: uniformes.uTemps, uLueur: uniformes.uLueur, tLave: LAVE.uniforms.tLave, tBraiseLave: LAVE.uniforms.tBraiseLave, tRocheLave: LAVE.uniforms.tRocheLave },
+    uniforms: { uTemps: uniformes.uTemps, uLueur: uniformes.uLueur, uFront: uniformes.uFront, uCroute: uniformes.uCroute, tLave: LAVE.uniforms.tLave, tBraiseLave: LAVE.uniforms.tBraiseLave, tRocheLave: LAVE.uniforms.tRocheLave },
     transparent: true, depthWrite: false, side: THREE.DoubleSide,
     polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
     vertexShader: `
-attribute float aAvance;
-varying vec2 vUv; varying float vA;
+attribute vec3 aAvance; // avancée 0..1, largeur (m), phase
+varying vec2 vUv; varying float vA, vLarg, vPh, vDist;
 void main() {
-  vUv = uv; vA = aAvance;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  vUv = uv; vA = aAvance.x; vLarg = aAvance.y; vPh = aAvance.z;
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  vDist = -mv.z;
+  gl_Position = projectionMatrix * mv;
 }`,
     fragmentShader: `
-uniform float uTemps, uLueur;
+uniform float uTemps, uLueur, uFront, uCroute;
 uniform sampler2D tLave, tBraiseLave, tRocheLave;
-varying vec2 vUv; varying float vA;
+varying vec2 vUv; varying float vA, vLarg, vPh, vDist;
+float sat(float x) { return clamp(x, 0.0, 1.0); }
 void main() {
-  float larg = 10.0 + 15.0 * pow(vA, 0.7);
-  vec2 fl = vec2((vUv.x - 0.5) * larg, vUv.y);
-  vec2 dw = texture2D(tLave, fl / 50.0 + vec2(0.0, -uTemps * 0.004)).rg - 0.5;
-  vec3 fusion = texture2D(tLave, (fl + dw * 9.0) / 14.0 + vec2(0.0, -uTemps * 0.045)).rgb;
-  float fente = texture2D(tBraiseLave, (fl + dw * 4.0) / 8.0 + vec2(0.0, -uTemps * 0.012)).r;
-  float bord = abs(vUv.x - 0.5) * 2.0;
-  float chaud = pow(dot(fusion, vec3(0.4, 0.4, 0.2)), 0.4545); // valeurs de l'image (lue en linéaire)
-  // croûte : les veines sombres de la photo de lave, qui dérivent ; la lave reste ouverte au milieu
-  float croute = smoothstep(0.46, 0.33, chaud - fente * 0.15) * (0.55 + 0.45 * vA);
-  croute = max(croute, smoothstep(0.72, 0.95, bord) * 0.9); // bords épais (levées de lave refroidie)
-  croute = max(croute, smoothstep(0.8, 1.0, vA) * 0.75);    // front plus sombre
-  vec3 plaque = vec3(dot(texture2D(tRocheLave, fl / 6.0).rgb, vec3(0.33))) * vec3(0.28, 0.24, 0.22);
-  vec3 lave = fusion * (2.2 + 9.0 * chaud * chaud * chaud * chaud) * (0.9 + 0.15 * uLueur);
-  gl_FragColor = vec4(mix(lave, plaque, croute), 1.0 - smoothstep(0.9, 1.0, bord));
+  if (vUv.y > uFront) discard; // la coulée n'est pas encore arrivée ici
+  float x = (vUv.x - 0.5) * vLarg; // m en travers du chenal
+  // le chenal incandescent : étroit, qui serpente sans être centré, se resserre vers l'aval
+  float cc = (sin(vUv.y * 0.034 + vPh) * 0.17 + sin(vUv.y * 0.012 + vPh * 2.1) * 0.09) * vLarg;
+  float cw = vLarg * (0.2 + 0.1 * sin(vUv.y * 0.051 + vPh * 3.0)) * (1.0 - vA * 0.6);
+  float dc = abs(x - cc);
+  float coeur = 1.0 - smoothstep(cw * 0.5, cw * 1.25, dc);
+  // courant : rapide au milieu, lent sur les bords et vers l'aval ; plus rapide en apparence de loin
+  float prof = sat(1.0 - dc / (vLarg * 0.55)); prof *= prof * (0.35 + 0.65 * (1.0 - vA));
+  float vit = 2.2 + vDist * 0.014; // m/s
+  const float T = 3.0;
+  float p0 = fract(uTemps / T), p1 = fract(uTemps / T + 0.5), w0 = 1.0 - abs(2.0 * p0 - 1.0);
+  vec2 fl = vec2(x, vUv.y);
+  vec2 o0 = vec2(0.0, prof * vit * T * p0), o1 = vec2(0.0, prof * vit * T * p1);
+  vec3 fusion = texture2D(tLave, (fl - o0) / 13.0).rgb * w0 + texture2D(tLave, (fl - o1) / 13.0 + 0.37).rgb * (1.0 - w0);
+  float fente = texture2D(tBraiseLave, (fl - o0 * 0.85) / 7.0).r * w0 + texture2D(tBraiseLave, (fl - o1 * 0.85) / 7.0 + 0.61).r * (1.0 - w0);
+  float bouil = texture2D(tLave, fl / 4.5 + vec2(uTemps * 0.09, -uTemps * 0.06)).g; // remous
+  float chaud = pow(dot(fusion, vec3(0.4, 0.4, 0.2)), 0.4545);
+  // croûte : levées noires hors du chenal, plaques (veines sombres de la lave) qui s'y fendent
+  float croute = max((1.0 - coeur) * (0.3 + 0.55 * smoothstep(0.25, 0.7, 1.0 - fente)), smoothstep(0.42, 0.3, chaud - fente * 0.2 + bouil * 0.12) * 0.7);
+  croute = max(croute, smoothstep(0.55, 0.95, vA) * 0.88);      // la lave se fige vers l'aval
+  croute = sat(croute + uCroute * (1.0 - coeur * 0.7));         // variante « croûte dominante »
+  float taches = smoothstep(0.5, 0.9, fente) * (1.0 - vA * 0.55); // fentes encore lumineuses
+  float gris = smoothstep(0.4, 0.95, vA);
+  vec3 plaque = vec3(dot(texture2D(tRocheLave, (fl - o0 * 0.4) / 6.0).rgb, vec3(0.33))) * mix(vec3(0.17, 0.15, 0.14), vec3(0.33, 0.32, 0.31), gris);
+  vec3 lave = fusion * (2.0 + 9.0 * chaud * chaud * chaud * chaud) * (0.9 + 0.15 * uLueur);
+  vec3 col = mix(lave, plaque + fusion * taches * 2.4, croute);
+  // le front qui avance : bourrelet sombre, fentes très lumineuses
+  float front = smoothstep(uFront - 10.0, uFront, vUv.y);
+  col = mix(col, plaque + fusion * smoothstep(0.4, 0.8, fente) * 2.2, front * 0.75);
+  // bords irréguliers (pas de bords parallèles)
+  float bord = abs(vUv.x - 0.5) * 2.0 + (texture2D(tLave, fl / 9.0 + 0.2).r - 0.45) * 0.35;
+  gl_FragColor = vec4(col, 1.0 - smoothstep(0.78, 0.98, bord));
 }`,
   });
 }
+
 // ---------------------------------------------------------------------------
 // Planche de particules (public/meteorite/particules.webp) : 8 images du Kenney Particle Pack
 // (CC0, https://kenney.nl/assets/particle-pack), en blanc, teintées dans le shader.

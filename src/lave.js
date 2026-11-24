@@ -156,10 +156,28 @@ if (wL > 0.002) {
   float d = distRoute(vSolXZ);
   // écoulement : la photo de lave se déforme (lue deux fois, décalée par une 3e plus grande)
   vec2 dw = texture2D(tLave, vSolXZ / 70.0 + vec2(uLaveTemps * 0.002, -uLaveTemps * 0.0015)).rg - 0.5;
-  vec3 fusion = texture2D(tLave, (vSolXZ + dw * 16.0) / 15.0 + vec2(uLaveTemps * 0.012, uLaveTemps * 0.018)).rgb;
-  // croûte : plaques noires (fissures de "Lava 001") qui dérivent lentement sur la lave en fusion
-  float fente = texture2D(tBraiseLave, (vSolXZ + dw * 5.0) / 9.0 + vec2(uLaveTemps * 0.004, uLaveTemps * 0.006)).r;
-  float chaud = pow(dot(fusion, vec3(0.4, 0.4, 0.2)), 0.4545);
+  // la lave coule comme une rivière : le long de la route (tangente tirée de la carte de distance),
+  // plus vite au milieu du lit qu'aux bords ; deux lectures décalées à tour de rôle (pas
+  // d'étirement infini) ; vitesse apparente plus grande de loin pour rester lisible
+  vec3 fusion = vec3(0.0);
+  float fente = 0.0;
+  if (riviere > 0.01 || halo > 0.01) {
+    float gx = distRoute(vSolXZ + vec2(3.0, 0.0)) - distRoute(vSolXZ - vec2(3.0, 0.0));
+    float gz = distRoute(vSolXZ + vec2(0.0, 3.0)) - distRoute(vSolXZ - vec2(0.0, 3.0));
+    vec2 tang = normalize(vec2(-gz, gx) + vec2(1e-4));
+    float prof = clamp(1.0 - abs(d - (uBordLave + 13.5)) / 9.0, 0.0, 1.0);
+    prof = max(prof * prof, 0.3 * step(uBordLave + 24.0, d));
+    float vit = 1.6 + length(vViewPosition) * 0.012;
+    const float T = 3.0;
+    float p0 = fract(uLaveTemps / T), p1 = fract(uLaveTemps / T + 0.5), w0 = 1.0 - abs(2.0 * p0 - 1.0);
+    vec2 o0 = tang * prof * vit * T * p0, o1 = tang * prof * vit * T * p1;
+    vec2 b0 = vSolXZ + dw * 16.0;
+    fusion = texture2D(tLave, (b0 - o0) / 15.0).rgb * w0 + texture2D(tLave, (b0 - o1) / 15.0 + 0.37).rgb * (1.0 - w0);
+    vec2 b1 = vSolXZ + dw * 5.0;
+    fente = texture2D(tBraiseLave, (b1 - o0 * 0.8) / 9.0).r * w0 + texture2D(tBraiseLave, (b1 - o1 * 0.8) / 9.0 + 0.61).r * (1.0 - w0);
+    // remous : le bouillonnement soulève un peu la croûte
+    fente += (texture2D(tLave, vSolXZ / 4.0 + vec2(uLaveTemps * 0.08, -uLaveTemps * 0.05)).g - 0.45) * 0.25;
+  }  float chaud = pow(dot(fusion, vec3(0.4, 0.4, 0.2)), 0.4545);
   // les veines sombres de la photo de lave deviennent la croûte qui dérive ; plaques plus grandes au bord
   float croute = smoothstep(0.46, 0.33, chaud - fente * 0.15) * 0.9;
   croute = max(croute, (riviere - coeur) * 0.8); // bords épais et croûtés
