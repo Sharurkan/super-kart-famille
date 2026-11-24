@@ -307,10 +307,14 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   const nids = horsTroupeaux(positions(piste, rnd, nb(14), horsPiste, 40)).map((p) => ({ ...p, s: 1, r: rnd() * 6 })); // posés plus bas
 
   // volcan en éruption au fond de la plaine (vrai modèle 3D, fumée, lave : voir volcan.js)
-  const xV = piste.centre.x + Math.cos(ANGLE_VOLCAN) * (piste.rayon + 260);
-  const zV = piste.centre.z + Math.sin(ANGLE_VOLCAN) * (piste.rayon + 260);
-  const volcan = creerVolcan(groupe, xV, zV, { versPiste: Math.atan2(piste.centre.z - zV, piste.centre.x - xV) });
-  if (import.meta.env.DEV) window.__volcan = volcan;
+  // (essais en développement : window.__volcanEssai = { angle, distance, echelle })
+  const placeV = { ...PLACE_VOLCAN, ...(import.meta.env.DEV ? window.__volcanEssai : null) };
+  const distV = placeV.distance || piste.rayon + 260;
+  const xV = piste.centre.x + Math.cos(placeV.angle) * distV;
+  const zV = piste.centre.z + Math.sin(placeV.angle) * distV;
+  const ANGLE_VOLCAN = Math.atan2(zV - piste.centre.z, xV - piste.centre.x);
+  const volcan = creerVolcan(groupe, xV, zV, { versPiste: Math.atan2(piste.centre.z - zV, piste.centre.x - xV), echelle: placeV.echelle });
+  if (import.meta.env.DEV) Object.assign(window, { __volcan: volcan, __THREE: THREE });
   // la météorite qui grossit tour après tour et percute le volcan au 2e tour, puis le monde passe en lave (meteorite.js, lave.js)
   const meteorite = creerMeteorite(groupe, volcan, piste);
   if (import.meta.env.DEV) window.__meteorite = meteorite;
@@ -318,7 +322,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   const collines = [];
   for (let i = 0; i < 14; i++) {
     const a = (i / 14) * Math.PI * 2;
-    if (Math.abs(Math.atan2(Math.sin(a - ANGLE_VOLCAN), Math.cos(a - ANGLE_VOLCAN))) < 0.35) continue;
+    if (Math.abs(Math.atan2(Math.sin(a - ANGLE_VOLCAN), Math.cos(a - ANGLE_VOLCAN))) < 0.7) continue; // rien devant le volcan
     const r = piste.rayon + 230 + rnd() * 70;
     collines.push({ x: piste.centre.x + Math.cos(a) * r, y: -8, z: piste.centre.z + Math.sin(a) * r, s: 70 + rnd() * 50, sy: 30 + rnd() * 25, couleur: [0xa8b890, 0x98a882, 0xb4bc9c][i % 3] });
   }
@@ -335,7 +339,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   // la jungle (imposteurs réalistes), une fois le ravin, le diplodocus, le T-rex et l'aquarium installés ;
   // rien sur le pied du volcan ni sur les troupeaux des plaines (ni dans piste.zonesDecor)
   if (import.meta.env.DEV) window.__troupeaux = Object.assign(clairieres, { plaines: PLAINES, trex, dinos: poses });
-  planterJungle(groupe, piste, rnd, garde, { plaines: PLAINES, exclusions: [{ x: xV, z: zV, r: volcan.rayonPied + 5 }, ...clairieres] });
+  planterJungle(groupe, piste, rnd, garde, { plaines: PLAINES, exclusions: [{ x: xV, z: zV, r: volcan.rayonPied + 5 }, ...clairieres], trouee: troueesVolcan(piste, xV, zV) });
   // les nids passent par la garde une fois le ravin, le diplodocus et le T-rex installés
   groupe.add(instances(nid, matCouleurs(), nids.flatMap((p) => {
     const ok = garde.verifier(p.x, p.z, 1.4, 1.2, "nid");
@@ -355,8 +359,39 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   };
 }
 
-// Volcan : voir volcan.js (modèle, matériau, éruption)
-const ANGLE_VOLCAN = 1.056; // direction depuis le centre du circuit (là où était l'ancien cône)
+/**
+ * Trouées dans la jungle pour voir le volcan : partout où, depuis la caméra du kart, le volcan
+ * est dans le champ (à moins de ~45° de l'axe), on ne plante pas d'arbres sur la ligne de vue,
+ * entre 15 et 170 m de la caméra (bande de ~22 m de large). Grille de cases de 6 m (rapide).
+ */
+function troueesVolcan(piste, xV, zV) {
+  const CASE = 6, R = piste.rayon + 300, NG = Math.ceil((2 * R) / CASE), grille = new Uint8Array(NG * NG);
+  const x0 = piste.centre.x - R, z0 = piste.centre.z - R, N = piste.N;
+  for (let i = 0; i < N; i += 6) {
+    const j = (i + 3) % N, k = (i - 3 + N) % N;
+    let dx = piste.cx[j] - piste.cx[k], dz = piste.cz[j] - piste.cz[k];
+    const l = Math.hypot(dx, dz); dx /= l; dz /= l;
+    const cx = piste.cx[i] - dx * 7, cz = piste.cz[i] - dz * 7;
+    let vx = xV - cx, vz = zV - cz;
+    const lv = Math.hypot(vx, vz); vx /= lv; vz /= lv;
+    if (vx * dx + vz * dz < Math.cos(0.8)) continue; // le volcan n'est pas dans le champ
+    for (let d = 15; d < Math.min(170, lv - 150); d += 4)
+      for (let s = -11; s <= 11; s += 4) {
+        const gi = Math.floor((cx + vx * d - vz * s - x0) / CASE), gj = Math.floor((cz + vz * d + vx * s - z0) / CASE);
+        if (gi >= 0 && gj >= 0 && gi < NG && gj < NG) grille[gj * NG + gi] = 1;
+      }
+  }
+  return (x, z) => {
+    const gi = Math.floor((x - x0) / CASE), gj = Math.floor((z - z0) / CASE);
+    return gi >= 0 && gj >= 0 && gi < NG && gj < NG && grille[gj * NG + gi] === 1;
+  };
+}
+
+// Volcan : voir volcan.js (modèle, matériau, éruption). Place : direction et distance depuis le
+// centre du circuit, échelle du modèle.
+// mesuré (outil de test : pixels du volcan vus depuis la caméra du kart, sur un tour) : plus près,
+// un peu tourné et plus grand, il se voit 2 fois plus longtemps qu'à l'ancienne place (1,056 ; 533 m ; ×1)
+const PLACE_VOLCAN = { angle: 0.85, distance: 560, echelle: 1.5 };
 
 // ---------------------------------------------------------------------------
 export function decorJouets(groupe, piste, rnd, horsPiste) {

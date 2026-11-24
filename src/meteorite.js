@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { audio } from "./audio.js";
 import { Sprites, CELLULE, CELLULES_FUMEE, textureParticules } from "./volcan.js";
 import { chargerModelesNature } from "./vegetation.js";
-import { LAVE, reinitialiserLave, creerCendres } from "./lave.js";
+import { LAVE, reinitialiserLave, creerCendres, VITESSE_VAGUE } from "./lave.js";
 
 // La météorite du circuit Dinosaures : dès le départ, elle brille dans le ciel derrière le volcan,
 // grossit pendant le 1er tour, puis au 2e tour elle fonce sur le cratère et explose :
@@ -24,7 +24,6 @@ const DUREE_CHUTE = 3.2; // s : la dernière ligne droite de la météorite (ell
 const F_AVANT = 0.6; // part du trajet faite avant le dernier tour
 const F_DERNIER = 0.1; // part du trajet faite pendant le dernier tour, avant la chute
 const GRAVITE = 22;
-const RAYON_LAVE = 1900, DUREE_VAGUE = 32; // m, s : la vague de lave après l'impact
 /** Le tour de l'impact : le 2e (le monde est en lave au 3e) ; le 1er si la course n'a qu'un ou deux tours. */
 const tourImpact = (info) => Math.max(1, Math.min(2, (info.tours ?? 3) - 1));
 const DISTANCES_ARBRES = [10, 20, 32, 45, 60, 80, 105, 135]; // m : où l'on cherche des arbres entre la caméra et le volcan
@@ -251,9 +250,9 @@ export function creerMeteorite(groupe, volcan, piste) {
     if (!dome?.visible) return false; // dans le ventre du T-rex : on ne voit pas le ciel
     sommetMonde.copy(volcan.etat.sommet).add(support.position);
     ndc.copy(sommetMonde).project(camera);
-    if (ndc.z > 1 || Math.abs(ndc.x) > 0.7 || ndc.y < -0.6 || ndc.y > 0.75) return false;
+    if (ndc.z > 1 || Math.abs(ndc.x) > 0.75 || ndc.y < -0.6 || ndc.y > 0.92) return false; // (le volcan est grand : sommet assez haut dans l'écran)
     ndc.copy(tete).add(support.position).project(camera);
-    if (ndc.z > 1 || Math.abs(ndc.x) > 0.9 || ndc.y > 0.95) return false;
+    if (ndc.z > 1 || Math.abs(ndc.x) > 1.1) return false;
     // les arbres de la forêt dense (jusqu'à ~25 m) ne cachent-ils pas le sommet ?
     if (!piste.dansJungle) return true;
     const cp = camera.position, dx = sommetMonde.x - cp.x, dz = sommetMonde.z - cp.z, dh = Math.hypot(dx, dz);
@@ -399,7 +398,7 @@ export function creerMeteorite(groupe, volcan, piste) {
       etat.tImpact += dt;
       const ti = etat.tImpact;
       // la vague de lave part du volcan et couvre tout en ~30 s (le 3e tour est entièrement en lave)
-      LAVE.uniforms.uLaveRayon.value = 30 + RAYON_LAVE * THREE.MathUtils.smoothstep(ti, 1, DUREE_VAGUE);
+      LAVE.uniforms.uLaveRayon.value = 30 + VITESSE_VAGUE * Math.max(0, ti - 1); // vague à vitesse constante (lave.js)
       if (ti < 9) {
         etat.emisCendres += dt * (ti < 2 ? 10 : 6);
         while (etat.emisCendres >= 1) { etat.emisCendres--; emettreCendres(1.2 - ti / 9); }

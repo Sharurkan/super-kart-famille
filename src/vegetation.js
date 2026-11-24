@@ -480,7 +480,7 @@ function auHasardPondere(rnd, liste) {
  * exclusions : [{ x, z, r }] (pied du volcan, troupeaux...)
  * La garde de la route retire ce qui gêne (route, vue de la caméra, ravin, grands décors).
  */
-export function planterJungle(groupe, piste, rnd, garde, { plaines = [], exclusions = [] } = {}) {
+export function planterJungle(groupe, piste, rnd, garde, { plaines = [], exclusions = [], trouee = null } = {}) {
   const { N, cx, cz, nx, nz } = piste;
   const barriere = piste.demi + piste.marge + 0.8;
   const ecart = (i, j) => { const d = (i - j + N) % N; return d > N / 2 ? d - N : d; };
@@ -515,6 +515,7 @@ export function planterJungle(groupe, piste, rnd, garde, { plaines = [], exclusi
       const { i, lat, d } = local(x, z);
       if (d < barriere || d > 290) continue;
       if (exclusions.some((e) => (x - e.x) ** 2 + (z - e.z) ** 2 < e.r * e.r)) continue;
+      if (trouee?.(x, z)) continue; // trouée : on y voit le volcan depuis la route
       const { o, lisiere } = ouverture(i, lat);
       // densités (arbres par m²) selon la distance à la route
       let dSous = (d < 30 ? 0.28 : d < 80 ? 0.05 : 0) * (1 - 0.92 * o);

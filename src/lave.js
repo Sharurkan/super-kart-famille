@@ -72,10 +72,16 @@ export function lierRouteLave(proche, carteMin, carteTaille, bord) {
 
 // largeur du front (m) : tout ce qui est à moins de LARGEUR derrière le front est entièrement transformé
 const LARGEUR = 70;
+/** Vitesse de la vague (m/s) qui noircit le sol, et du front des coulées qui vient vers la route. */
+export const VITESSE_VAGUE = 60, VITESSE_FRONT = 1.3;
 /** GLSL commun : déclaration des uniforms et force de la transformation en un point (0..1). */
 export const GLSL_LAVE = `
 uniform vec2 uLaveCentre;
 uniform float uLaveRayon, uLaveTemps;
+// secondes depuis le passage de la vague en ce point (négatif : pas encore passée)
+float tempsLave(vec2 xz) {
+  return (uLaveRayon - distance(xz, uLaveCentre)) / ${VITESSE_VAGUE.toFixed(1)};
+}
 float vagueLave(vec2 xz) {
   return smoothstep(uLaveRayon, uLaveRayon - ${LARGEUR.toFixed(1)}, distance(xz, uLaveCentre));
 }`;
@@ -104,10 +110,20 @@ vec3 riviereLave(vec2 xz) {
   float par = smoothstep(0.43, 0.47, g2);
   float bande = loin * (1.0 - smoothstep(b + 17.0, b + 22.0, d)) * par;
   float bandeC = bande * smoothstep(b + 8.0, b + 10.0, d) * (1.0 - smoothstep(b + 17.0, b + 20.0, d));
-  float lave = max(smoothstep(0.545, 0.59, g) * loin, bande);
-  float coeur = max(smoothstep(0.565, 0.62, g) * loin, bandeC);
-  float halo = max(smoothstep(0.52, 0.58, g), par * (1.0 - smoothstep(b + 20.0, b + 30.0, d))) * smoothstep(b + 1.0, b + 6.0, d);
+  // la lave arrive en coulant : après le passage de la vague, son front vient du loin vers la
+  // route, à quelques m/s (dFront : distance à la route jusqu'où elle est arrivée)
+  float dFront = ${DIST_MAX_ROUTE.toFixed(1)} - tempsLave(xz) * ${VITESSE_FRONT.toFixed(2)};
+  float rempli = smoothstep(dFront, dFront + 1.5, d);
+  float lave = max(smoothstep(0.545, 0.59, g) * loin, bande) * rempli;
+  float coeur = max(smoothstep(0.565, 0.62, g) * loin, bandeC) * smoothstep(dFront + 4.0, dFront + 9.0, d);
+  float halo = max(smoothstep(0.52, 0.58, g), par * (1.0 - smoothstep(b + 20.0, b + 30.0, d))) * smoothstep(b + 1.0, b + 6.0, d) * smoothstep(dFront - 6.0, dFront + 1.0, d);
   return vec3(lave, coeur, halo);
+}
+// le front qui avance : une bande croûtée et très lumineuse juste derrière lui
+float frontLave(vec2 xz) {
+  float d = distRoute(xz);
+  float dFront = ${DIST_MAX_ROUTE.toFixed(1)} - tempsLave(xz) * ${VITESSE_FRONT.toFixed(2)};
+  return smoothstep(dFront, dFront + 1.0, d) * (1.0 - smoothstep(dFront + 1.5, dFront + 6.0, d));
 }`;
 
 /** Où en est la vague en un point (pour le JS : cendres autour de la caméra). */
@@ -147,6 +163,9 @@ if (wL > 0.002) {
   // les veines sombres de la photo de lave deviennent la croûte qui dérive ; plaques plus grandes au bord
   float croute = smoothstep(0.46, 0.33, chaud - fente * 0.15) * 0.9;
   croute = max(croute, (riviere - coeur) * 0.8); // bords épais et croûtés
+  // le front qui avance vers la route : bourrelet de croûte fendue, très lumineux dans les fentes
+  float fr = frontLave(vSolXZ) * riviere;
+  croute = max(croute, fr * 0.55);
   vec3 plaque = vec3(dot(texture2D(tRocheLave, (vSolXZ + dw * 5.0) / 7.0).rgb, vec3(0.33))) * vec3(0.22, 0.19, 0.17);
   // fines fissures lumineuses : sur les bas-côtés et près des coulées seulement
   float pouls = 0.8 + 0.2 * sin(uLaveTemps * 2.2 + dot(vSolXZ, vec2(0.05, 0.08)));
@@ -156,7 +175,7 @@ if (wL > 0.002) {
   c = mix(c, mix(roche, mix(fusion * 0.5, plaque, croute), riviere), wL);
   float front = wL * (1.0 - wL) * 4.0; // le front de la vague brille
   laveSol = (fissures * (1.0 - riviere) + eclat * riviere * (1.0 - croute) * 2.2
-            + fusion * halo * (1.0 - riviere) * 0.16 + fusion * front * 1.2) * wL;
+            + fusion * halo * (1.0 - riviere) * 0.16 + eclat * fr * (0.6 + 1.6 * fente) + fusion * front * 1.2) * wL;
 }`,  emission: `totalEmissiveRadiance += laveSol;`,
 };
 
@@ -181,7 +200,7 @@ vLaveInst = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
 vLaveInst = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
 #endif
 // englouti par une rivière de lave : la plante a brûlé, elle disparaît
-if (vagueLave(vLaveInst.xz) > 0.6 && riviereLave(vLaveInst.xz).x > 0.3) gl_Position = vec4(0.0, 0.0, 2.0, 1.0);`);
+if (riviereLave(vLaveInst.xz).x > 0.3) gl_Position = vec4(0.0, 0.0, 2.0, 1.0);`);
     sh.fragmentShader = sh.fragmentShader
       .replace("#include <common>", `#include <common>\nvarying vec3 vLaveInst;${GLSL_LAVE}`)
       .replace("#include <color_fragment>", `#include <color_fragment>
@@ -251,12 +270,14 @@ export function creerCendres(groupe, piste) {
         let dMin = Infinity;
         for (let i = 0; i < piste.N; i += 2) dMin = Math.min(dMin, (x - piste.cx[i]) ** 2 + (z - piste.cz[i]) ** 2);
         dMin = Math.sqrt(dMin);
-        if ((bande && dMin > bord + 10 && dMin < bord + 16) || (mare && dMin > bord + 10 && dMin < 220)) cands.push({ x, z, d: dMin });
+        if ((bande && dMin > bord + 10 && dMin < bord + 16) || (mare && dMin > bord + 10 && dMin < 220)) cands.push({ x, z, d: dMin, dist: Math.hypot(x - LAVE.uniforms.uLaveCentre.value.x, z - LAVE.uniforms.uLaveCentre.value.y) });
       }    cands.sort((a, b) => a.d - b.d); // les plus proches de la route d'abord : on les voit
     for (const c of cands) {
       if (mares.length >= NM) break;
       if (mares.some((m) => (m.x - c.x) ** 2 + (m.z - c.z) ** 2 < 40 * 40)) continue;
-      mares.push({ x: c.x, z: c.z, ph: Math.random() * 6.283, cell: CELLULES_FUMEE[mares.length % 3] });
+      // moment où le front de lave arrive à cette mare (s après l'impact) : la vapeur part de là
+      const arrivee = c.dist / VITESSE_VAGUE + Math.max(0, DIST_MAX_ROUTE - c.d) / VITESSE_FRONT;
+      mares.push({ x: c.x, z: c.z, ph: Math.random() * 6.283, cell: CELLULES_FUMEE[mares.length % 3], arrivee });
     }
     return true;
   }
@@ -283,8 +304,10 @@ export function creerCendres(groupe, piste) {
     }
     // mares : halo qui respire (additif) ou vapeur qui monte en boucle
     for (const m of mares) {
-      const wm = vagueLave(m.x, m.z);
-      if (wm < 0.01) continue;
+      // la mare ne fume et ne brille qu'une fois la lave arrivée (bouffée plus forte à l'arrivée)
+      const depuis = (LAVE.uniforms.uLaveRayon.value - 30) / VITESSE_VAGUE - m.arrivee;
+      if (depuis < 0) continue;
+      const wm = Math.min(1, depuis / 3) * (1 + 1.5 * Math.max(0, 1 - depuis / 6));
       if (montee) {
         monde.set(m.x, 0.8, m.z);
         s.poser(n++, monde, 34 + 5 * Math.sin(t * 1.3 + m.ph), 0, lueurMare, wm * (0.35 + 0.1 * Math.sin(t * 2.1 + m.ph)), cam, CELLULE.lueur);

@@ -33,7 +33,10 @@ const GRAVITE = 22; // m/s² (un peu moins que la vraie : les boules restent lis
 const BROUILLARD = 0.55; // le volcan traverse moins de brume que le reste (il doit se voir de loin)
 
 /** Volcan + éruption. Renvoie { update(dt, camera), eruption(), pret, rayonPied }. */
-export function creerVolcan(groupe, x, z, { versPiste = 0 } = {}) {
+export function creerVolcan(groupe, x, z, { versPiste = 0, echelle = 1 } = {}) {
+  // taille (échelle 1 : 140 m de haut, 380 m de large)
+  const DIM = { hauteur: DIMENSIONS.hauteur * echelle, largeur: DIMENSIONS.largeur * echelle };
+  const rayonPied = RAYON_PIED * echelle;
   const support = new THREE.Group();
   support.name = "volcan";
   support.position.set(x, 0, z);
@@ -50,6 +53,7 @@ export function creerVolcan(groupe, x, z, { versPiste = 0 } = {}) {
     uOrigine: { value: new THREE.Vector3(x, 0, z) }, // pied du volcan (origine du repère du support)
     tSol: { value: chargerTexturesSol().herbe },
     tCoulees: { value: null }, // masque des coulées (tracerCoulees)
+    uDemi: { value: 200 * echelle }, // demi-côté (m) du carré couvert par ce masque
     uSombre: { value: 0 }, // après l'impact : la roche noircit (la lave ressort)
   };
   const etat = {
@@ -73,7 +77,7 @@ export function creerVolcan(groupe, x, z, { versPiste = 0 } = {}) {
     });
     const boite = new THREE.Box3().setFromObject(modele);
     const taille = boite.getSize(new THREE.Vector3());
-    const sh = DIMENSIONS.largeur / Math.max(taille.x, taille.z), sv = DIMENSIONS.hauteur / taille.y;
+    const sh = DIM.largeur / Math.max(taille.x, taille.z), sv = DIM.hauteur / taille.y;
     modele.scale.set(sh, sv, sh);
     // l'axe du cratère est déjà à l'origine du modèle ; son zéro (terrain d'origine) reste un peu
     // sous le sol du jeu, le bord du disque est bien plus bas (pas de bord visible)
@@ -94,10 +98,10 @@ export function creerVolcan(groupe, x, z, { versPiste = 0 } = {}) {
       }
     });
     let sx = 0, sz = 0, n = 0;
-    for (let k = 0; k < pts.length; k += 3) if (pts[k + 1] > yMax - DIMENSIONS.hauteur * 0.05) { sx += pts[k]; sz += pts[k + 2]; n++; }
+    for (let k = 0; k < pts.length; k += 3) if (pts[k + 1] > yMax - DIM.hauteur * 0.05) { sx += pts[k]; sz += pts[k + 2]; n++; }
     const cx = sx / n, cz = sz / n;
     let sr = 0;
-    for (let k = 0; k < pts.length; k += 3) if (pts[k + 1] > yMax - DIMENSIONS.hauteur * 0.05) sr += Math.hypot(pts[k] - cx, pts[k + 2] - cz);
+    for (let k = 0; k < pts.length; k += 3) if (pts[k + 1] > yMax - DIM.hauteur * 0.05) sr += Math.hypot(pts[k] - cx, pts[k + 2] - cz);
     etat.rayon = sr / n;
     etat.sommet.set(cx, yMax, cz);
     uniformes.uCratere.value.set(cx, yMax, cz, etat.rayon);
@@ -121,6 +125,7 @@ export function creerVolcan(groupe, x, z, { versPiste = 0 } = {}) {
   // Le résultat est un masque (données, pas une image affichée) : R = coulée (s'élargit en
   // descendant), G = avancée le long de la coulée (front croûté), B = halo sur la roche autour.
   // L'aspect vient des photos de lave (lave.js) lues dans le shader de la roche.
+  const DEMI_COULEES = Math.ceil(200 * echelle);
   const halosCoulees = []; // { p: Vector3, a (avancée 0..1), ph } : sprites de lueur le long des coulées
   function tracerCoulees(pts, cx, cz, yMax, modele) {
     // hauteur exacte de la surface (rayon vertical sur le modèle) : le maillage est simplifié, la
@@ -131,7 +136,7 @@ export function creerVolcan(groupe, x, z, { versPiste = 0 } = {}) {
       const hit = rayon.intersectObject(modele, true)[0];
       return hit ? hit.point.y : H(x, z);
     };
-    const CASE = 4, DEMI = 200, NG = (2 * DEMI) / CASE;
+    const CASE = 4, DEMI = DEMI_COULEES, NG = (2 * DEMI) / CASE;
     const h = new Float32Array(NG * NG).fill(-1e9);
     for (let k = 0; k < pts.length; k += 3) {
       const i = Math.floor((pts[k] + DEMI) / CASE), j = Math.floor((pts[k + 2] + DEMI) / CASE);
@@ -180,7 +185,7 @@ export function creerVolcan(groupe, x, z, { versPiste = 0 } = {}) {
         dx /= dl; dz /= dl;
         x += dx * 2.5; z += dz * 2.5;
         chemin.push([x, z]);
-        if (H(x, z) < 4 || rl > RAYON_PIED * 0.92) break;
+        if (H(x, z) < 4 || rl > rayonPied * 0.92) break;
       }
       const L = chemin.length;
       // halo (B) large et doux, puis la coulée (R, G) qui s'élargit
@@ -385,7 +390,7 @@ export function creerVolcan(groupe, x, z, { versPiste = 0 } = {}) {
 
   return {
     support,
-    rayonPied: RAYON_PIED,
+    rayonPied: rayonPied,
     get pret() { return etat.pret; },
     get etat() { return etat; },
     update(dt, camera) {
@@ -413,7 +418,7 @@ function materiauRoche(ancien, uniformes) {
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", `#include <common>
 varying vec3 vMonde;
-uniform float uTemps, uLueur, uVue, uSombre;
+uniform float uTemps, uLueur, uVue, uSombre, uDemi;
 uniform vec3 uOrigine;
 uniform vec4 uCratere;
 uniform sampler2D tSol, tRocheLave, tBraiseLave, tLave, tCoulees;
@@ -444,7 +449,7 @@ diffuseColor.rgb = mix(diffuseColor.rgb, sol, pied);
 // près du cratère : roche à peine roussie par la chaleur (la photo du modèle reste la base)
 diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.2, 0.9, 0.8), smoothstep(0.12, 0.0, hn) * 0.5);
 // coulées de lave : masque des vraies ravines (tracerCoulees) ; l'aspect vient des photos de lave
-vec4 cm = texture2D(tCoulees, (local.xz + 200.0) / 400.0);
+vec4 cm = texture2D(tCoulees, (local.xz + uDemi) / (2.0 * uDemi));
 float c = cm.r, avance = sat(cm.g / max(cm.r, 0.02)), haloC = cm.b;
 // repère de l'écoulement : la lave descend depuis le cratère ; la photo se déforme en coulant
 vec2 fl = vec2(atan(q.y, q.x) * 40.0, r);
