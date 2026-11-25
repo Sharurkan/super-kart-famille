@@ -548,13 +548,42 @@ function adapterResolution(dt) {
   }
 }
 
+// Compteur de performances (pour un parent, ou pour régler le jeu sur la tablette) : images/s,
+// temps de calcul + envoi du dessin par image (processeur), appels de dessin, triangles, résolution.
+// S'affiche en touchant la ligne de diagnostic de l'écran de pause (mémorisé) ou avec ?perf.
+const perfEl = document.getElementById("perf");
+const perf = { actif: false, images: 0, temps: 0, cpu: 0, debut: performance.now() };
+function afficherPerf(actif) {
+  perf.actif = actif;
+  perfEl.classList.toggle("cache", !actif);
+  try {
+    localStorage.setItem("superkart-perf", actif ? "1" : "");
+  } catch {}
+}
+try {
+  afficherPerf(new URLSearchParams(location.search).has("perf") || localStorage.getItem("superkart-perf") === "1");
+} catch {}
+document.getElementById("diag-ecran").addEventListener("click", () => afficherPerf(!perf.actif));
+function majPerf(cpu) {
+  perf.images++;
+  perf.cpu += cpu;
+  const ecoule = performance.now() - perf.debut;
+  if (ecoule < 500) return;
+  const i = renderer.info.render;
+  perfEl.textContent = `${Math.round((perf.images * 1000) / ecoule)} i/s · ${(perf.cpu / perf.images).toFixed(1)} ms · ${i.calls} appels · ${Math.round(i.triangles / 1000)}k tri · rés. ${resolution}`;
+  perf.images = perf.cpu = 0;
+  perf.debut = performance.now();
+}
+
 function boucle() {
   const dt = Math.min(horloge.getDelta(), 0.05);
   requestAnimationFrame(boucle);
   if (chargement) return audio.moteur(0, false); // l'œuf couvre l'écran : rien à calculer ni dessiner
+  const t0 = performance.now();
   etape(dt);
   adapterResolution(dt);
   renderer.render(vue.scene, vue.camera);
+  if (perf.actif) majPerf(performance.now() - t0);
 }
 
 // Outil de test (dev uniquement) : fait avancer le jeu sans requestAnimationFrame.

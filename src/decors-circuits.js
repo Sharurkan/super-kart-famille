@@ -37,7 +37,7 @@ export function nuages(groupe, piste, rnd, eviter = null) {
       if (garde) liste.push(n);
     }
   }
-  groupe.add(instances(new THREE.IcosahedronGeometry(1, 2), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), liste));
+  groupe.add(instances(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), liste));
 }
 
 // ---------------------------------------------------------------------------

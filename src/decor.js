@@ -162,7 +162,7 @@ function decorPrairie(groupe, piste, rnd, horsPiste) {
     for (let k = 0; k < 4; k++)
       nuages.push({ x: x + (k - 1.5) * 9 + rnd() * 4, y: y + rnd() * 4, z: z + rnd() * 6, s: 7 + rnd() * 5, sy: 4 + rnd() * 3 });
   }
-  groupe.add(instances(new THREE.IcosahedronGeometry(1, 2), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), nuages));
+  groupe.add(instances(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), nuages));
 }
 
 // ---------------------------------------------------------------------------
