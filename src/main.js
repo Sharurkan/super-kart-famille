@@ -13,6 +13,7 @@ import { REGLAGES } from "./physique.js";
 import { ouvrirBoutique, installerBoutique } from "./boutique.js";
 import { ajouter as ajouterBonbons } from "./portefeuille.js";
 import { chargerTexturesSol } from "./decor.js";
+import { oeuf } from "./oeuf.js";
 
 // les photos du sol se chargent pendant que les enfants choisissent leur pilote
 chargerTexturesSol();
@@ -266,8 +267,50 @@ for (const b of document.querySelectorAll("[data-difficulte]"))
   });
 
 // ---------- Course ----------
-function lancerCourse() {
+// Chargement suivi par le gestionnaire par défaut de three.js (tous les GLTFLoader / TextureLoader
+// du jeu) : fichiers lus / demandés, et instant du dernier changement.
+const fichiers = { faits: 0, demandes: 0, change: 0 };
+{
+  const M = THREE.DefaultLoadingManager;
+  const noter = (_url, faits, demandes) => Object.assign(fichiers, { faits, demandes, change: performance.now() });
+  M.onStart = noter;
+  M.onProgress = noter;
+  M.onLoad = () => (fichiers.change = performance.now());
+}
+let chargement = false; // l'œuf de dino est affiché (la course se prépare)
+let lancement = 0; // numéro du dernier lancement (un « Menu » pendant le chargement l'annule)
+const imageSuivante = () => new Promise((ok) => requestAnimationFrame(() => ok()));
+const attendre = (ms) => new Promise((ok) => setTimeout(ok, ms));
+
+/** Attend que le circuit soit chargé (plus aucun fichier en cours depuis un moment), en faisant
+ *  avancer l'œuf. Les modèles qui en demandent d'autres une fois lus relancent l'attente. */
+async function attendreChargement(jeton, f0, d0, debut) {
+  let p = 0;
+  for (;;) {
+    if (jeton !== lancement) return false;
+    const demandes = fichiers.demandes - d0, faits = fichiers.faits - f0;
+    if (demandes > 0) p = Math.max(p, Math.min(0.95, faits / demandes));
+    else p = Math.max(p, Math.min(0.6, (performance.now() - debut) / 2500)); // rien à lire (déjà en cache)
+    oeuf.progres(p);
+    const calme = fichiers.faits === fichiers.demandes && performance.now() - fichiers.change > 400;
+    const ecoule = performance.now() - debut;
+    if ((calme && ecoule > 1200) || ecoule > 30000) return true;
+    await attendre(100);
+  }
+}
+
+async function lancerCourse() {
+  const jeton = ++lancement;
   quitterCourse();
+  chargement = true;
+  montrer(null);
+  oeuf.montrer();
+  audio.musique("course");
+  // le navigateur affiche l'œuf avant le gros calcul (construction du circuit)
+  await imageSuivante();
+  await imageSuivante();
+  if (jeton !== lancement) return;
+  const debut = performance.now(), f0 = fichiers.faits, d0 = fichiers.demandes;
   course = new Course(
     { circuit: reglages.circuit, perso: reglages.perso, kart: reglages.kart, modeAuto: reglages.modeAuto, difficulte: reglages.difficulte },
     controles,
@@ -291,16 +334,31 @@ function lancerCourse() {
   );
   vue = course;
   enPause = false;
-  controles.calibrer(); // la position de la tablette au départ = tout droit
   preparerClassement(course.karts);
+  classementEl.classList.add("cache"); // (montré avec la course, après l'œuf)
   minimap = new Minimap($("#minimap"), course.piste, course.karts, { couleurs: COULEURS_PERSOS, urlFace: (p) => urlSprite(p, "face") });
   $("#nb-bonbons").textContent = 0;
   derniereposition = 0;
   document.body.classList.toggle("mode-auto", reglages.modeAuto);
   redimensionner();
-  montrer(null);
-  audio.musique("course");
   if (import.meta.env.DEV) Object.assign(window.__jeu, { course });
+  oeuf.progres(0.15);
+  if (!(await attendreChargement(jeton, f0, d0, debut))) return;
+  // shaders compilés et textures envoyées à la carte graphique pendant que l'œuf est là
+  // (sinon la première image de la course fige le jeu)
+  try {
+    await Promise.race([renderer.compileAsync(course.scene, course.camera), attendre(8000)]);
+  } catch {}
+  if (jeton !== lancement) return;
+  renderer.render(course.scene, course.camera);
+  await oeuf.eclore();
+  if (jeton !== lancement) return;
+  oeuf.cacher();
+  chargement = false;
+  horloge.getDelta(); // le temps passé dans l'œuf ne compte pas pour la course
+  controles.calibrer(); // la position de la tablette au départ = tout droit
+  classementEl.classList.remove("cache");
+  montrer(null);
 }
 
 // --- annonces au centre de l'écran ---
@@ -370,6 +428,11 @@ function montrerPodium(liste) {
 }
 
 function quitterCourse() {
+  if (chargement) {
+    lancement++;
+    chargement = false;
+    oeuf.cacher();
+  }
   if (!course) return;
   clearTimeout(minuteurAnnonce);
   annonce.classList.add("cache");
@@ -445,11 +508,11 @@ function majSon() {
 majSon();
 // Échap = pause pendant la course
 addEventListener("keydown", (e) => {
-  if (e.code === "Escape" && course) (enPause ? ACTIONS.reprendre : ACTIONS.pause)();
+  if (e.code === "Escape" && course && !chargement) (enPause ? ACTIONS.reprendre : ACTIONS.pause)();
 });
 // si on quitte l'appli pendant la course, on met en pause
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden && course && course.etat !== "podium" && !enPause) ACTIONS.pause();
+  if (document.hidden && course && !chargement && course.etat !== "podium" && !enPause) ACTIONS.pause();
   audio.suspendre(document.hidden);
 });
 
@@ -487,10 +550,11 @@ function adapterResolution(dt) {
 
 function boucle() {
   const dt = Math.min(horloge.getDelta(), 0.05);
+  requestAnimationFrame(boucle);
+  if (chargement) return audio.moteur(0, false); // l'œuf couvre l'écran : rien à calculer ni dessiner
   etape(dt);
   adapterResolution(dt);
   renderer.render(vue.scene, vue.camera);
-  requestAnimationFrame(boucle);
 }
 
 // Outil de test (dev uniquement) : fait avancer le jeu sans requestAnimationFrame.
@@ -498,7 +562,7 @@ function avancer(secondes, entree) {
   for (let k = 0; k < secondes * 60; k++) etape(1 / 60, entree);
   renderer.render(vue.scene, vue.camera);
 }
-if (import.meta.env.DEV) window.__jeu = { avancer, controles, vitrine, renderer, rendre: () => renderer.render(vue.scene, vue.camera) };
+if (import.meta.env.DEV) window.__jeu = { avancer, controles, vitrine, renderer, rendre: () => renderer.render(vue.scene, vue.camera), enChargement: () => chargement };
 
 montrer("titre");
 redimensionner();

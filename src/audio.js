@@ -222,6 +222,34 @@ class MoteurAudio {
   }
 
   /** "CROC" : deux claquements de mâchoire et un grondement. */
+  /** Petit craquement de coquille (écran de chargement : l'œuf se fissure). */
+  craque() {
+    if (!this.ctx) return;
+    this.bruitFiltre(this.ctx.currentTime, 0.06, 0.5, "highpass", 2500, this.busEffets);
+  }
+
+  /** L'œuf éclot : la coquille casse, puis le petit cri du bébé dino. */
+  eclosion() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.bruitFiltre(t, 0.08, 0.8, "highpass", 1800, this.busEffets);
+    this.bruitFiltre(t + 0.07, 0.12, 0.6, "bandpass", 1200, this.busEffets);
+    for (const [d, f0, f1] of [[0.25, 500, 1300], [0.5, 650, 1500]]) {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = "triangle";
+      o.frequency.setValueAtTime(f0, t + d);
+      o.frequency.exponentialRampToValueAtTime(f1, t + d + 0.12);
+      o.frequency.exponentialRampToValueAtTime(f0 * 1.4, t + d + 0.22);
+      g.gain.setValueAtTime(0.0001, t + d);
+      g.gain.exponentialRampToValueAtTime(0.4, t + d + 0.03);
+      g.gain.exponentialRampToValueAtTime(0.001, t + d + 0.24);
+      o.connect(g).connect(this.busEffets);
+      o.start(t + d);
+      o.stop(t + d + 0.26);
+    }
+  }
+
   croc() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;

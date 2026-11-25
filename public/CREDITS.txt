@@ -77,6 +77,20 @@ Kenney — Sci-Fi Sounds : meteorite/explosionCrunch_004.ogg, lowFrequency_explo
   thrusterFire_000.ogg (impact et chute de la météorite)
   https://kenney.nl/assets/sci-fi-sounds
 
+Openclipart — bébés dinos de l'écran de chargement (l'œuf qui éclot, src/oeuf.js) : public/bebes/*.webp
+  Série « baby dinosaurs » de xing qiu (Openclipart, domaine public CC0 1.0), fichiers SVG copiés depuis
+  publicdomainvectors.org (domaine public), rendus en WebP transparents et recadrés.
+  T-rex : https://publicdomainvectors.org/en/free-clipart/Falling-dinosaur/78652.html (t_rex_01),
+    .../Sitting-T-rex/78651.html (t_rex_02), .../Blue-cartoon-dinosaur/78669.html (t_rex_03)
+  Tricératops : .../Blue-dinosaur/78636.html, .../Green-baby-dino/78635.html, .../Green-baby-dino-vector-image/78634.html
+  Stégosaure : .../Cartoon-running-dino/78646.html, .../Sitting-baby-dino/78645.html
+  Apatosaure : .../Pink-prehistoric-animal/78668.html, .../Big-cartoon-dinosaur/78666.html, .../Smiling-cartoon-dino/78667.html
+  Ptéranodon : .../Flying-baby-dinosaur/78649.html, .../Cartoon-baby-dragon/78648.html, .../Happy-baby-dinosaur/78647.html
+  Ankylosaure : .../Mad-dinosaur-in-cartoon-style/78662.html, .../Raging-cartoon-dinosaur/78661.html, .../Cartoon-sitting-dinosaur/78660.html
+  Parasaurolophus (hadrosaure) : .../Smiling-violet-dinosaur/78650.html, .../Pink-dinosaur/78633.html
+  Cœlophysis : .../Red-cartoon-dragon/78663.html, .../Red-cartoon-dino/78665.html, .../Dangerous-red-dragon/78664.html
+  (... = https://publicdomainvectors.org/en/free-clipart)
+
 OpenGameArt — sons du T-rex debout au bord de la route (src/trex-attaque.js ; découpés, mélangés,
   normalisés et réencodés en OGG Vorbis mono : outils/blender/sons_trex.py)
   "T-rex calls" — CaveboyTup : sons/trex-rugissement.ogg (extrait 10,45 s → 14,45 s),
