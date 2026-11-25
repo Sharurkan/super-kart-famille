@@ -176,7 +176,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
       const angle = versPiste(piste, { x, z }) + travers + tourne;
       if (T.file) clairiereDino(x, z, angle, L * echelle, T.espece, i);
       // marcheur : animation accordée à sa taille pour que les pieds ne glissent pas (vitesse commune)
-      creerDino(T.espece, { animation: anim, vitesse: T.marche ? vMarche / echelle : vitesse, hauteur: HAUTEUR[T.espece] * S * echelle, detail: T.heros ? undefined : "loin" }).then(({ objet, mixer }) => {
+      creerDino(T.espece, { animation: anim, vitesse: T.marche ? vMarche / echelle : vitesse, hauteur: HAUTEUR[T.espece] * S * echelle, detail: T.heros ? "auto" : "loin", troupeau: true }).then(({ objet, animer }) => {
         // sa vraie taille (boîte du modèle) : rien ne doit déborder sur la route, ni pendant la marche
         const boite = new THREE.Box3().setFromObject(objet);
         if (T.marche) {
@@ -208,7 +208,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
           poses.push({ objet, espece: T.espece });
         }
         groupe.add(objet);
-        mixers.push(mixer);
+        mixers.push({ update: animer }); // animer(dt, camera) : moins souvent au loin ou hors champ (dinos.js)
       });
     }
   }
@@ -239,7 +239,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
     const bx = piste.cx[j] + piste.nx[j] * l, bz = piste.cz[j] + piste.nz[j] * l;
     for (let f = 0; f <= 1.001; f += 0.2) clairieres.push({ x: x + (bx - x) * f, z: z + (bz - z) * f, r: 12, occupe: 3, espece: "Trex", i: j });
   }
-  creerDino("Trex", { animation: "Idle", hauteur: HAUTEUR.Trex * TREX.S }).then(({ objet, mixer, clips }) => {
+  creerDino("Trex", { animation: "Idle", hauteur: HAUTEUR.Trex * TREX.S, detail: "auto" }).then(({ objet, mixer, clips, choisirDetail }) => {
     // toute son emprise est vérifiée (route, barrières, vue de la caméra, tête géante)
     const boite = new THREE.Box3().setFromObject(objet);
     const raison = gene(boite, trex.place.x, trex.place.z, trex.place.angle);
@@ -255,7 +255,8 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
     // il fait semblant d'attraper le joueur (clips + os tournés par-dessus, après son mixer)
     trex.attaque = attaqueTrex({ objet, mixer, clips, piste, cote: P3.cote, iFrappe: trex.place.iFrappe });
     // ordre : os remis aux valeurs du clip, clips (mixer), puis les os tournés par-dessus (voir remettre())
-    mixers.push({ update: (dt) => { trex.attaque.remettre(); mixer.update(dt); trex.attaque.update(dt); } });
+    // (version allégée au loin, mêmes os : choisirDetail, voir dinos.js)
+    mixers.push({ update: (dt, camera) => { choisirDetail(camera); trex.attaque.remettre(); mixer.update(dt); trex.attaque.update(dt); } });
     trex.objet = objet;
     trex.boite = boite;
     poses.push({ objet, espece: "Trex" });
@@ -353,7 +354,7 @@ export function decorDino(groupe, piste, rnd, horsPiste, obstacles = []) {
   return (dt, camera) => {
     volcan.update(dt, camera);
     meteorite.update(dt, camera); // avant le ventre et l'aquarium : ils gardent la main sur la brume
-    for (const m of mixers) m.update(dt);
+    for (const m of mixers) m.update(dt, camera);
     animerRaptors(dt, camera);
     // dinosaures qui marchent en rond, lentement, autour de leur troupeau
     for (const D of marcheurs) {
