@@ -37,7 +37,7 @@ export const ATTAQUE = {
 const SONS = {
   rugit: `${import.meta.env.BASE_URL}sons/trex-rugissement.ogg`, // « T-rex calls » (CaveboyTup)
   grogne: `${import.meta.env.BASE_URL}sons/trex-grognement.ogg`, // idem
-  cri: `${import.meta.env.BASE_URL}sons/trex-cri.ogg`, // rugissement plus aigu et court (voir CREDITS)
+  cri: `${import.meta.env.BASE_URL}sons/trex-cri.ogg`, // long cri perçant (voir CREDITS)
   clac: `${import.meta.env.BASE_URL}sons/trex-clac.ogg`, // « 80 CC0 creature SFX #2 » (rubberduck)
 };
 let sonsPrets = false;

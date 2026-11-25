@@ -81,8 +81,10 @@ OpenGameArt — sons du T-rex debout au bord de la route (src/trex-attaque.js ; 
   normalisés et réencodés en OGG Vorbis mono : outils/blender/sons_trex.py)
   "T-rex calls" — CaveboyTup : sons/trex-rugissement.ogg (extrait 10,45 s → 14,45 s),
     sons/trex-grognement.ogg (extrait 15,8 s → 18,7 s),
-    sons/trex-cri.ogg (trex-rugissement.ogg 0,3 s → 2,6 s, 18 % plus aigu, écho)
+    sons/trex-cri.ogg (extrait 36,7 s → 45,6 s, 10 % plus aigu, aigus renforcés + copie à la quinte, écho)
     https://opengameart.org/content/t-rex-calls
+  "CC0 Deep Monster Roar" — trazzz123 : grondement grave sous sons/trex-cri.ogg (0 → 4,5 s, plus grave)
+    https://opengameart.org/content/cc0-deep-monster-roar
   "80 CC0 creature SFX #2" — rubberduck : sons/trex-clac.ogg (attack_01 un peu plus grave + stomp_01)
     https://opengameart.org/content/80-cc0-creture-sfx-2
 
