@@ -21,15 +21,15 @@ import { audio } from "./audio.js";
 //    plus de ATTAQUE.plancher au-dessus de la route ; sinon le tangage est réduit (dichotomie).
 export const ATTAQUE = {
   approche: 85, // m avant le point de frappe : il se tourne vers le kart et se penche un peu
-  hauteurBouche: 4.2, // m au-dessus de la route : milieu de la gueule au plus bas de la frappe
-  plancher: 2.6, // m : aucun point de la tête ni de la mâchoire plus bas au-dessus de la route
+  hauteurBouche: 2.8, // m au-dessus de la route : milieu de la gueule au plus bas de la frappe
+  plancher: 1.7, // m : aucun point de la tête ni de la mâchoire plus bas au-dessus de la route
   descenteMin: 0.4, // s : durée du plongeon (selon la vitesse du kart ; rapide : il ne rate jamais le départ)
   descenteMax: 0.7,
   tenue: 0.35, // s : gueule fermée, au plus bas, juste après le CLAC
   remontee: 1.2, // s : il se redresse
   rugit: 2.4, // s après le CLAC : la gueule se referme, retour au repos
-  cote: 3.2, // m : la gueule claque à côté du kart (du côté du T-rex)
-  avance: 13, // m : ... et devant lui : la gueule claque bien dans le champ de la caméra (derrière le kart)
+  cote: 1.6, // m : la gueule claque à côté du kart (du côté du T-rex)
+  avance: 2, // m : ... juste devant lui : il le rate de justesse, bien dans le champ de la caméra (7 m derrière le kart)
   pivot: 0.7, // rad : il pivote au plus de tant sur ses pieds vers le kart (le reste : buste et cou)
 };
 
@@ -384,7 +384,7 @@ export function attaqueTrex({ objet, mixer, clips, piste, cote, iFrappe }) {
     modifie = true;
     // cible : la gueule à côté du kart (côté T-rex), au-dessus du bord de la route
     if (J) {
-      const lat = clamp(cote * (J.phys.lateral ?? 0) + A.cote, 2.5, piste.demi + 1.5) * cote;
+      const lat = clamp(cote * (J.phys.lateral ?? 0) + A.cote, 1.2, piste.demi + 1.5) * cote;
       cible.set(piste.cx[iFrappe] + piste.nx[iFrappe] * lat, yRoute + A.hauteurBouche, piste.cz[iFrappe] + piste.nz[iFrappe] * lat);
       regardF.set(J.phys.x, (J.phys.y ?? 0) + 1, J.phys.z);
       derniereCible = { c: cible.clone(), r: regardF.clone() };
