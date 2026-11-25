@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { audio } from "./audio.js";
 import { LAVE } from "./lave.js";
 
@@ -6,14 +7,30 @@ import { LAVE } from "./lave.js";
 // mégalodon. Une colonne de lave jaillit du lac de lave juste sous le kart qui tombe, monte jusqu'à
 // lui au moment où le ptérodactyle l'attrape (sauvé de justesse !), projette des gerbes de lave
 // tout autour, puis retombe.
-// Texture : la lave en fusion du monde en lave (public/lave/lave.jpg, « Lava 004 » d'ambientCG, CC0).
+// La gerbe : « Fire tornado » d'OPREXT (Sketchfab, CC-BY 4.0, voir CREDITS.txt ; textures WebP 512),
+// public/dinos/geyser-lave.glb : trois nappes de flammes en spirale, fines en bas et évasées en haut,
+// qu'on fait tournoyer (chacune à sa vitesse) et grandir avec le jet. En attendant le modèle (ou s'il
+// manque), une colonne simple avec la lave du monde en lave (public/lave/lave.jpg, ambientCG, CC0).
 
 export const GEYSER = {
   montee: 0.55, // s : de la surface jusqu'au sommet (sous le kart)
   tenue: 0.35, // s au sommet
   descente: 0.9, // s pour retomber
   rayon: 2.4, // m : rayon de la colonne en haut (plus large en bas)
+  largeur: 6.5, // × le modèle en largeur (2,1 m) : gerbe de ~14 m de large en haut
 };
+const MODELE = { centreX: 0.42, bas: -1.23, hauteur: 3.15 }; // (mesuré sur geyser-lave.glb)
+
+let promesse = null;
+function chargerGerbe() {
+  promesse ??= new GLTFLoader()
+    .loadAsync(`${import.meta.env.BASE_URL}dinos/geyser-lave.glb`)
+    .catch((e) => {
+      console.warn("geyser : modèle indisponible, colonne simple", e);
+      return null;
+    });
+  return promesse;
+}
 
 /** Une texture de lave à soi (même image que le monde en lave, réglages propres). */
 export function textureLave(repetX, repetY) {
@@ -51,10 +68,36 @@ export function installerGeyser(groupe, { laveY }) {
   // dôme au sommet (la lave qui bouillonne)
   const dome = new THREE.Mesh(new THREE.SphereGeometry(GEYSER.rayon * 1.05, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), matColonne);
   // bouillons à la base (sur le lac)
-  const base = new THREE.Mesh(new THREE.CircleGeometry(GEYSER.rayon * 3.2, 28), new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: 0.8, depthWrite: false }));
+  const base = new THREE.Mesh(new THREE.CircleGeometry(GEYSER.rayon * 3.2, 28), new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.55, depthWrite: false }));
   base.rotation.x = -Math.PI / 2;
   base.position.y = 0.15;
   g.add(colonne, coeur, dome, base);
+  // la gerbe en spirale (modèle) : une toupie par nappe, l'axe au centre de la gerbe
+  const gerbe = new THREE.Group();
+  gerbe.visible = false;
+  g.add(gerbe);
+  const toupies = [];
+  chargerGerbe().then((gltf) => {
+    if (!gltf) return;
+    gltf.scene.updateMatrixWorld(true);
+    gltf.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const m = o.clone();
+      o.matrixWorld.decompose(m.position, m.quaternion, m.scale);
+      m.position.x -= MODELE.centreX;
+      m.position.y -= MODELE.bas;
+      m.material = o.material.clone();
+      Object.assign(m.material, { transparent: true, depthWrite: false, side: THREE.DoubleSide }); // (ses propres couleurs : elles se détachent sur le lac)
+      m.frustumCulled = false;
+      const toupie = new THREE.Group();
+      toupie.add(m);
+      toupie.userData.vitesse = [5.5, -4, 7.5][toupies.length % 3];
+      toupies.push(toupie);
+      gerbe.add(toupie);
+    });
+    // la gerbe tournoie autour de la colonne de lave (le cœur lumineux n'est plus utile)
+    if (toupies.length) coeur.visible = false;
+  });
   // gerbes : des gouttes de lave projetées depuis le sommet
   const gouttes = [];
   const matGoutte = new THREE.MeshBasicMaterial({ color: 0xff8a1e });
@@ -95,12 +138,15 @@ export function installerGeyser(groupe, { laveY }) {
       else { const u = Math.min(1, (J.t - M - T) / D); h = J.hMax * (1 - u * u); }
       h = Math.max(0.01, h);
       colonne.scale.y = h;
+      gerbe.visible = toupies.length > 0;
+      gerbe.scale.set(GEYSER.largeur, h / MODELE.hauteur, GEYSER.largeur);
+      for (const t of toupies) t.rotation.y += dt * t.userData.vitesse;
       coeur.scale.y = h * 1.02;
       dome.position.y = h;
       const gonfle = 1 + 0.12 * Math.sin(J.t * 25);
       dome.scale.set(gonfle, 0.35 * gonfle, gonfle); // aplati : il ne cache pas le kart juste au-dessus
       base.scale.setScalar(0.6 + 0.4 * Math.min(1, J.t / 0.3));
-      base.material.opacity = 0.8 * (J.t < M + T ? 1 : Math.max(0, 1 - (J.t - M - T) / D));
+      base.material.opacity = 0.55 * (J.t < M + T ? 1 : Math.max(0, 1 - (J.t - M - T) / D));
       // gerbes au sommet
       if (!J.gerbe && J.t >= M) {
         J.gerbe = true;

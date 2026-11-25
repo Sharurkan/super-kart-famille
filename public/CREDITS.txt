@@ -51,6 +51,10 @@ Chaque œuvre : « This work is based on "<titre>" by <auteur> licensed under CC
   https://sketchfab.com/3d-models/megalodon-dc2b75f091964c26b05544f6a990e7ac
   Fichier : dinos/megalodon.glb (simplifié à 45 %, textures WebP 1024, sans reflets spéculaires)
 
+"Fire tornado" — OPREXT
+  https://sketchfab.com/3d-models/fire-tornado-b22f1181514946c18fc07980c2d2b63a
+  Fichier : dinos/geyser-lave.glb (textures WebP 512 ; sert de gerbe au geyser de lave du ravin)
+
 "Sago Palm, Game ready, Low poly, baked textures." — Valykor
   https://sketchfab.com/3d-models/sago-palm-game-ready-low-poly-baked-textures-85c86658224a4fe493f0f35091635555
   Fichier : nature/realiste.glb (cycas)
