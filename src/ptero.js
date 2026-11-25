@@ -472,7 +472,7 @@ export function installerRavin(groupe, piste, { debut }) {
   pivot.add(fond);
   const texEau = textureEau();
   texEau.repeat.set(1, 12);
-  const riviere = new THREE.Mesh(new THREE.PlaneGeometry(6, longueur), new THREE.MeshBasicMaterial({ map: texEau, color: 0xbff6ff }));
+  const riviere = new THREE.Mesh(new THREE.PlaneGeometry(26, longueur), new THREE.MeshBasicMaterial({ map: texEau, color: 0xbff6ff }));
   riviere.rotation.x = -Math.PI / 2;
   riviere.position.y = 0.3;
   pivot.add(riviere);
@@ -721,18 +721,16 @@ export function installerRavin(groupe, piste, { debut }) {
     ph.poussee.x = ph.poussee.z = 0;
     if (k.joueur) cri();
 
-    // le mégalodon (joueur seulement) : il claque à côté du kart quand celui-ci passe au-dessus de la
-    // rivière (milieu du ravin, s = R), un peu devant lui
+    // le mégalodon (joueur seulement) : il jaillit de la rivière (large de 26 m, au milieu du ravin)
+    // devant le kart, un peu sur le côté, et claque quand le kart arrive à sa hauteur
     let requin = null;
     if (k.joueur) {
-      let uS = 0.5;
-      for (let u = 0; u <= 1; u += 0.01) {
-        if (versRavin(bezier(P0, C1, C2, P3, u, tmpP).x, tmpP.z)[0] >= R - MEGALO.devant) { uS = u; break; }
-      }
+      const uS = 0.32; // (fraction du vol porté)
       const K = bezier(P0, C1, C2, P3, uS, new THREE.Vector3());
-      const lK = versRavin(K.x, K.z)[1];
+      const [sK, lK] = versRavin(K.x, K.z);
       const sigma = lK > 6 ? -1 : 1; // du côté où il y a le plus de place (jamais contre la paroi)
-      const sommet = monde(R, lK + sigma * MEGALO.cote);
+      const sR = Math.max(R - 11, Math.min(R + 11, sK + MEGALO.devant)); // (au-dessus de la rivière)
+      const sommet = monde(sR, lK + sigma * MEGALO.cote);
       sommet.y = K.y - RAVIN.accroche - MEGALO.dessous;
       requin = { tS: T1 + uS * T2, sommet, lat: nE.clone().multiplyScalar(sigma), lance: false };
     }

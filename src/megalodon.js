@@ -3,9 +3,9 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { audio } from "./audio.js";
 
 // Le mégalodon du ravin (circuit dino) : pendant que le ptérodactyle porte le kart du joueur
-// au-dessus du vide, un mégalodon géant jaillit de la rivière tout au fond, monte jusqu'à côté
-// du kart, gueule grande ouverte, et CLAC ! il rate le kart de peu, puis replonge dans un grand
-// « plouf ».
+// au-dessus du vide, un mégalodon géant jaillit tout droit de la rivière, à la verticale, le nez
+// vers le ciel et la gueule grande ouverte ; il monte jusqu'à côté du kart, CLAC ! il le rate de
+// peu, puis retombe à la verticale (la queue la première) dans un grand « plouf ».
 //
 // Modèle : public/dinos/megalodon.glb, d'après « Megalodon » de Sealife Fan 3 (Sketchfab,
 // CC-BY 4.0, voir CREDITS.txt), allégé (gltf-transform : simplify, textures WebP 1024).
@@ -13,12 +13,12 @@ import { audio } from "./audio.js";
 // Le modèle regarde vers +Z ; le pivot de saut est mis sur le bout du museau.
 
 export const MEGALO = {
-  taille: 2, // × le modèle (14,5 m) : ~29 m de long
-  montee: 1.0, // s du plongeon jusqu'au sommet (là où la gueule claque)
-  cote: 5, // m : le museau passe à côté du kart (latéralement)
-  dessous: 0, // m : ... à la hauteur du bas du kart
-  devant: 8, // m : ... et devant lui (le long de la route), bien dans le champ de la caméra
-  vitesseLat: 12, // m/s : il fonce vers le kart (en travers de la route) pendant le saut
+  taille: 3, // × le modèle (14,5 m) : ~43 m de long
+  montee: 1.1, // s de la sortie de l'eau jusqu'au sommet (là où la gueule claque)
+  cote: 3.5, // m : le museau monte juste à côté de la trajectoire du kart (latéralement)
+  dessous: -2, // m : ... jusqu'à 2 m au-dessus du bas du kart
+  devant: 9, // m : ... et devant lui (le long de la route), bien dans le champ de la caméra
+  penche: 0.22, // rad : le nez penché vers le kart (le reste : vertical)
 };
 const NEZ_Z = 4.1; // m (modèle) : bout du museau
 const CLAC_CLIP = 1.0; // s : instant du clip « Bite » où la gueule est fermée
@@ -108,12 +108,12 @@ export function installerMegalodon(groupe, { eauY }) {
 
   // saut en cours : s = temps depuis le départ (sous l'eau)
   let saut = null;
-  const tete = new THREE.Vector3(), vit = new THREE.Vector3(), haut = new THREE.Vector3(0, 1, 0);
+  const tete = new THREE.Vector3(), haut = new THREE.Vector3(0, 1, 0);
   const mBase = new THREE.Matrix4(), axeX = new THREE.Vector3(), axeY = new THREE.Vector3();
 
   function position(s, cible) {
     const S = saut, ds = s - S.sp;
-    cible.copy(S.sommet).addScaledVector(S.lat, S.vL * ds);
+    cible.copy(S.sommet); // à la verticale : il retombe par où il est sorti
     cible.y = S.sommet.y - S.a * ds * ds;
     return cible;
   }
@@ -130,12 +130,16 @@ export function installerMegalodon(groupe, { eauY }) {
       const depart = Math.max(0, sp - dans); // (si on est en retard, on démarre déjà en l'air)
       saut = {
         sp, sommet: sommet.clone(), lat: lat.clone().normalize(),
-        vL: -MEGALO.vitesseLat, // vers le kart
-        a: (sommet.y - eauY + 3) / (sp * sp), // il part 3 m sous l'eau
+        a: (sommet.y - eauY + 3) / (sp * sp), // le museau part 3 m sous l'eau
         s: depart, ploufs: 0, clac: false,
       };
-      // repère : X perpendiculaire au plan du saut (le dos vers le haut au sommet)
-      axeX.crossVectors(haut, saut.lat.clone().negate()).normalize();
+      // repère fixe : nez vers le ciel, un peu penché vers le kart, le ventre tourné vers lui
+      const versKart = saut.lat.clone().negate();
+      const f = haut.clone().multiplyScalar(Math.cos(MEGALO.penche)).addScaledVector(versKart, Math.sin(MEGALO.penche)).normalize();
+      axeX.crossVectors(versKart, haut).normalize(); // perpendiculaire au plan kart-requin
+      axeY.crossVectors(f, axeX).normalize(); // dos à l'opposé du kart
+      mBase.makeBasis(axeX, axeY, f);
+      pivot.quaternion.setFromRotationMatrix(mBase);
       pivot.visible = true;
       this.etape(0);
       return true;
@@ -146,23 +150,19 @@ export function installerMegalodon(groupe, { eauY }) {
       const S = saut;
       S.s += dt;
       position(S.s, tete);
-      // vitesse (dérivée) : le nez suit sa trajectoire
-      vit.copy(S.lat).multiplyScalar(S.vL);
-      vit.y = -2 * S.a * (S.s - S.sp);
-      const f = vit.normalize();
-      axeY.crossVectors(f, axeX).normalize();
-      const x = axeX.clone().crossVectors(axeY, f).normalize();
-      mBase.makeBasis(x, axeY, f);
-      pivot.quaternion.setFromRotationMatrix(mBase);
       pivot.position.copy(tete);
-      // gueule : le clip « Bite » est calé pour se refermer au sommet
-      if (bite) mixer.setTime(Math.max(0, S.s - S.sp + CLAC_CLIP) % bite.getClip().duration);
+      // gueule : grande ouverte en montant (clip « Bite » à 0,5 s), elle se referme au sommet
+      // (1,0 s), puis se rouvre en retombant
+      if (bite) {
+        const d = S.s - S.sp;
+        mixer.setTime(d < -0.25 ? 0.5 : Math.min(bite.getClip().duration - 0.01, CLAC_CLIP + (d < 0 ? d * 2 : d)));
+      }
       // éclaboussures : à la sortie de l'eau et en replongeant
       const auDessus = tete.y > eauY;
       if (S.ploufs === 0 && auDessus) {
         S.ploufs = 1;
         plouf.lancer(new THREE.Vector3(tete.x, eauY, tete.z));
-      } else if (S.ploufs === 1 && !auDessus && S.s > S.sp) {
+      } else if (S.ploufs === 1 && S.s > S.sp && tete.y < eauY + 13 * MEGALO.taille) { // la queue touche l'eau
         S.ploufs = 2;
         plouf.lancer(new THREE.Vector3(tete.x, eauY, tete.z));
       }
@@ -170,8 +170,8 @@ export function installerMegalodon(groupe, { eauY }) {
         S.clac = true;
         if (!audio.jouer?.(`${import.meta.env.BASE_URL}sons/trex-clac.ogg`, 1.0, 0.8)) audio.croc?.();
       }
-      // fini quand la queue (29 m derrière le museau) est repassée sous l'eau
-      if (S.s > S.sp && tete.y < eauY - 14.5 * MEGALO.taille - 3) {
+      // fini quand la queue (sous le museau) est repassée sous l'eau
+      if (S.s > S.sp && tete.y < eauY - 2) {
         saut = null;
         pivot.visible = false;
       }
