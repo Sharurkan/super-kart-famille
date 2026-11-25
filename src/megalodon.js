@@ -18,10 +18,11 @@ export const MEGALO = {
   cote: 0, // m : le museau monte juste sous le kart (latéralement)
   dessous: 0.6, // m : ... la gueule ouverte juste sous le bas du kart
   devant: 0, // m : ... à l'endroit même où le kart tombe
-  penche: 0, // rad : le nez vers le ciel
+  penche: 0.3, // rad : le nez penché vers la caméra (on voit dans la gueule)
 };
 const NEZ_Z = 4.1; // m (modèle) : bout du museau
 const CLAC_CLIP = 1.0; // s : instant du clip « Bite » où la gueule est fermée
+const OUVERTURE = 0.7; // rad : mâchoire ouverte en plus du clip (au-delà de ~0,8 le maillage se déforme)
 
 let promesse = null;
 export function chargerMegalodon() {
@@ -91,7 +92,8 @@ export function installerMegalodon(groupe, { eauY }) {
   groupe.add(pivot);
   const plouf = creerPlouf();
   groupe.add(plouf.objet);
-  let mixer = null, bite = null;
+  let mixer = null, bite = null, machoire = null;
+  const qOuvre = new THREE.Quaternion(), axeMachoire = new THREE.Vector3(1, 0, 0);
   chargerMegalodon().then((gltf) => {
     if (!gltf) return;
     const m = gltf.scene;
@@ -99,6 +101,7 @@ export function installerMegalodon(groupe, { eauY }) {
     m.position.set(0, -2.6 * MEGALO.taille, -NEZ_Z * MEGALO.taille);
     m.traverse((o) => {
       if (o.isMesh) o.frustumCulled = false; // (squelette animé : la boîte du maillage au repos ne suit pas)
+      if (o.isBone && /^jaw/.test(o.name)) machoire = o;
     });
     pivot.add(m);
     mixer = new THREE.AnimationMixer(m);
@@ -156,6 +159,11 @@ export function installerMegalodon(groupe, { eauY }) {
       if (bite) {
         const d = S.s - S.sp;
         mixer.setTime(d < -0.25 ? 0.5 : Math.min(bite.getClip().duration - 0.01, CLAC_CLIP + (d < 0 ? d * 2 : d)));
+        // et la mâchoire encore plus grande ouverte (os « jaw ») : se referme d'un coup au sommet
+        if (machoire) {
+          const ouvert = d < -0.12 ? 1 : d < 0 ? -d / 0.12 : Math.min(0.8, d / 0.35);
+          machoire.quaternion.multiply(qOuvre.setFromAxisAngle(axeMachoire, OUVERTURE * ouvert));
+        }
       }
       // éclaboussures : à la sortie de l'eau et en replongeant
       const auDessus = tete.y > eauY;

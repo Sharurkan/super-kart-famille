@@ -741,7 +741,8 @@ export function installerRavin(groupe, piste, { debut }) {
       const sR = Math.max(2, Math.min(W - 4, sK + MEGALO.devant));
       const sommet = monde(sR, lK + sigma * MEGALO.cote);
       sommet.y = G.y - MEGALO.dessous;
-      requin = { tS: T1, sommet, lat: nE.clone().multiplyScalar(sigma), lance: false };
+      // (lat = sens de la route : le ventre, donc la gueule ouverte, tourné vers la caméra qui suit le kart)
+      requin = { tS: T1, sommet, lat: avant.clone().negate(), lance: false };
     }
 
     return {
