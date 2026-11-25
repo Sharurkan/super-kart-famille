@@ -11,6 +11,7 @@ import { Particules } from "./particules.js";
 import { liberer } from "./liberer.js";
 import { audio } from "./audio.js";
 import { Bonbons } from "./bonbons.js";
+import { creerPortee } from "./secteurs.js";
 
 export const TOURS = 3;
 const DUREE_DECOMPTE = 3.6; // 3, 2, 1, Partez !
@@ -69,6 +70,7 @@ export class Course {  constructor(options, controles, quand = {}) {
 
     const def = (this.def = CIRCUITS[options.circuit] ?? CIRCUITS.prairie);
     scene.fog = new THREE.Fog(def.ciel.horizon, 160, 620);
+    this.portee = creerPortee(scene); // masque les tronçons de décor noyés dans le brouillard
     if (def.lumiere) {
       ciel.intensity = def.lumiere;
       soleil.intensity = def.lumiere * 0.6;
@@ -268,6 +270,7 @@ export class Course {  constructor(options, controles, quand = {}) {
       const angle = k.phys.angle;
       k.pilote.orienter(this.camera, angle + k.modele.corps.rotation.y, angle);
     }
+    this.portee(this.camera);
   }
 
   // ---------- Plan de cinéma : le kart du joueur saute au-dessus de la meute de raptors ----------

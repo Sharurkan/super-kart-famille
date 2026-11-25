@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { brulable } from "./lave.js";
+import { ajouterDecoupe } from "./secteurs.js";
 
 // Végétation en vrais modèles 3D : Stylized Nature MegaKit de Quaternius (CC0), rassemblés et
 // allégés avec Blender dans public/nature/jurassique.glb, et modèles réalistes dans
@@ -237,7 +238,7 @@ export function planter(groupe, nom, liste, garde = null) {
         o.updateMatrix();
         im.setMatrixAt(i, o.matrix);
       });
-      groupe.add(im);
+      ajouterDecoupe(groupe, im); // en tronçons : écartés hors champ ou dans le brouillard
     }
   });
 }
@@ -449,7 +450,8 @@ export function planterImposteurs(groupe, liste, garde = null) {
     const sprites = new Float32Array(liste.length);
     const im = new THREE.InstancedMesh(geo, materiau, liste.length);
     im.name = "Imposteurs";
-    im.frustumCulled = false; // les rectangles tournent dans le shader : la boîte calculée serait fausse
+    // (les rectangles tournent dans le shader autour de leur axe vertical : la sphère englobante
+    // calculée reste juste, donc les tronçons peuvent être écartés hors champ)
     const o = new THREE.Object3D(), couleur = new THREE.Color();
     liste.forEach((p, i) => {
       const s = info.sprites[p.sprite];
@@ -463,8 +465,7 @@ export function planterImposteurs(groupe, liste, garde = null) {
       sprites[i] = noms.indexOf(p.sprite);
     });
     geo.setAttribute("aSprite", new THREE.InstancedBufferAttribute(sprites, 1));
-    groupe.add(im);
-    return im;
+    return ajouterDecoupe(groupe, im);
   });
 }
 
