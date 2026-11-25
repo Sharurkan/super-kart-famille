@@ -13,8 +13,9 @@ import { audio } from "./audio.js";
 // Le modèle regarde vers +Z ; le pivot de saut est mis sur le bout du museau.
 
 export const MEGALO = {
-  taille: 3, // × le modèle (14,5 m) : ~43 m de long
-  montee: 0.6, // s de la sortie de l'eau jusqu'au sommet (là où la gueule claque) : pendant la chute du kart
+  taille: 5, // × le modèle (14,5 m) : ~72 m de long
+  montee: 0.65, // s de la sortie de l'eau jusqu'au sommet (là où la gueule claque)
+  apres: 0.45, // s : le sommet vient ce temps après que le ptérodactyle a attrapé le kart (il est remonté un peu)
   cote: 0, // m : le museau monte juste sous le kart (latéralement)
   dessous: 0.6, // m : ... la gueule ouverte juste sous le bas du kart
   devant: 0, // m : ... à l'endroit même où le kart tombe
@@ -91,6 +92,7 @@ export function installerMegalodon(groupe, { eauY }) {
   pivot.visible = false;
   groupe.add(pivot);
   const plouf = creerPlouf();
+  plouf.objet.scale.setScalar(MEGALO.taille / 3);
   groupe.add(plouf.objet);
   let mixer = null, bite = null, machoire = null;
   const qOuvre = new THREE.Quaternion(), axeMachoire = new THREE.Vector3(1, 0, 0);

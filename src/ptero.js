@@ -6,6 +6,8 @@ import { fusion } from "./decors-circuits.js";
 import { audio } from "./audio.js";
 import { percerSol } from "./decor.js";
 import { installerMegalodon, MEGALO } from "./megalodon.js";
+import { installerGeyser, textureLave, GEYSER } from "./geyser.js";
+import { vagueLave } from "./lave.js";
 
 // Le ravin du ptérodactyle (circuit dino) : la route s'arrête au bord d'un précipice,
 // le kart tombe dans le vide... et un ptérodactyle l'attrape avec ses pattes pour le
@@ -485,6 +487,16 @@ export function installerRavin(groupe, piste, { debut }) {
   lac.rotation.x = -Math.PI / 2;
   lac.position.y = H - RAVIN.eau;
   pivot.add(lac);
+  // ... qui devient un lac de lave quand la vague de lave du monde (3e tour, lave.js) arrive au ravin
+  const matLacLave = new THREE.MeshBasicMaterial({ color: 0xffc58a, transparent: true, opacity: 0 });
+  const lacLave = new THREE.Mesh(lac.geometry, matLacLave);
+  lacLave.rotation.x = -Math.PI / 2;
+  lacLave.position.y = H - RAVIN.eau + 0.05;
+  lacLave.visible = false;
+  pivot.add(lacLave);
+  let texLacLave = null;
+  // (essais en développement : window.__laveRavin = 1 met le lac en lave)
+  const enLave = () => (import.meta.env.DEV && window.__laveRavin != null ? window.__laveRavin : vagueLave(centre.x, centre.z));
   for (const [y, o] of [[16, 0.08], [30, 0.11], [44, 0.14]].filter(([y]) => y < RAVIN.eau)) {
     const brume = new THREE.Mesh(new THREE.PlaneGeometry(W + 40, longueur), new THREE.MeshBasicMaterial({ color: 0xd8e2ea, transparent: true, opacity: o, depthWrite: false, fog: false }));
     brume.rotation.x = -Math.PI / 2;
@@ -494,6 +506,8 @@ export function installerRavin(groupe, piste, { debut }) {
   groupeRavin.add(pivot);
   // le mégalodon qui jaillit de la rivière quand le joueur traverse (megalodon.js)
   const megalo = installerMegalodon(groupeRavin, { eauY: -RAVIN.eau });
+  // ... remplacé par un geyser de lave quand le lac est en lave (geyser.js)
+  const geyser = installerGeyser(groupeRavin, { laveY: -RAVIN.eau + 0.1 });
   audio.precharger?.(`${import.meta.env.BASE_URL}sons/trex-clac.ogg`);
 
   // cascade : de l'arrondi du côté "+l", le long de la paroi, jusqu'à la rivière
@@ -650,6 +664,17 @@ export function installerRavin(groupe, piste, { debut }) {
     texLac.offset.x += dt * 0.05;
     texCascade.offset.y += dt * 1.4;
     megalo.etape(dt);
+    geyser.etape(dt);
+    const v = enLave();
+    if (v > 0.001 && !texLacLave) {
+      texLacLave = textureLave(3, 12);
+      if (texLacLave) { matLacLave.map = texLacLave; matLacLave.needsUpdate = true; }
+    }
+    lacLave.visible = v > 0.001;
+    matLacLave.opacity = v;
+    matLacLave.transparent = v < 1;
+    lac.visible = v < 1;
+    if (texLacLave) { texLacLave.offset.y -= dt * 0.04; texLacLave.offset.x += dt * 0.015; }
     for (const p of reserve) {
       if (!p.depart) continue;
       const d = p.depart;
@@ -732,17 +757,18 @@ export function installerRavin(groupe, piste, { debut }) {
     ph.poussee.x = ph.poussee.z = 0;
     if (k.joueur) cri();
 
-    // le mégalodon (joueur seulement) : il jaillit du lac là où le kart tombe et claque juste à côté de
-    // lui à l'instant où le ptérodactyle l'attrape (fin de la chute) : sauvé de justesse !
+    // le mégalodon (joueur seulement) : il jaillit du lac là où le kart tombe et claque juste sous lui,
+    // un instant après que le ptérodactyle l'a attrapé (sauvé de justesse !). Quand le lac est en
+    // lave (3e tour), c'est un geyser de lave qui jaillit à sa place.
     let requin = null;
     if (k.joueur) {
-      const [sK, lK] = versRavin(G.x, G.z);
-      const sigma = lK > 6 ? -1 : 1; // du côté où il y a le plus de place (jamais contre la paroi)
-      const sR = Math.max(2, Math.min(W - 4, sK + MEGALO.devant));
-      const sommet = monde(sR, lK + sigma * MEGALO.cote);
-      sommet.y = G.y - MEGALO.dessous;
+      const lave = enLave() > 0.5;
+      const dt0 = lave ? 0.1 : MEGALO.apres; // s après la prise
+      const K = bezier(P0, C1, C2, P3, dt0 / T2, new THREE.Vector3()); // (pattes du ptérodactyle)
+      const sommet = K.clone().addScaledVector(avant, lave ? 0 : MEGALO.devant);
+      sommet.y = K.y - RAVIN.accroche - (lave ? 1.6 : MEGALO.dessous);
       // (lat = sens de la route : le ventre, donc la gueule ouverte, tourné vers la caméra qui suit le kart)
-      requin = { tS: T1, sommet, lat: avant.clone().negate(), lance: false };
+      requin = { lave, tS: T1 + dt0, sommet, lat: avant.clone().negate(), lance: false };
     }
 
     return {
@@ -782,9 +808,10 @@ export function installerRavin(groupe, piste, { debut }) {
         ph.xAvant = ph.x;
         ph.zAvant = ph.z;
         suivre(ph);
-        if (requin && !requin.lance && t >= requin.tS - MEGALO.montee) {
+        if (requin && !requin.lance && t >= requin.tS - (requin.lave ? GEYSER.montee : MEGALO.montee)) {
           requin.lance = true;
-          megalo.lancer({ sommet: requin.sommet, lat: requin.lat, dans: requin.tS - t });
+          if (requin.lave) geyser.lancer({ sommet: requin.sommet, dans: requin.tS - t });
+          else megalo.lancer({ sommet: requin.sommet, lat: requin.lat, dans: requin.tS - t });
         }
         horloge(coursePourHorloge);
         if (t < DUREE) return false;
@@ -854,5 +881,6 @@ export function installerRavin(groupe, piste, { debut }) {
   piste.ravin.dansLeVide = dansLeVide;
   piste.ravin.pteros = reserve;
   piste.ravin.megalo = megalo;
+  piste.ravin.geyser = geyser;
   return piste.ravin;
 }
