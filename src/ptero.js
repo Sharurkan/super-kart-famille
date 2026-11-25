@@ -19,7 +19,7 @@ import { installerMegalodon, MEGALO } from "./megalodon.js";
 export const RAVIN = {
   largeur: 42, // m de vide le long de la route
   profondeur: 62, // m jusqu'au fond
-  eau: 28, // m sous la route : surface du lac qui remplit le fond du ravin (le mégalodon en sort)
+  eau: 14, // m sous la route : surface du lac qui remplit le fond du ravin (le mégalodon en sort)
   bout: 40, // m (de chaque côté de la route) où le ravin garde toute sa largeur, puis il s'arrondit
   depose: 6, // m après le bord d'en face : où le kart est reposé
   chute: 0.65, // s de chute ("oh non !") avant d'être attrapé
@@ -485,7 +485,7 @@ export function installerRavin(groupe, piste, { debut }) {
   lac.rotation.x = -Math.PI / 2;
   lac.position.y = H - RAVIN.eau;
   pivot.add(lac);
-  for (const [y, o] of [[16, 0.08], [30, 0.11], [44, 0.14]].filter(([y]) => H - y > RAVIN.eau)) {
+  for (const [y, o] of [[16, 0.08], [30, 0.11], [44, 0.14]].filter(([y]) => y < RAVIN.eau)) {
     const brume = new THREE.Mesh(new THREE.PlaneGeometry(W + 40, longueur), new THREE.MeshBasicMaterial({ color: 0xd8e2ea, transparent: true, opacity: o, depthWrite: false, fog: false }));
     brume.rotation.x = -Math.PI / 2;
     brume.position.y = H - y;
@@ -738,7 +738,7 @@ export function installerRavin(groupe, piste, { debut }) {
     if (k.joueur) {
       const [sK, lK] = versRavin(G.x, G.z);
       const sigma = lK > 6 ? -1 : 1; // du côté où il y a le plus de place (jamais contre la paroi)
-      const sR = Math.max(4, Math.min(W - 6, sK + MEGALO.devant));
+      const sR = Math.max(2, Math.min(W - 4, sK + MEGALO.devant));
       const sommet = monde(sR, lK + sigma * MEGALO.cote);
       sommet.y = G.y - MEGALO.dessous;
       requin = { tS: T1, sommet, lat: nE.clone().multiplyScalar(sigma), lance: false };

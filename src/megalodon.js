@@ -15,10 +15,10 @@ import { audio } from "./audio.js";
 export const MEGALO = {
   taille: 3, // × le modèle (14,5 m) : ~43 m de long
   montee: 0.6, // s de la sortie de l'eau jusqu'au sommet (là où la gueule claque) : pendant la chute du kart
-  cote: 3.5, // m : le museau monte juste à côté de la trajectoire du kart (latéralement)
-  dessous: -2, // m : ... jusqu'à 2 m au-dessus du bas du kart
-  devant: 5, // m : ... et devant lui (le long de la route), bien dans le champ de la caméra
-  penche: 0.22, // rad : le nez penché vers le kart (le reste : vertical)
+  cote: 0, // m : le museau monte juste sous le kart (latéralement)
+  dessous: 0.6, // m : ... la gueule ouverte juste sous le bas du kart
+  devant: 0, // m : ... à l'endroit même où le kart tombe
+  penche: 0, // rad : le nez vers le ciel
 };
 const NEZ_Z = 4.1; // m (modèle) : bout du museau
 const CLAC_CLIP = 1.0; // s : instant du clip « Bite » où la gueule est fermée
@@ -46,7 +46,7 @@ function creerPlouf() {
   for (let k = 0; k < 18; k++) {
     const m = new THREE.Mesh(new THREE.SphereGeometry(0.7, 8, 6), mat.clone());
     const a = (k / 18) * Math.PI * 2;
-    m.userData.v = new THREE.Vector3(Math.cos(a) * (5 + (k % 3) * 3), 16 + (k % 4) * 5, Math.sin(a) * (5 + (k % 3) * 3));
+    m.userData.v = new THREE.Vector3(Math.cos(a) * (4 + (k % 3) * 2.5), 9 + (k % 4) * 3, Math.sin(a) * (4 + (k % 3) * 2.5));
     gouttes.push(m);
     g.add(m);
   }
@@ -65,15 +65,15 @@ function creerPlouf() {
       t += dt;
       const u = t / 1.6;
       if (u >= 1) { g.visible = false; t = -1; return; }
-      anneau.scale.setScalar(3 + 16 * Math.sqrt(u));
+      anneau.scale.setScalar(3 + 12 * Math.sqrt(u));
       anneau.material.opacity = 0.9 * (1 - u);
-      const h = 22 * Math.sin(Math.min(1, u * 1.6) * Math.PI);
-      gerbe.scale.set(6 + 6 * u, Math.max(0.01, h), 6 + 6 * u);
-      gerbe.material.opacity = 0.75 * (1 - u);
+      const h = 9 * Math.sin(Math.min(1, u * 1.6) * Math.PI);
+      gerbe.scale.set(3.5 + 3 * u, Math.max(0.01, h), 3.5 + 3 * u);
+      gerbe.material.opacity = 0.45 * (1 - u);
       for (const m of gouttes) {
         const v = m.userData.v;
         m.position.set(v.x * t, v.y * t - 12 * t * t, v.z * t);
-        m.scale.setScalar(1.6 * (1 - u) + 0.3);
+        m.scale.setScalar(1.1 * (1 - u) + 0.25);
         m.material.opacity = m.position.y > -0.5 ? 0.9 * (1 - u) : 0;
       }
     },
@@ -162,7 +162,7 @@ export function installerMegalodon(groupe, { eauY }) {
       if (S.ploufs === 0 && auDessus) {
         S.ploufs = 1;
         plouf.lancer(new THREE.Vector3(tete.x, eauY, tete.z));
-      } else if (S.ploufs === 1 && S.s > S.sp && tete.y < eauY + 13 * MEGALO.taille) { // la queue touche l'eau
+      } else if (S.ploufs === 1 && S.s > S.sp && !auDessus) { // il replonge
         S.ploufs = 2;
         plouf.lancer(new THREE.Vector3(tete.x, eauY, tete.z));
       }
