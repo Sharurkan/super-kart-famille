@@ -19,6 +19,7 @@ import { installerMegalodon, MEGALO } from "./megalodon.js";
 export const RAVIN = {
   largeur: 42, // m de vide le long de la route
   profondeur: 62, // m jusqu'au fond
+  eau: 28, // m sous la route : surface du lac qui remplit le fond du ravin (le mégalodon en sort)
   bout: 40, // m (de chaque côté de la route) où le ravin garde toute sa largeur, puis il s'arrondit
   depose: 6, // m après le bord d'en face : où le kart est reposé
   chute: 0.65, // s de chute ("oh non !") avant d'être attrapé
@@ -476,7 +477,15 @@ export function installerRavin(groupe, piste, { debut }) {
   riviere.rotation.x = -Math.PI / 2;
   riviere.position.y = 0.3;
   pivot.add(riviere);
-  for (const [y, o] of [[16, 0.08], [30, 0.11], [44, 0.14]]) {
+  // le lac : il remplit le ravin jusqu'à RAVIN.eau sous la route (plus grand que le ravin : les parois
+  // cachent ce qui dépasse)
+  const texLac = textureEau();
+  texLac.repeat.set(4, 16);
+  const lac = new THREE.Mesh(new THREE.PlaneGeometry(W + 40, longueur), new THREE.MeshBasicMaterial({ map: texLac, color: 0x7fe3f0 }));
+  lac.rotation.x = -Math.PI / 2;
+  lac.position.y = H - RAVIN.eau;
+  pivot.add(lac);
+  for (const [y, o] of [[16, 0.08], [30, 0.11], [44, 0.14]].filter(([y]) => H - y > RAVIN.eau)) {
     const brume = new THREE.Mesh(new THREE.PlaneGeometry(W + 40, longueur), new THREE.MeshBasicMaterial({ color: 0xd8e2ea, transparent: true, opacity: o, depthWrite: false, fog: false }));
     brume.rotation.x = -Math.PI / 2;
     brume.position.y = H - y;
@@ -484,7 +493,7 @@ export function installerRavin(groupe, piste, { debut }) {
   }
   groupeRavin.add(pivot);
   // le mégalodon qui jaillit de la rivière quand le joueur traverse (megalodon.js)
-  const megalo = installerMegalodon(groupeRavin, { eauY: -H + 0.3 });
+  const megalo = installerMegalodon(groupeRavin, { eauY: -RAVIN.eau });
   audio.precharger?.(`${import.meta.env.BASE_URL}sons/trex-clac.ogg`);
 
   // cascade : de l'arrondi du côté "+l", le long de la paroi, jusqu'à la rivière
@@ -637,6 +646,8 @@ export function installerRavin(groupe, piste, { debut }) {
     const dt = tPrecedent === null ? 0 : Math.min(0.1, Math.max(0, t - tPrecedent));
     tPrecedent = t;
     texEau.offset.y -= dt * 0.6;
+    texLac.offset.y -= dt * 0.25;
+    texLac.offset.x += dt * 0.05;
     texCascade.offset.y += dt * 1.4;
     megalo.etape(dt);
     for (const p of reserve) {
