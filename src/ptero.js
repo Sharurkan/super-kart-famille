@@ -732,18 +732,16 @@ export function installerRavin(groupe, piste, { debut }) {
     ph.poussee.x = ph.poussee.z = 0;
     if (k.joueur) cri();
 
-    // le mégalodon (joueur seulement) : il jaillit de la rivière (large de 26 m, au milieu du ravin)
-    // devant le kart, un peu sur le côté, et claque quand le kart arrive à sa hauteur
+    // le mégalodon (joueur seulement) : il jaillit du lac là où le kart tombe et claque juste à côté de
+    // lui à l'instant où le ptérodactyle l'attrape (fin de la chute) : sauvé de justesse !
     let requin = null;
     if (k.joueur) {
-      const uS = 0.32; // (fraction du vol porté)
-      const K = bezier(P0, C1, C2, P3, uS, new THREE.Vector3());
-      const [sK, lK] = versRavin(K.x, K.z);
+      const [sK, lK] = versRavin(G.x, G.z);
       const sigma = lK > 6 ? -1 : 1; // du côté où il y a le plus de place (jamais contre la paroi)
-      const sR = Math.max(R - 11, Math.min(R + 11, sK + MEGALO.devant)); // (au-dessus de la rivière)
+      const sR = Math.max(4, Math.min(W - 6, sK + MEGALO.devant));
       const sommet = monde(sR, lK + sigma * MEGALO.cote);
-      sommet.y = K.y - RAVIN.accroche - MEGALO.dessous;
-      requin = { tS: T1 + uS * T2, sommet, lat: nE.clone().multiplyScalar(sigma), lance: false };
+      sommet.y = G.y - MEGALO.dessous;
+      requin = { tS: T1, sommet, lat: nE.clone().multiplyScalar(sigma), lance: false };
     }
 
     return {

@@ -14,10 +14,10 @@ import { audio } from "./audio.js";
 
 export const MEGALO = {
   taille: 3, // × le modèle (14,5 m) : ~43 m de long
-  montee: 1.1, // s de la sortie de l'eau jusqu'au sommet (là où la gueule claque)
+  montee: 0.6, // s de la sortie de l'eau jusqu'au sommet (là où la gueule claque) : pendant la chute du kart
   cote: 3.5, // m : le museau monte juste à côté de la trajectoire du kart (latéralement)
   dessous: -2, // m : ... jusqu'à 2 m au-dessus du bas du kart
-  devant: 9, // m : ... et devant lui (le long de la route), bien dans le champ de la caméra
+  devant: 5, // m : ... et devant lui (le long de la route), bien dans le champ de la caméra
   penche: 0.22, // rad : le nez penché vers le kart (le reste : vertical)
 };
 const NEZ_Z = 4.1; // m (modèle) : bout du museau
