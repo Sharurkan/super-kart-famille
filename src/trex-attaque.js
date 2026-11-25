@@ -15,14 +15,14 @@ import { audio } from "./audio.js";
 //  - (ψ, θ) résolus (Newton, 2 inconnues, repart de la solution précédente) pour que la gueule arrive
 //    sur la cible : direction et hauteur ; la distance suit la courbure de la colonne ;
 //  - tête : le museau vise le kart ; mâchoire : fermée de force pour le CLAC, puis rouverte (rugissement) ;
-//  - sons : grognement quand il voit arriver le kart, claquement au CLAC, rugissement au raté
+//  - sons : cri puis grognement quand il voit arriver le kart, claquement au CLAC, rugissement au raté
 //    (enregistrements CC0 de public/sons ; sons synthétisés d'audio.js en secours) ;
 //  - sécurité : les points extrêmes de la tête et de la mâchoire (mesurés sur le maillage) restent à
 //    plus de ATTAQUE.plancher au-dessus de la route ; sinon le tangage est réduit (dichotomie).
 export const ATTAQUE = {
   approche: 85, // m avant le point de frappe : il se tourne vers le kart et se penche un peu
-  hauteurBouche: 6.3, // m au-dessus de la route : milieu de la gueule au plus bas de la frappe
-  plancher: 4.3, // m : aucun point de la tête ni de la mâchoire plus bas au-dessus de la route
+  hauteurBouche: 4.2, // m au-dessus de la route : milieu de la gueule au plus bas de la frappe
+  plancher: 2.6, // m : aucun point de la tête ni de la mâchoire plus bas au-dessus de la route
   descenteMin: 0.4, // s : durée du plongeon (selon la vitesse du kart ; rapide : il ne rate jamais le départ)
   descenteMax: 0.7,
   tenue: 0.35, // s : gueule fermée, au plus bas, juste après le CLAC
@@ -37,6 +37,7 @@ export const ATTAQUE = {
 const SONS = {
   rugit: `${import.meta.env.BASE_URL}sons/trex-rugissement.ogg`, // « T-rex calls » (CaveboyTup)
   grogne: `${import.meta.env.BASE_URL}sons/trex-grognement.ogg`, // idem
+  cri: `${import.meta.env.BASE_URL}sons/trex-cri.ogg`, // rugissement plus aigu et court (voir CREDITS)
   clac: `${import.meta.env.BASE_URL}sons/trex-clac.ogg`, // « 80 CC0 creature SFX #2 » (rubberduck)
 };
 let sonsPrets = false;
@@ -311,12 +312,14 @@ export function attaqueTrex({ objet, mixer, clips, piste, cote, iFrappe }) {
     if (E.phase === "repos" && E.arme && J && J.d > 0 && J.d < A.approche) {
       E.phase = "guette";
       E.tau = 0;
-      audio.jouer?.(SONS.grogne, 0.8); // il gronde en voyant arriver le kart
+      E.grogne = false;
+      if (!audio.jouer?.(SONS.cri, 1.0)) audio.grondement?.(0.4); // il pousse un cri en voyant arriver le kart
     }
     if (E.phase === "guette") {
       if (!J || J.d < -5) { E.phase = "repos"; E.arme = false; }
       else {
         regardCible = 1;
+        if (!E.grogne && E.tau > 1.2) { E.grogne = true; audio.jouer?.(SONS.grogne, 0.8); } // puis il gronde
         ouvre = 0.12 * lisse(E.tau / 0.8); // babines entrouvertes : il attend
         const v = Math.max(J.phys.vitesse ?? 0, 3);
         const tImp = (J.d - A.avance) / v;

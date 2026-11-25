@@ -80,7 +80,8 @@ Kenney — Sci-Fi Sounds : meteorite/explosionCrunch_004.ogg, lowFrequency_explo
 OpenGameArt — sons du T-rex debout au bord de la route (src/trex-attaque.js ; découpés, mélangés,
   normalisés et réencodés en OGG Vorbis mono : outils/blender/sons_trex.py)
   "T-rex calls" — CaveboyTup : sons/trex-rugissement.ogg (extrait 10,45 s → 14,45 s),
-    sons/trex-grognement.ogg (extrait 15,8 s → 18,7 s)
+    sons/trex-grognement.ogg (extrait 15,8 s → 18,7 s),
+    sons/trex-cri.ogg (trex-rugissement.ogg 0,3 s → 2,6 s, 18 % plus aigu, écho)
     https://opengameart.org/content/t-rex-calls
   "80 CC0 creature SFX #2" — rubberduck : sons/trex-clac.ogg (attack_01 un peu plus grave + stomp_01)
     https://opengameart.org/content/80-cc0-creture-sfx-2
