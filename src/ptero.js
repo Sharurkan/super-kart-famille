@@ -5,6 +5,7 @@ import { planter, placeRocher, MARGE_ROCHER } from "./vegetation.js";
 import { fusion } from "./decors-circuits.js";
 import { audio } from "./audio.js";
 import { percerSol } from "./decor.js";
+import { installerMegalodon, MEGALO } from "./megalodon.js";
 
 // Le ravin du ptérodactyle (circuit dino) : la route s'arrête au bord d'un précipice,
 // le kart tombe dans le vide... et un ptérodactyle l'attrape avec ses pattes pour le
@@ -482,6 +483,9 @@ export function installerRavin(groupe, piste, { debut }) {
     pivot.add(brume);
   }
   groupeRavin.add(pivot);
+  // le mégalodon qui jaillit de la rivière quand le joueur traverse (megalodon.js)
+  const megalo = installerMegalodon(groupeRavin, { eauY: -H + 0.3 });
+  audio.precharger?.(`${import.meta.env.BASE_URL}sons/trex-clac.ogg`);
 
   // cascade : de l'arrondi du côté "+l", le long de la paroi, jusqu'à la rivière
   let contourRuisseau = null; // (le ruisseau : la végétation s'en écarte aussi)
@@ -634,6 +638,7 @@ export function installerRavin(groupe, piste, { debut }) {
     tPrecedent = t;
     texEau.offset.y -= dt * 0.6;
     texCascade.offset.y += dt * 1.4;
+    megalo.etape(dt);
     for (const p of reserve) {
       if (!p.depart) continue;
       const d = p.depart;
@@ -716,6 +721,22 @@ export function installerRavin(groupe, piste, { debut }) {
     ph.poussee.x = ph.poussee.z = 0;
     if (k.joueur) cri();
 
+    // le mégalodon (joueur seulement) : il claque à côté du kart quand celui-ci passe au-dessus de la
+    // rivière (milieu du ravin, s = R), un peu devant lui
+    let requin = null;
+    if (k.joueur) {
+      let uS = 0.5;
+      for (let u = 0; u <= 1; u += 0.01) {
+        if (versRavin(bezier(P0, C1, C2, P3, u, tmpP).x, tmpP.z)[0] >= R - MEGALO.devant) { uS = u; break; }
+      }
+      const K = bezier(P0, C1, C2, P3, uS, new THREE.Vector3());
+      const lK = versRavin(K.x, K.z)[1];
+      const sigma = lK > 6 ? -1 : 1; // du côté où il y a le plus de place (jamais contre la paroi)
+      const sommet = monde(R, lK + sigma * MEGALO.cote);
+      sommet.y = K.y - RAVIN.accroche - MEGALO.dessous;
+      requin = { tS: T1 + uS * T2, sommet, lat: nE.clone().multiplyScalar(sigma), lance: false };
+    }
+
     return {
       etape(dt) {
         t += dt;
@@ -753,6 +774,10 @@ export function installerRavin(groupe, piste, { debut }) {
         ph.xAvant = ph.x;
         ph.zAvant = ph.z;
         suivre(ph);
+        if (requin && !requin.lance && t >= requin.tS - MEGALO.montee) {
+          requin.lance = true;
+          megalo.lancer({ sommet: requin.sommet, lat: requin.lat, dans: requin.tS - t });
+        }
         horloge(coursePourHorloge);
         if (t < DUREE) return false;
 
@@ -820,5 +845,6 @@ export function installerRavin(groupe, piste, { debut }) {
   // (pour les essais)
   piste.ravin.dansLeVide = dansLeVide;
   piste.ravin.pteros = reserve;
+  piste.ravin.megalo = megalo;
   return piste.ravin;
 }
